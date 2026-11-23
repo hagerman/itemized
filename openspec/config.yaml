@@ -1,0 +1,10 @@
+schema: spec-driven
+
+rules:
+  tasks:
+    - Include a verification task that runs `go test ./...`, `go vet ./...`, and `gopls check` on Go files
+
+operations:
+  apply:
+    guidance:
+      - Before completing implementation, run `go test ./...`, `go vet ./...`, and `gopls check` on modified/all Go files (resolving `gopls` from `PATH` or `$(go env GOPATH)/bin/gopls`) and fix all reported diagnostics

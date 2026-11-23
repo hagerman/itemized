@@ -1,0 +1,53 @@
+# Legacy project directory
+/legacy/
+
+# Local SQLite databases (including root dev.db and WAL/SHM files)
+/dev.db
+/dev.db-shm
+/dev.db-wal
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+
+# Go binaries, test, and coverage artifacts
+/itemized
+/itemized-migrate
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# Frontend (Node / Vite / TypeScript)
+node_modules/
+web/dist/
+*.tsbuildinfo
+.vite/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & local secrets
+.env
+.env.*
+!.env.example
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.ruby-lsp/
+*.swp
+*.swo
+*~

@@ -1,0 +1,1209 @@
+import React, { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown, ChevronRight, Loader2, RotateCcw, ScanBarcode, Sparkles, X } from "lucide-react";
+import {
+  apiFetch,
+  Category,
+  Item,
+  Location,
+  Product,
+  ScanResolution,
+} from "../api";
+import { BarcodeScanner } from "./BarcodeScanner";
+import { HierarchySelect } from "./HierarchySelect";
+import {
+  EMPTY_MEASUREMENT,
+  MeasurementDraft,
+  MeasurementFields,
+  measurementFromLLM,
+  measurementToPayload,
+  measurementToVariantWorkflowPayload,
+} from "./MeasurementFields";
+
+export type ScanMode = "purchase" | "consume" | "open" | "transfer" | "inventory";
+
+interface ScannerDrawerProps {
+  open: boolean;
+  initialMode?: ScanMode;
+  onClose: () => void;
+  categories: Category[];
+  locations: Location[];
+}
+
+interface UndoToast {
+  message: string;
+  itemId: number;
+  patch: Record<string, unknown>;
+}
+
+interface InventorySummary {
+  to_consume: Item[];
+  to_transfer: Item[];
+  to_confirm: Item[];
+  to_create: Array<{ product_id: number; product_name: string; quantity: number; due_on_date: string | null }>;
+}
+
+const MODES: Array<{ id: ScanMode; label: string }> = [
+  { id: "purchase", label: "Purchase" },
+  { id: "consume", label: "Consume" },
+  { id: "open", label: "Open" },
+  { id: "transfer", label: "Transfer" },
+  { id: "inventory", label: "Inventory" },
+];
+
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return (
+    window.matchMedia("(max-width: 767px)").matches ||
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
+function computeDefaultDueDateStr(p: Product): string {
+  const days = p.use_average_for_due_date
+    ? (p.calculated_due_days ?? p.default_due_days)
+    : p.default_due_days;
+  if (days == null || days <= 0) return "";
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
+  open,
+  initialMode = "purchase",
+  onClose,
+  categories,
+  locations,
+}) => {
+  const qc = useQueryClient();
+  const [mode, setMode] = useState<ScanMode>(initialMode);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<UndoToast | null>(null);
+
+  // Purchase state (flattened: Confirm & Add + expandable variant/barcode section)
+  const [purchaseProduct, setPurchaseProduct] = useState<Product | null>(null);
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newProdName, setNewProdName] = useState("");
+  const [newProdCatId, setNewProdCatId] = useState<number>(0);
+  const [newProdLocId, setNewProdLocId] = useState<number>(0);
+  const [newProdDueDays, setNewProdDueDays] = useState("");
+  const [newProdUseAvg, setNewProdUseAvg] = useState(true);
+  const [purchaseBarcode, setPurchaseBarcode] = useState("");
+  const [purchaseBarcodeQty, setPurchaseBarcodeQty] = useState(1);
+  const [secondBarcode, setSecondBarcode] = useState("");
+  const [secondBarcodeQty, setSecondBarcodeQty] = useState(1);
+  const [variantId, setVariantId] = useState<number | null>(null);
+  const [variantName, setVariantName] = useState("");
+  const [showVariantSection, setShowVariantSection] = useState(false);
+  const [purchaseQty, setPurchaseQty] = useState(1);
+  const [purchaseLocId, setPurchaseLocId] = useState<number>(0);
+  const [purchaseDueDate, setPurchaseDueDate] = useState("");
+  const [purchasePrintMode, setPurchasePrintMode] = useState("per_item");
+  const [purchaseSearchHits, setPurchaseSearchHits] = useState<Product[]>([]);
+  const [upcHint, setUpcHint] = useState<string | null>(null);
+  const [classifyWarning, setClassifyWarning] = useState<string | null>(null);
+  const [lookupPhase, setLookupPhase] = useState<"idle" | "upc" | "classify">("idle");
+  const [newProdMeasurement, setNewProdMeasurement] = useState<MeasurementDraft>(EMPTY_MEASUREMENT);
+  const [variantMeasurement, setVariantMeasurement] = useState<MeasurementDraft>(EMPTY_MEASUREMENT);
+  const [scanTarget, setScanTarget] = useState<null | "primary_barcode" | "second_barcode">(null);
+  const lookupSeqRef = useRef(0);
+  const userEditedNameRef = useRef(false);
+  const userEditedProdMeasRef = useRef(false);
+  const userEditedVarMeasRef = useRef(false);
+
+  // Consume / Open / Transfer item selection state
+  const [candidateItems, setCandidateItems] = useState<Item[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [unknownBarcodeForAssoc, setUnknownBarcodeForAssoc] = useState<string | null>(null);
+  const [assocQuery, setAssocQuery] = useState("");
+  const [assocMatches, setAssocMatches] = useState<Product[]>([]);
+
+  // Transfer state
+  const [transferDest, setTransferDest] = useState<Location | null>(null);
+
+  // Inventory Audit state
+  const [invLocation, setInvLocation] = useState<Location | null>(null);
+  const [invScannedItemIds, setInvScannedItemIds] = useState<number[]>([]);
+  const [invScannedProducts, setInvScannedProducts] = useState<Array<{ product_id: number; product_name: string; quantity: number }>>([]);
+  const [invSummary, setInvSummary] = useState<InventorySummary | null>(null);
+  const [invConsumeIds, setInvConsumeIds] = useState<number[]>([]);
+  const [invTransferIds, setInvTransferIds] = useState<number[]>([]);
+  const [invCreateMap, setInvCreateMap] = useState<Record<number, { selected: boolean; due_on_date: string }>>({});
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  if (!open) return null;
+
+  const resetSubState = () => {
+    lookupSeqRef.current += 1;
+    userEditedNameRef.current = false;
+    userEditedProdMeasRef.current = false;
+    userEditedVarMeasRef.current = false;
+    setStatusMsg(null);
+    setErrorMsg(null);
+    setPurchaseProduct(null);
+    setCreatingNew(false);
+    setPurchaseSearchHits([]);
+    setUpcHint(null);
+    setClassifyWarning(null);
+    setLookupPhase("idle");
+    setNewProdDueDays("");
+    setNewProdUseAvg(true);
+    setPurchaseDueDate("");
+    setNewProdMeasurement(EMPTY_MEASUREMENT);
+    setVariantMeasurement(EMPTY_MEASUREMENT);
+    setVariantName("");
+    setPurchaseBarcode("");
+    setSecondBarcode("");
+    setCandidateItems([]);
+    setSelectedItemIds([]);
+    setUnknownBarcodeForAssoc(null);
+    setInvSummary(null);
+    setScanTarget(null);
+  };
+
+  const invalidateInventory = () => {
+    void qc.invalidateQueries({ queryKey: ["products"] });
+    void qc.invalidateQueries({ queryKey: ["product"] });
+  };
+
+  const handleUndo = async () => {
+    if (!toast) return;
+    try {
+      await apiFetch(`/api/items/${toast.itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify(toast.patch),
+      });
+      setStatusMsg("Action undone.");
+      setToast(null);
+      invalidateInventory();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Undo failed");
+    }
+  };
+
+  const handleScan = async (raw: string) => {
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (scanTarget === "primary_barcode") {
+      setPurchaseBarcode(raw.trim());
+      setScanTarget(null);
+      setStatusMsg(`Captured primary barcode: ${raw.trim()}`);
+      return;
+    }
+    if (scanTarget === "second_barcode") {
+      setSecondBarcode(raw.trim());
+      setScanTarget(null);
+      setStatusMsg(`Captured second barcode: ${raw.trim()}`);
+      return;
+    }
+
+    try {
+      const resolved = await apiFetch<ScanResolution>("/api/scan/resolve", {
+        method: "POST",
+        body: JSON.stringify({ input: raw }),
+      });
+
+      if (mode === "purchase") {
+        await handlePurchaseScan(raw, resolved);
+      } else if (mode === "consume" || mode === "open") {
+        await handleConsumeOpenScan(raw, resolved, mode);
+      } else if (mode === "transfer") {
+        await handleTransferScan(raw, resolved);
+      } else if (mode === "inventory") {
+        await handleInventoryScan(raw, resolved);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Scan failed");
+    }
+  };
+
+  const handlePurchaseScan = async (raw: string, res: ScanResolution) => {
+    if (res.kind === "barcode") {
+      setPurchaseProduct(res.product);
+      setCreatingNew(false);
+      setVariantId(res.variant_id);
+      setVariantName(res.variant_name);
+      setPurchaseBarcode(res.barcode.barcode);
+      setPurchaseQty(res.barcode.default_quantity || 1);
+      setPurchaseLocId(res.product.default_location_id);
+      setPurchaseDueDate(computeDefaultDueDateStr(res.product));
+      setPurchasePrintMode(res.product.label_print_mode);
+      setShowVariantSection(false);
+      setStatusMsg(`Matched ${res.product.name} (${res.variant_name})`);
+      return;
+    }
+    if (res.kind === "product" || res.kind === "item") {
+      const p = res.product;
+      setPurchaseProduct(p);
+      setCreatingNew(false);
+      setVariantId(null);
+      setPurchaseBarcode("");
+      setPurchaseQty(1);
+      setPurchaseLocId(p.default_location_id);
+      setPurchaseDueDate(computeDefaultDueDateStr(p));
+      setPurchasePrintMode(p.label_print_mode);
+      setStatusMsg(`Selected ${p.name}`);
+      return;
+    }
+
+    // Unknown barcode or text search
+    const isNumericBarcode = /^\d{6,14}$/.test(raw.trim());
+    if (isNumericBarcode) {
+      const seq = ++lookupSeqRef.current;
+      userEditedNameRef.current = false;
+      userEditedProdMeasRef.current = false;
+      userEditedVarMeasRef.current = false;
+
+      setPurchaseProduct(null);
+      setPurchaseSearchHits([]);
+      setUpcHint(null);
+      setClassifyWarning(null);
+      setNewProdName("");
+      setNewProdDueDays("");
+      setNewProdUseAvg(true);
+      setPurchaseDueDate("");
+      setVariantName("");
+      setNewProdMeasurement(EMPTY_MEASUREMENT);
+      setVariantMeasurement(EMPTY_MEASUREMENT);
+      setPurchaseBarcode(raw.trim());
+      setShowVariantSection(true);
+      setVariantId(null);
+      setNewProdCatId(categories[0]?.id || 0);
+      setNewProdLocId(locations[0]?.id || 0);
+      setPurchaseLocId(locations[0]?.id || 0);
+      setLookupPhase("upc");
+
+      try {
+        const upcRes = await apiFetch<{ found: boolean; result?: { title: string; measurement?: string } }>("/api/upc/lookup", {
+          method: "POST",
+          body: JSON.stringify({ barcode: raw.trim() }),
+        });
+        if (lookupSeqRef.current !== seq) return;
+
+        let suggestedName = "";
+        if (upcRes.found && upcRes.result) {
+          const title = upcRes.result.title || "";
+          suggestedName = title;
+          setUpcHint(`OpenFoodFacts: ${title}${upcRes.result.measurement ? ` (${upcRes.result.measurement})` : ""}`);
+          if (title) {
+            setVariantName(title);
+            if (!userEditedNameRef.current) {
+              setNewProdName(title);
+            }
+          }
+          setCreatingNew(true);
+          setLookupPhase("classify");
+
+          try {
+            const clsRes = await apiFetch<{
+              enabled: boolean;
+              warning?: string;
+              classification?: {
+                product_name?: string;
+                product_value?: number | null;
+                product_unit_type?: string | null;
+                product_unit?: string | null;
+                category_id?: number | null;
+              } | null;
+            }>("/api/upc/classify", {
+              method: "POST",
+              body: JSON.stringify({ title, quantity: upcRes.result.measurement || "" }),
+            });
+            if (lookupSeqRef.current !== seq) return;
+
+            if (clsRes.warning) {
+              setClassifyWarning(clsRes.warning);
+            }
+            if (clsRes.classification?.product_name && !userEditedNameRef.current) {
+              suggestedName = clsRes.classification.product_name;
+              setNewProdName(suggestedName);
+            }
+            if (clsRes.classification?.category_id) {
+              setNewProdCatId(clsRes.classification.category_id);
+            }
+            const llmMeas = measurementFromLLM(
+              clsRes.classification?.product_value,
+              clsRes.classification?.product_unit_type,
+              clsRes.classification?.product_unit
+            );
+            if (llmMeas.type) {
+              if (!userEditedProdMeasRef.current) setNewProdMeasurement(llmMeas);
+              if (!userEditedVarMeasRef.current) setVariantMeasurement(llmMeas);
+            }
+          } catch (err) {
+            if (lookupSeqRef.current === seq) {
+              setClassifyWarning(err instanceof Error ? err.message : "Classification failed");
+            }
+          }
+        } else {
+          setUpcHint("Barcode not found in OpenFoodFacts. Pick an existing product or create a new one.");
+          setCreatingNew(true);
+        }
+
+        if (lookupSeqRef.current !== seq) return;
+        setLookupPhase("idle");
+
+        if (suggestedName) {
+          const search = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(suggestedName)}`);
+          if (lookupSeqRef.current !== seq) return;
+          setPurchaseSearchHits(search.products.slice(0, 5));
+        }
+      } finally {
+        if (lookupSeqRef.current === seq) {
+          setLookupPhase("idle");
+        }
+      }
+      return;
+    }
+
+    // Text search for existing product
+    const search = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(raw)}`);
+    setPurchaseSearchHits(search.products.slice(0, 8));
+    if (search.products.length === 0) {
+      setNewProdName(raw);
+      setNewProdCatId(categories[0]?.id || 0);
+      setNewProdLocId(locations[0]?.id || 0);
+      setPurchaseLocId(locations[0]?.id || 0);
+      setCreatingNew(true);
+    }
+  };
+
+  const submitPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    try {
+      const payload: Record<string, unknown> = {
+        variant_id: variantId,
+        variant_name: variantName || undefined,
+        ...(variantId == null ? measurementToVariantWorkflowPayload(variantMeasurement) : {}),
+        barcode: purchaseBarcode || undefined,
+        barcode_quantity: purchaseBarcodeQty,
+        second_barcode: secondBarcode || undefined,
+        second_barcode_quantity: secondBarcodeQty,
+        location_id: purchaseLocId || undefined,
+        due_on_date: purchaseDueDate || undefined,
+        quantity: purchaseQty,
+        label_print_mode: purchasePrintMode,
+      };
+      if (purchaseProduct && !creatingNew) {
+        payload.product_id = purchaseProduct.id;
+      } else {
+        payload.new_product = {
+          name: newProdName,
+          category_id: newProdCatId,
+          default_location_id: newProdLocId || purchaseLocId,
+          default_due_days: newProdUseAvg ? null : newProdDueDays ? Number(newProdDueDays) : null,
+          use_average_for_due_date: newProdUseAvg,
+          label_print_mode: purchasePrintMode,
+          ...measurementToPayload(newProdMeasurement),
+        };
+      }
+      const res = await apiFetch<{ product: Product; items: Item[]; print_warnings?: string[] }>("/api/workflows/purchase", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const warn = res.print_warnings?.length ? ` (Print warning: ${res.print_warnings.join("; ")})` : "";
+      resetSubState();
+      setStatusMsg(`Added ${res.items.length} × ${res.product.name}${warn}`);
+      invalidateInventory();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Purchase failed");
+    }
+  };
+
+  const handleConsumeOpenScan = async (raw: string, res: ScanResolution, action: "consume" | "open") => {
+    if (res.kind === "item") {
+      const resp = await apiFetch<{ item: Item; previous: Item }>(`/api/items/${res.item.id}/${action}`, {
+        method: "POST",
+      });
+      setToast({
+        message: `${action === "consume" ? "Consumed" : "Opened"} ${resp.item.product_name}`,
+        itemId: resp.item.id,
+        patch: action === "consume"
+          ? { consumed_on_date: resp.previous.consumed_on_date }
+          : { opened_on_date: resp.previous.opened_on_date, due_on_date: resp.previous.due_on_date },
+      });
+      invalidateInventory();
+      return;
+    }
+    if (res.kind === "product" || res.kind === "barcode" || res.kind === "location") {
+      setCandidateItems(res.items);
+      setSelectedItemIds(res.items.length > 0 ? [res.items[0].id] : []);
+      if (res.items.length === 0) {
+        setStatusMsg("No unconsumed items found.");
+      }
+      return;
+    }
+    if (/^\d{6,14}$/.test(raw.trim())) {
+      setUnknownBarcodeForAssoc(raw.trim());
+      setStatusMsg(`Unrecognized barcode ${raw.trim()} — link it to a product below.`);
+      return;
+    }
+    const search = await apiFetch<{ products: Product[] }>(`/api/products?status=in_stock&q=${encodeURIComponent(raw)}`);
+    if (search.products.length === 1) {
+      const detail = await apiFetch<{ items: Item[] }>(`/api/products/${search.products[0].id}`);
+      setCandidateItems(detail.items);
+      setSelectedItemIds(detail.items.length > 0 ? [detail.items[0].id] : []);
+    } else {
+      setStatusMsg(`Found ${search.products.length} matching products; refine your search or scan a label.`);
+    }
+  };
+
+  const applyCandidateItems = async () => {
+    if (selectedItemIds.length === 0) return;
+    try {
+      const action = mode === "transfer" ? "transfer" : mode;
+      await apiFetch("/api/items/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          action,
+          item_ids: selectedItemIds,
+          location_id: mode === "transfer" ? transferDest?.id : undefined,
+        }),
+      });
+      setStatusMsg(`Updated ${selectedItemIds.length} item(s).`);
+      setCandidateItems([]);
+      setSelectedItemIds([]);
+      invalidateInventory();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Action failed");
+    }
+  };
+
+  const associateUnknownBarcode = async (product: Product) => {
+    if (!unknownBarcodeForAssoc) return;
+    try {
+      const detail = await apiFetch<{ variants: Array<{ id: number }>; items: Item[] }>(`/api/products/${product.id}`);
+      let vId = detail.variants[0]?.id;
+      if (!vId) {
+        const createdV = await apiFetch<{ variant: { id: number } }>(`/api/products/${product.id}/variants`, {
+          method: "POST",
+          body: JSON.stringify({ name: "Default" }),
+        });
+        vId = createdV.variant.id;
+      }
+      await apiFetch(`/api/variants/${vId}/barcodes`, {
+        method: "POST",
+        body: JSON.stringify({ barcode: unknownBarcodeForAssoc, default_quantity: 1 }),
+      });
+      setUnknownBarcodeForAssoc(null);
+      setCandidateItems(detail.items);
+      setSelectedItemIds(detail.items.length > 0 ? [detail.items[0].id] : []);
+      setStatusMsg(`Linked barcode to ${product.name}`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Association failed");
+    }
+  };
+
+  const handleTransferScan = async (_raw: string, res: ScanResolution) => {
+    if (!transferDest) {
+      if (res.kind === "location") {
+        setTransferDest(res.location);
+        setStatusMsg(`Destination locked: ${res.location.hierarchy_name}`);
+      } else {
+        setErrorMsg("Select or scan a destination location first.");
+      }
+      return;
+    }
+    if (res.kind === "location") {
+      setTransferDest(res.location);
+      setStatusMsg(`Switched destination to: ${res.location.hierarchy_name}`);
+      return;
+    }
+    if (res.kind === "item") {
+      const resp = await apiFetch<{ item: Item; previous: Item }>(`/api/items/${res.item.id}/transfer`, {
+        method: "POST",
+        body: JSON.stringify({ location_id: transferDest.id }),
+      });
+      setToast({
+        message: `Moved ${resp.item.product_name} -> ${transferDest.name}`,
+        itemId: resp.item.id,
+        patch: { location_id: resp.previous.location_id, due_on_date: resp.previous.due_on_date },
+      });
+      invalidateInventory();
+      return;
+    }
+    if (res.kind === "product" || res.kind === "barcode") {
+      setCandidateItems(res.items);
+      setSelectedItemIds(res.items.length > 0 ? [res.items[0].id] : []);
+    }
+  };
+
+  const handleInventoryScan = async (_raw: string, res: ScanResolution) => {
+    if (!invLocation) {
+      if (res.kind === "location") {
+        setInvLocation(res.location);
+        setStatusMsg(`Auditing ${res.location.hierarchy_name}`);
+      } else {
+        setErrorMsg("Select or scan a location to audit first.");
+      }
+      return;
+    }
+    if (res.kind === "item") {
+      setInvScannedItemIds((prev) => (prev.includes(res.item.id) ? prev : [...prev, res.item.id]));
+      setStatusMsg(`Scanned item #${res.item.id} (${res.product.name})`);
+      return;
+    }
+    if (res.kind === "product" || res.kind === "barcode") {
+      const p = res.product;
+      setInvScannedProducts((prev) => {
+        const existing = prev.find((x) => x.product_id === p.id);
+        if (existing) {
+          return prev.map((x) => (x.product_id === p.id ? { ...x, quantity: x.quantity + 1 } : x));
+        }
+        return [...prev, { product_id: p.id, product_name: p.name, quantity: 1 }];
+      });
+      setStatusMsg(`Counted ${p.name}`);
+    }
+  };
+
+  const buildInventorySummary = async () => {
+    if (!invLocation) return;
+    try {
+      const summary = await apiFetch<InventorySummary>("/api/workflows/inventory/summary", {
+        method: "POST",
+        body: JSON.stringify({
+          location_id: invLocation.id,
+          scanned_item_ids: invScannedItemIds,
+          scanned_products: invScannedProducts.map((p) => ({ product_id: p.product_id, quantity: p.quantity })),
+        }),
+      });
+      setInvSummary(summary);
+      setInvConsumeIds(summary.to_consume.map((i) => i.id));
+      setInvTransferIds(summary.to_transfer.map((i) => i.id));
+      const cMap: Record<number, { selected: boolean; due_on_date: string }> = {};
+      summary.to_create.forEach((c) => {
+        cMap[c.product_id] = { selected: true, due_on_date: c.due_on_date || "" };
+      });
+      setInvCreateMap(cMap);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Summary failed");
+    }
+  };
+
+  const applyInventoryAudit = async () => {
+    if (!invLocation || !invSummary) return;
+    try {
+      const createItems = invSummary.to_create
+        .filter((c) => invCreateMap[c.product_id]?.selected)
+        .map((c) => ({
+          product_id: c.product_id,
+          quantity: c.quantity,
+          due_on_date: invCreateMap[c.product_id]?.due_on_date || null,
+        }));
+      const res = await apiFetch<{ consumed: number; transferred: number; created: number }>("/api/workflows/inventory/apply", {
+        method: "POST",
+        body: JSON.stringify({
+          location_id: invLocation.id,
+          consume_item_ids: invConsumeIds,
+          transfer_item_ids: invTransferIds,
+          create_items: createItems,
+        }),
+      });
+      setInvSummary(null);
+      setInvScannedItemIds([]);
+      setInvScannedProducts([]);
+      setStatusMsg(`Audit applied: ${res.consumed} consumed, ${res.transferred} transferred, ${res.created} created.`);
+      invalidateInventory();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Apply failed");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center" role="dialog" aria-label="Scanner">
+      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl sm:rounded-2xl">
+        {/* Header & Mode Switcher */}
+        <div className="border-b border-slate-800 px-4 py-3">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">Scan &amp; Action</h2>
+            <button type="button" onClick={onClose} aria-label="Close scanner" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-5 gap-1 rounded-xl bg-slate-900 p-1">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  setMode(m.id);
+                  resetSubState();
+                }}
+                className={`rounded-lg py-1.5 text-xs font-medium transition ${
+                  mode === m.id ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          {/* Persistent single-stream scanner across all modes */}
+          <BarcodeScanner active={open} defaultCameraEnabled={isMobileDevice()} onScan={handleScan} />
+
+          {toast && (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">
+              <span>{toast.message}</span>
+              <button
+                type="button"
+                onClick={handleUndo}
+                className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Undo
+              </button>
+            </div>
+          )}
+
+          {statusMsg && <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-200">{statusMsg}</div>}
+          {errorMsg && <div className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{errorMsg}</div>}
+
+          {/* PURCHASE WORKFLOW */}
+          {mode === "purchase" && (
+            <div className="space-y-3">
+              {lookupPhase === "upc" && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                  <span>Looking up barcode in OpenFoodFacts...</span>
+                </div>
+              )}
+
+              {upcHint && (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+                  <Sparkles className="h-4 w-4 text-amber-400" />
+                  <span>{upcHint}</span>
+                </div>
+              )}
+
+              {lookupPhase === "classify" && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                  <span>Classifying product...</span>
+                </div>
+              )}
+
+              {classifyWarning && lookupPhase === "idle" && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  Product classifier warning: {classifyWarning}
+                </div>
+              )}
+
+              {purchaseSearchHits.length > 0 && !purchaseProduct && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Matching Products</div>
+                  {purchaseSearchHits.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setPurchaseProduct(p);
+                        setCreatingNew(false);
+                        setPurchaseLocId(p.default_location_id);
+                        setPurchaseDueDate(computeDefaultDueDateStr(p));
+                        setPurchasePrintMode(p.label_print_mode);
+                      }}
+                      className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
+                    >
+                      <span className="font-medium text-slate-100">{p.name}</span>
+                      <span className="text-xs text-slate-400">{p.category_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {(purchaseProduct || creatingNew) && (
+                <form onSubmit={submitPurchase} className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-white">
+                      {creatingNew ? "Create Product & Add Items" : `Confirm & Add: ${purchaseProduct?.name}`}
+                    </h3>
+                    {creatingNew && purchaseSearchHits.length > 0 && (
+                      <span className="text-xs text-slate-400">Or pick a match above</span>
+                    )}
+                  </div>
+
+                  {creatingNew && (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <input
+                        required
+                        value={newProdName}
+                        onChange={(e) => {
+                          userEditedNameRef.current = true;
+                          setNewProdName(e.target.value);
+                        }}
+                        placeholder="Product name"
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                      />
+                      <HierarchySelect
+                        items={categories}
+                        value={newProdCatId || null}
+                        onChange={(v) => setNewProdCatId(v || 0)}
+                        placeholder="Category"
+                        ariaLabel="New product category"
+                      />
+                      <input
+                        type="number"
+                        disabled={newProdUseAvg}
+                        value={newProdUseAvg ? "" : newProdDueDays}
+                        onChange={(e) => setNewProdDueDays(e.target.value)}
+                        placeholder={newProdUseAvg ? "Due days (auto rolling avg)" : "Default due days (optional)"}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                      <label className="flex items-center gap-2 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={newProdUseAvg}
+                          onChange={(e) => setNewProdUseAvg(e.target.checked)}
+                        />
+                        Use rolling average for due date
+                      </label>
+                      <div className="sm:col-span-2">
+                        <MeasurementFields
+                          value={newProdMeasurement}
+                          onChange={(next) => {
+                            userEditedProdMeasRef.current = true;
+                            setNewProdMeasurement(next);
+                          }}
+                          label="Product Measurement (Optional)"
+                          ariaPrefix="Product measurement"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <label className="block text-xs text-slate-400">
+                      Quantity
+                      <input
+                        type="number"
+                        min={1}
+                        value={purchaseQty}
+                        onChange={(e) => setPurchaseQty(Number(e.target.value))}
+                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <div className="block text-xs text-slate-400">
+                      <div className="mb-1">Location</div>
+                      <HierarchySelect
+                        items={locations}
+                        value={purchaseLocId || null}
+                        onChange={(v) => {
+                          setPurchaseLocId(v || 0);
+                          setNewProdLocId(v || 0);
+                        }}
+                        placeholder="Location"
+                        ariaLabel="Purchase location"
+                      />
+                    </div>
+                    <label className="block text-xs text-slate-400">
+                      Due Date
+                      <input
+                        type="date"
+                        value={purchaseDueDate}
+                        onChange={(e) => setPurchaseDueDate(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                      />
+                    </label>
+                    <label className="block text-xs text-slate-400">
+                      Label Mode
+                      <select
+                        value={purchasePrintMode}
+                        onChange={(e) => setPurchasePrintMode(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                      >
+                        <option value="per_item">Per Item</option>
+                        <option value="single">Single Label</option>
+                        <option value="none">No Label</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {/* Expandable Variant & Pack Details */}
+                  <div className="border-t border-slate-800 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowVariantSection((v) => !v)}
+                      className="flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300"
+                    >
+                      {showVariantSection ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      Variant &amp; Barcode Details
+                    </button>
+                    {showVariantSection && (
+                      <div className="mt-2 space-y-2">
+                        {scanTarget && (
+                          <div className="flex items-center justify-between rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-2.5 py-1.5 text-xs text-indigo-200">
+                            <span>
+                              Ready to scan into {scanTarget === "primary_barcode" ? "primary barcode" : "second barcode"}...
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setScanTarget(null)}
+                              className="font-semibold text-indigo-300 hover:text-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        <input
+                          value={variantName}
+                          onChange={(e) => setVariantName(e.target.value)}
+                          placeholder="Variant name (e.g. 16 oz)"
+                          aria-label="Variant name"
+                          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                        />
+                        <div className="flex items-center gap-2" data-testid="primary-barcode-row">
+                          <div className="relative flex flex-1 items-center">
+                            <input
+                              value={purchaseBarcode}
+                              onChange={(e) => setPurchaseBarcode(e.target.value)}
+                              placeholder="Primary barcode"
+                              aria-label="Primary barcode"
+                              className={`w-full rounded-lg border bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-white ${
+                                scanTarget === "primary_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-700"
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              aria-label="Scan primary barcode"
+                              title="Scan primary barcode"
+                              onClick={() => setScanTarget((cur) => (cur === "primary_barcode" ? null : "primary_barcode"))}
+                              className={`absolute right-1.5 rounded p-1 ${
+                                scanTarget === "primary_barcode"
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-slate-400 hover:bg-slate-800 hover:text-indigo-300"
+                              }`}
+                            >
+                              <ScanBarcode className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            min={1}
+                            value={purchaseBarcodeQty}
+                            onChange={(e) => setPurchaseBarcodeQty(Number(e.target.value))}
+                            placeholder="Qty"
+                            aria-label="Primary pack quantity"
+                            title="Primary pack quantity"
+                            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-center text-sm text-white"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2" data-testid="second-barcode-row">
+                          <div className="relative flex flex-1 items-center">
+                            <input
+                              value={secondBarcode}
+                              onChange={(e) => setSecondBarcode(e.target.value)}
+                              placeholder="Second barcode (optional)"
+                              aria-label="Second barcode"
+                              className={`w-full rounded-lg border bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-white ${
+                                scanTarget === "second_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-700"
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              aria-label="Scan second barcode"
+                              title="Scan second barcode"
+                              onClick={() => setScanTarget((cur) => (cur === "second_barcode" ? null : "second_barcode"))}
+                              className={`absolute right-1.5 rounded p-1 ${
+                                scanTarget === "second_barcode"
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-slate-400 hover:bg-slate-800 hover:text-indigo-300"
+                              }`}
+                            >
+                              <ScanBarcode className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            min={1}
+                            value={secondBarcodeQty}
+                            onChange={(e) => setSecondBarcodeQty(Number(e.target.value))}
+                            placeholder="Qty"
+                            aria-label="Second pack quantity"
+                            title="Second pack quantity"
+                            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-center text-sm text-white"
+                          />
+                        </div>
+                        <MeasurementFields
+                          value={variantMeasurement}
+                          onChange={(next) => {
+                            userEditedVarMeasRef.current = true;
+                            setVariantMeasurement(next);
+                          }}
+                          label="Variant Measurement (Optional)"
+                          ariaPrefix="Variant measurement"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                  >
+                    Confirm &amp; Add ({purchaseQty})
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* TRANSFER DESTINATION PICKER */}
+          {mode === "transfer" && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+              <div className="mb-1 text-xs font-medium text-slate-400">
+                Destination Location (scan location QR or select)
+              </div>
+              <HierarchySelect
+                items={locations}
+                value={transferDest?.id ?? null}
+                onChange={(v) => setTransferDest(locations.find((l) => l.id === v) || null)}
+                allowEmpty
+                emptyLabel="-- Choose destination --"
+                ariaLabel="Destination location"
+                inlineMenu
+              />
+            </div>
+          )}
+
+          {/* UNKNOWN BARCODE INLINE ASSOCIATION (Consume/Open) */}
+          {unknownBarcodeForAssoc && (mode === "consume" || mode === "open") && (
+            <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <div className="text-xs font-medium text-amber-200">
+                Link barcode <code>{unknownBarcodeForAssoc}</code> to an existing product:
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={assocQuery}
+                  onChange={(e) => setAssocQuery(e.target.value)}
+                  placeholder="Search product name..."
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const r = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(assocQuery)}`);
+                    setAssocMatches(r.products.slice(0, 5));
+                  }}
+                  className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  Find
+                </button>
+              </div>
+              {assocMatches.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => associateUnknownBarcode(p)}
+                  className="flex w-full items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-left text-sm hover:bg-slate-800"
+                >
+                  <span>{p.name}</span>
+                  <span className="text-xs text-indigo-400">Link</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ITEM SELECTION LIST (Consume / Open / Transfer) */}
+          {candidateItems.length > 0 && mode !== "purchase" && mode !== "inventory" && (
+            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                Select items (soonest due first)
+              </div>
+              {candidateItems.map((it) => {
+                const checked = selectedItemIds.includes(it.id);
+                return (
+                  <label key={it.id} className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedItemIds((prev) =>
+                            checked ? prev.filter((x) => x !== it.id) : [...prev, it.id]
+                          )
+                        }
+                      />
+                      <div>
+                        <div className="font-medium text-slate-100">{it.product_name}</div>
+                        <div className="text-xs text-slate-400">
+                          {it.location_name || "No location"} {it.due_on_date ? `• Due ${it.due_on_date}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+              <button
+                type="button"
+                onClick={applyCandidateItems}
+                className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+              >
+                Apply {mode} ({selectedItemIds.length})
+              </button>
+            </div>
+          )}
+
+          {/* INVENTORY AUDIT WORKFLOW */}
+          {mode === "inventory" && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                <div className="mb-1 text-xs font-medium text-slate-400">Location to Audit</div>
+                <HierarchySelect
+                  items={locations}
+                  value={invLocation?.id ?? null}
+                  onChange={(v) => {
+                    const loc = locations.find((l) => l.id === v) || null;
+                    setInvLocation(loc);
+                    setInvSummary(null);
+                    setInvScannedItemIds([]);
+                    setInvScannedProducts([]);
+                  }}
+                  allowEmpty
+                  emptyLabel="-- Choose location --"
+                  ariaLabel="Audit location"
+                  inlineMenu
+                />
+              </div>
+
+              {invLocation && !invSummary && (
+                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Scanned: {invScannedItemIds.length} items, {invScannedProducts.reduce((s, p) => s + p.quantity, 0)} product units</span>
+                    <button
+                      type="button"
+                      onClick={buildInventorySummary}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                    >
+                      Review Reconciliation
+                    </button>
+                  </div>
+                  {invScannedProducts.map((sp) => (
+                    <div key={sp.product_id} className="flex items-center justify-between rounded bg-slate-950 px-3 py-1.5 text-sm">
+                      <span>{sp.product_name}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={sp.quantity}
+                        onChange={(e) =>
+                          setInvScannedProducts((prev) =>
+                            prev.map((x) => (x.product_id === sp.product_id ? { ...x, quantity: Number(e.target.value) } : x))
+                          )
+                        }
+                        className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-right text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {invSummary && (
+                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm">
+                  <h3 className="font-semibold text-white">Reconciliation Summary</h3>
+                  <div>
+                    <div className="text-xs font-semibold text-rose-300">Consume Missing ({invSummary.to_consume.length})</div>
+                    {invSummary.to_consume.map((it) => (
+                      <label key={it.id} className="mt-1 flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={invConsumeIds.includes(it.id)}
+                          onChange={() =>
+                            setInvConsumeIds((prev) => (prev.includes(it.id) ? prev.filter((x) => x !== it.id) : [...prev, it.id]))
+                          }
+                        />
+                        <span>{it.product_name} (#{it.id})</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-amber-300">Transfer Here ({invSummary.to_transfer.length})</div>
+                    {invSummary.to_transfer.map((it) => (
+                      <label key={it.id} className="mt-1 flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={invTransferIds.includes(it.id)}
+                          onChange={() =>
+                            setInvTransferIds((prev) => (prev.includes(it.id) ? prev.filter((x) => x !== it.id) : [...prev, it.id]))
+                          }
+                        />
+                        <span>{it.product_name} (from {it.location_name || "unknown"})</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-300">Confirmed ({invSummary.to_confirm.length})</div>
+                  </div>
+                  {invSummary.to_create.length > 0 && (
+                    <div>
+                      <div className="text-xs font-semibold text-indigo-300">Create New ({invSummary.to_create.length})</div>
+                      {invSummary.to_create.map((c) => (
+                        <div key={c.product_id} className="mt-1 flex items-center justify-between gap-2 text-xs">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(invCreateMap[c.product_id]?.selected)}
+                              onChange={(e) =>
+                                setInvCreateMap((prev) => ({
+                                  ...prev,
+                                  [c.product_id]: { ...prev[c.product_id], selected: e.target.checked },
+                                }))
+                              }
+                            />
+                            <span>{c.quantity} × {c.product_name}</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={invCreateMap[c.product_id]?.due_on_date || ""}
+                            onChange={(e) =>
+                              setInvCreateMap((prev) => ({
+                                ...prev,
+                                [c.product_id]: { ...prev[c.product_id], due_on_date: e.target.value },
+                              }))
+                            }
+                            className="rounded border border-slate-700 bg-slate-950 px-2 py-0.5 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={applyInventoryAudit}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-500"
+                  >
+                    <Check className="h-4 w-4" /> Apply Reconciliation
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,422 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  Box,
+  Clock,
+  FolderTree,
+  LayoutGrid,
+  LogOut,
+  MapPin,
+  Menu,
+  ScanBarcode,
+  Search,
+  Settings,
+  ShoppingCart,
+  Snowflake,
+  X,
+} from "lucide-react";
+import { apiFetch, Category, Location, Product, User } from "../api";
+import { BrandLogo } from "./BrandLogo";
+import { buildHierarchyTree, flattenHierarchyTree } from "./HierarchySelect";
+import { ScannerDrawer, ScanMode } from "./ScannerDrawer";
+
+interface LayoutProps {
+  user: User;
+  onLogout: () => void;
+  title: string;
+  headerActions?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerActions, children }) => {
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const [searchParams] = useSearchParams();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [treeTab, setTreeTab] = useState<"locations" | "categories">("locations");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState<ScanMode>("purchase");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  const pendingPrefix = useRef<string | null>(null);
+  const prefixTimer = useRef<number | null>(null);
+
+  const { data: catData } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => apiFetch<{ categories: Category[] }>("/api/categories"),
+  });
+  const { data: locData } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => apiFetch<{ locations: Location[] }>("/api/locations"),
+  });
+  const { data: countsData } = useQuery({
+    queryKey: ["products", "counts"],
+    queryFn: () => apiFetch<{ status_counts: Record<string, number> }>("/api/products?status=in_stock"),
+  });
+  const { data: quickSearchData } = useQuery({
+    queryKey: ["quick-search", searchQuery],
+    queryFn: () => apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(searchQuery)}`),
+    enabled: searchOpen && searchQuery.trim().length > 0,
+  });
+
+  const categories = catData?.categories || [];
+  const locations = locData?.locations || [];
+  const counts = countsData?.status_counts || {};
+  const activeStatus = searchParams.get("status") || "in_stock";
+  const activeCatId = searchParams.get("category_id");
+  const activeLocId = searchParams.get("location_id");
+
+  // Gmail-style keyboard shortcuts (g+i, g+s, g+d, g+o, g+a, n, Esc, ?)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      if (isTyping) return;
+      if (e.key !== "Escape" && (e.metaKey || e.ctrlKey || e.altKey)) return;
+
+      if (e.key === "?") {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
+        return;
+      }
+      if (e.key === "Escape") {
+        if (helpOpen) { setHelpOpen(false); return; }
+        if (searchOpen) { setSearchOpen(false); return; }
+        if (scannerOpen) { setScannerOpen(false); return; }
+        if (loc.pathname !== "/") { navigate("/"); }
+        return;
+      }
+      if (e.key === "n") {
+        e.preventDefault();
+        navigate("/products/new");
+        return;
+      }
+      if (e.key === "g" && !pendingPrefix.current) {
+        pendingPrefix.current = "g";
+        prefixTimer.current = window.setTimeout(() => {
+          pendingPrefix.current = null;
+        }, 1000);
+        return;
+      }
+      if (pendingPrefix.current === "g") {
+        pendingPrefix.current = null;
+        if (prefixTimer.current) clearTimeout(prefixTimer.current);
+        const map: Record<string, string> = {
+          i: "in_stock",
+          s: "shopping_list",
+          d: "due_soon",
+          o: "overdue",
+          a: "all",
+        };
+        if (map[e.key]) {
+          e.preventDefault();
+          navigate(`/?status=${map[e.key]}`);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [helpOpen, searchOpen, scannerOpen, loc.pathname, navigate]);
+
+  const buildFilterUrl = (overrides: { status?: string; category_id?: string | null; location_id?: string | null }) => {
+    const next = new URLSearchParams();
+    next.set("status", overrides.status ?? activeStatus);
+    const cid = overrides.category_id === undefined ? activeCatId : overrides.category_id;
+    const lid = overrides.location_id === undefined ? activeLocId : overrides.location_id;
+    if (cid) next.set("category_id", cid);
+    if (lid) next.set("location_id", lid);
+    return `/?${next.toString()}`;
+  };
+
+  const sidebarContent = (
+    <div className="flex h-full flex-col bg-slate-900 border-r border-slate-800">
+      <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4">
+        <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white">
+          <BrandLogo className="h-8 w-8 shrink-0" />
+          <span>itemized</span>
+        </Link>
+        <button type="button" onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-1 text-slate-400 lg:hidden">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <nav className="flex-1 space-y-5 overflow-y-auto p-3">
+        <div className="space-y-1">
+          {[
+            { id: "in_stock", label: "In Stock", icon: LayoutGrid },
+            { id: "shopping_list", label: "Shopping List", icon: ShoppingCart, badge: counts.shopping_list },
+            { id: "due_soon", label: "Due Soon", icon: Clock, badge: counts.due_soon },
+            { id: "overdue", label: "Overdue", icon: AlertTriangle, badge: counts.overdue },
+            { id: "all", label: "All Items", icon: Box },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = loc.pathname === "/" && activeStatus === item.id;
+            return (
+              <Link
+                key={item.id}
+                to={buildFilterUrl({ status: item.id })}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  active ? "bg-indigo-600/20 text-indigo-300" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </span>
+                {item.badge ? (
+                  <span className="rounded-full bg-indigo-600/30 px-2 py-0.5 text-xs font-semibold text-indigo-200">
+                    {item.badge}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="hidden space-y-1 border-t border-slate-800 pt-3 lg:block">
+          <button
+            type="button"
+            onClick={() => { setScannerMode("purchase"); setScannerOpen(true); }}
+            className="flex w-full items-center gap-2.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            <ScanBarcode className="h-4 w-4" /> Scan / Action
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <Search className="h-4 w-4" /> Quick Search
+          </button>
+        </div>
+
+        {/* Tabbed Locations / Categories Tree */}
+        <div className="border-t border-slate-800 pt-3">
+          <div className="mb-2 grid grid-cols-2 rounded-lg bg-slate-950 p-1 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setTreeTab("locations")}
+              className={`rounded-md py-1.5 ${treeTab === "locations" ? "bg-slate-800 text-white" : "text-slate-400"}`}
+            >
+              Locations
+            </button>
+            <button
+              type="button"
+              onClick={() => setTreeTab("categories")}
+              className={`rounded-md py-1.5 ${treeTab === "categories" ? "bg-slate-800 text-white" : "text-slate-400"}`}
+            >
+              Categories
+            </button>
+          </div>
+
+          {treeTab === "locations" ? (
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-500">
+                <span>Filter by location</span>
+                <Link to="/locations" onClick={() => setMobileMenuOpen(false)} className="text-indigo-400 hover:underline">Manage</Link>
+              </div>
+              {flattenHierarchyTree(buildHierarchyTree(locations)).map(({ item: l, depth }) => {
+                const isSelected = activeLocId === String(l.id);
+                return (
+                  <Link
+                    key={l.id}
+                    to={buildFilterUrl({ location_id: isSelected ? null : String(l.id), category_id: null })}
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{ paddingLeft: `${depth * 14 + 10}px` }}
+                    title={isSelected ? "Click to clear filter" : l.hierarchy_name}
+                    className={`flex items-center justify-between rounded-lg py-1.5 pr-2.5 text-xs transition ${
+                      isSelected ? "bg-indigo-600/20 font-medium text-indigo-200" : "text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <MapPin className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-400" : "text-slate-500"}`} />
+                      <span className="truncate">{l.name}</span>
+                    </span>
+                    {l.is_freezer && <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-500">
+                <span>Filter by category</span>
+                <Link to="/categories" onClick={() => setMobileMenuOpen(false)} className="text-indigo-400 hover:underline">Manage</Link>
+              </div>
+              {flattenHierarchyTree(buildHierarchyTree(categories)).map(({ item: c, depth }) => {
+                const isSelected = activeCatId === String(c.id);
+                return (
+                  <Link
+                    key={c.id}
+                    to={buildFilterUrl({ category_id: isSelected ? null : String(c.id), location_id: null })}
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{ paddingLeft: `${depth * 14 + 10}px` }}
+                    title={isSelected ? "Click to clear filter" : c.hierarchy_name}
+                    className={`flex items-center gap-1.5 rounded-lg py-1.5 pr-2.5 text-xs transition ${
+                      isSelected ? "bg-indigo-600/20 font-medium text-indigo-200" : "text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    <FolderTree className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-400" : "text-slate-500"}`} />
+                    <span className="truncate">{c.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </nav>
+
+      <div className="border-t border-slate-800 p-3">
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 truncate hover:text-white">
+            <Settings className="h-4 w-4" />
+            <span className="truncate">{user.email}</span>
+          </Link>
+          <button type="button" onClick={onLogout} aria-label="Logout" className="rounded p-1.5 hover:bg-slate-800 hover:text-white">
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
+      {/* Desktop persistent sidebar */}
+      <aside className="hidden w-64 shrink-0 lg:block">{sidebarContent}</aside>
+
+      {/* Mobile slide-out drawer */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <div className="w-72 max-w-[85vw]">{sidebarContent}</div>
+          <div className="flex-1 bg-black/60" onClick={() => setMobileMenuOpen(false)} />
+        </div>
+      )}
+
+      {/* Main column */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/70 px-4 backdrop-blur">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open navigation"
+              className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <h1 className="truncate text-lg font-semibold text-white">{title}</h1>
+          </div>
+          <div className="flex items-center gap-2">{headerActions}</div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+          {children}
+        </main>
+      </div>
+
+      {/* Mobile Bottom Dock */}
+      <div className="fixed inset-x-0 bottom-0 z-40 grid h-16 grid-cols-3 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+        <Link to="/" className="flex flex-col items-center justify-center gap-0.5 text-xs text-slate-300">
+          <Box className="h-5 w-5" />
+          <span>Inventory</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => { setScannerMode("purchase"); setScannerOpen(true); }}
+          className="flex flex-col items-center justify-center gap-0.5 bg-indigo-600 text-xs font-semibold text-white"
+        >
+          <ScanBarcode className="h-5 w-5" />
+          <span>Scan / Action</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          className="flex flex-col items-center justify-center gap-0.5 text-xs text-slate-300"
+        >
+          <Search className="h-5 w-5" />
+          <span>Search</span>
+        </button>
+      </div>
+
+      {/* Unified Scanner Drawer */}
+      <ScannerDrawer
+        open={scannerOpen}
+        initialMode={scannerMode}
+        onClose={() => setScannerOpen(false)}
+        categories={categories}
+        locations={locations}
+      />
+
+      {/* Quick Search Modal */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-20" role="dialog" aria-label="Quick Search">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search products..."
+                className="flex-1 bg-transparent text-sm text-white outline-none"
+              />
+              <button type="button" onClick={() => setSearchOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
+              {(quickSearchData?.products || []).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setSearchQuery("");
+                    navigate(`/products/${p.id}`);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-800"
+                >
+                  <span className="font-medium text-white">{p.name}</span>
+                  <span className="text-xs text-slate-400">{p.in_stock_count} in stock</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {helpOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-label="Keyboard Shortcuts">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold text-white">Keyboard Shortcuts</h2>
+              <button type="button" onClick={() => setHelpOpen(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-300">
+              <li className="flex justify-between"><span>In Stock</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g i</kbd></li>
+              <li className="flex justify-between"><span>Shopping List</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g s</kbd></li>
+              <li className="flex justify-between"><span>Due Soon</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g d</kbd></li>
+              <li className="flex justify-between"><span>Overdue</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g o</kbd></li>
+              <li className="flex justify-between"><span>All Items</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g a</kbd></li>
+              <li className="flex justify-between"><span>New Product</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">n</kbd></li>
+              <li className="flex justify-between"><span>Back / Close</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">Esc</kbd></li>
+              <li className="flex justify-between"><span>Help</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">?</kbd></li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

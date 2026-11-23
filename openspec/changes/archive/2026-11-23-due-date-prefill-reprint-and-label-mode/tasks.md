@@ -1,0 +1,11 @@
+# Tasks
+
+## 1. Backend Calculated Due Days, Auto-Reprint & Inventory Audit Parity
+
+- [x] 1.1 Populate `CalculatedDueDays` in `loadProducts` (`internal/api/catalog.go`) for products with `use_average_for_due_date = true` (removing the duplicate single-product call in `getProductByID`) so `GET /api/products` search results also include `calculated_due_days`; verify with `go test -v ./internal/api/...`.
+- [x] 1.2 Add `reprintIfDueDateChanged` in `internal/api/items.go` and invoke it whenever `handleOpenItem`, `handleTransferItem`, `handleBulkItems` (`open` / `transfer`), or `handleInventoryApply` (`transfer`) updates `due_on_date` on a product with `label_print_mode == "per_item"`, and update `handleInventoryApply` in `internal/api/workflows.go` to apply freeze/thaw due-date rules on transfers and auto due-date calculation on created items with unset due dates; add unit tests in `internal/api/api_test.go` covering reprint-on-change (Open, Freeze, Thaw), no-reprint when unchanged or non-`per_item`, and Inventory Audit freeze/thaw, and verify with `go test -v ./internal/api/...`.
+
+## 2. Frontend Purchase Due-Date Pre-fill & Human-Readable Label Mode
+
+- [x] 2.1 Update `web/src/components/ScannerDrawer.tsx` to pre-populate `purchaseDueDate` (`today + effectiveDueDays` using `calculated_due_days` when `use_average_for_due_date` is true, or `default_due_days`) whenever a barcode/product/item is resolved in Purchase mode or an existing product is picked from search results; add a Vitest test in `web/src/components/Scanner.test.tsx` verifying `Due Date` is pre-filled from `calculated_due_days`, and verify with `cd web && ./node_modules/.bin/vitest run --pool=forks src/components/Scanner.test.tsx`.
+- [x] 2.2 Format `label_print_mode` on `web/src/pages/ProductDetailPage.tsx` as human-readable text (`per_item` → `One label per item`, `single` → `Single product label`, `none` → `No label`); update `web/src/pages/ProductDetailPage.test.tsx` to assert `One label per item` is displayed instead of `per_item`, and verify with `cd web && ./node_modules/.bin/vitest run --pool=forks && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/vite build` and `go test ./... && go build ./...`.
