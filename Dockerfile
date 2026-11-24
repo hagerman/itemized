@@ -20,22 +20,22 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/itemized ./cmd/ite
 
 # Stage 3: Minimal runtime image
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata \
- && addgroup -S -g 1000 itemized \
- && adduser -S -u 1000 -G itemized itemized \
- && mkdir -p /data \
- && chown -R itemized:itemized /data
+RUN apk add --no-cache ca-certificates tzdata su-exec \
+ && mkdir -p /data
 COPY --from=go-builder /out/itemized /usr/local/bin/itemized
 COPY --from=go-builder /out/itemized-migrate /usr/local/bin/itemized-migrate
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV PORT=8080 \
-    DB_PATH=/data/itemized.db
+    DB_PATH=/data/itemized.db \
+    PUID=1000 \
+    PGID=1000
 
 EXPOSE 8080
 VOLUME ["/data"]
-USER itemized
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/up || exit 1
 
-ENTRYPOINT ["/usr/local/bin/itemized"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

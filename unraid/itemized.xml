@@ -11,6 +11,8 @@
   <Icon>https://raw.githubusercontent.com/hagerman/itemized/main/web/public/icon.png</Icon>
   <Config Name="Web UI Port" Target="8080" Default="8080" Mode="tcp" Description="HTTP port for Itemized Web UI and API" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/itemized" Mode="rw" Description="Persistent storage for SQLite database (itemized.db)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/itemized</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for running Itemized and owning /data files (99 = nobody on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID for running Itemized and owning /data files (100 = users on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
   <Config Name="Base URL" Target="BASE_URL" Default="" Mode="" Description="Public URL encoded in printed QR labels (e.g. https://itemized.example.com)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Timezone" Target="TZ" Default="America/New_York" Mode="" Description="Container timezone" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
   <Config Name="Trust Proxy Headers" Target="TRUST_PROXY" Default="false" Mode="" Description="Set to true when behind a reverse proxy so login rate limiting reads X-Forwarded-For / X-Real-IP" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>

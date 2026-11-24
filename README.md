@@ -23,6 +23,8 @@ Open `http://localhost:8080` to complete first-run administrator setup.
 |---|---|---|
 | `PORT` | `8080` | HTTP listen port |
 | `DB_PATH` | `/data/itemized.db` | SQLite database path |
+| `PUID` | `1000` | User ID for running Itemized and owning `/data` (`99` in Unraid template) |
+| `PGID` | `1000` | Group ID for running Itemized and owning `/data` (`100` in Unraid template) |
 | `BASE_URL` | *(request host)* | Base URL encoded into printed QR labels |
 | `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so login rate limiting uses `X-Forwarded-For` / `X-Real-IP` |
 | `OIDC_ISSUER` | *(disabled)* | Optional OIDC issuer URL (Auth Code + PKCE) |
@@ -51,7 +53,7 @@ itemized-migrate \
 
 An Unraid template is provided at `unraid/itemized.xml`. Bridge networking reaches LAN printers directly on outbound connections (e.g. `http://192.168.1.50:631/ipp/print` for Zebra ZSB or `192.168.1.50:9100` for Raw TCP ZPL printers).
 
-> **Note on `/data` permissions:** The container runs as a non-root user (`itemized`, UID/GID `1000:1000`). If you have an existing `/data` bind mount previously owned by `root`, update ownership with `chown -R 1000:1000 /path/to/appdata/itemized`.
+The container entrypoint automatically ensures `/data` ownership matches `PUID:PGID` (`99:100` / `nobody:users` in the Unraid template, or `1000:1000` by default) before dropping privileges to run `/usr/local/bin/itemized` as a non-root user. If launched with an explicit non-root `--user` flag, privilege dropping is skipped automatically.
 
 ## Development
 
