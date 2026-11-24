@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserMultiFormatReader } from "@zxing/library";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { ScannerDrawer } from "./ScannerDrawer";
 
@@ -331,5 +332,181 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     );
     const dueInput = screen.getByLabelText("Due Date") as HTMLInputElement;
     expect(dueInput.value).toBe(wantDate);
+  });
+
+  it("shows HTTPS reverse-proxy guidance when camera API is unavailable in an insecure context", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    Object.defineProperty(window, "isSecureContext", { value: false, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
+
+    try {
+      render(<BarcodeScanner onScan={vi.fn()} defaultCameraEnabled={true} />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            "Camera requires HTTPS. Access Itemized over HTTPS (e.g., via a reverse proxy) to use live barcode scanning."
+          )
+        ).toBeInTheDocument()
+      );
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+    }
+  });
+
+  it("shows browser-unavailable error when camera API is unavailable in a secure context", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
+
+    try {
+      render(<BarcodeScanner onScan={vi.fn()} defaultCameraEnabled={true} />);
+      await waitFor(() =>
+        expect(screen.getByText("Camera API unavailable in this browser.")).toBeInTheDocument()
+      );
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+    }
+  });
+
+  it("requests rear camera by default, enumerates devices after permission, and cycles cameras", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const callOrder: string[] = [];
+
+    const makeStream = (deviceId: string) =>
+      ({
+        getVideoTracks: () => [
+          {
+            getSettings: () => ({ deviceId }),
+            getCapabilities: () => ({}),
+            stop: vi.fn(),
+          },
+        ],
+        getTracks: () => [{ stop: vi.fn() }],
+      }) as unknown as MediaStream;
+
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      callOrder.push("getUserMedia");
+      const video = constraints.video as MediaTrackConstraints;
+      const requestedId =
+        typeof video.deviceId === "object" && video.deviceId && "exact" in video.deviceId
+          ? String(video.deviceId.exact)
+          : "cam-rear";
+      return makeStream(requestedId);
+    });
+
+    const enumerateDevices = vi.fn(async () => {
+      callOrder.push("enumerateDevices");
+      return [
+        { kind: "videoinput", deviceId: "cam-front", label: "Front Camera" },
+        { kind: "videoinput", deviceId: "cam-rear", label: "Back Camera" },
+      ] as MediaDeviceInfo[];
+    });
+
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getUserMedia, enumerateDevices },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    try {
+      render(<BarcodeScanner onScan={vi.fn()} defaultCameraEnabled={true} />);
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Switch camera" })).toBeInTheDocument());
+      expect(getUserMedia).toHaveBeenCalledWith({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+      expect(callOrder.slice(0, 2)).toEqual(["getUserMedia", "enumerateDevices"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Switch camera" }));
+      await waitFor(() =>
+        expect(getUserMedia).toHaveBeenLastCalledWith({
+          video: {
+            deviceId: { exact: "cam-front" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        })
+      );
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+    }
+  });
+
+  it("decodes UPC and QR codes via ZXing on already-playing video without BarcodeDetector and recovers from transient errors", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
+
+    const stream = {
+      getVideoTracks: () => [
+        {
+          getSettings: () => ({ deviceId: "cam-rear" }),
+          getCapabilities: () => ({}),
+          stop: vi.fn(),
+        },
+      ],
+      getTracks: () => [{ stop: vi.fn() }],
+    } as unknown as MediaStream;
+
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(window, "BarcodeDetector", { value: undefined, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue(stream),
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    let attempt = 0;
+    const decodeSpy = vi
+      .spyOn(BrowserMultiFormatReader.prototype, "decode")
+      .mockImplementation(() => {
+        attempt += 1;
+        if (attempt === 1) {
+          throw new Error("transient frame error");
+        }
+        if (attempt === 2) {
+          return { getText: () => "049000028904" } as never;
+        }
+        return { getText: () => "https://itemized.example.com/go/i/42" } as never;
+      });
+
+    const onScan = vi.fn();
+
+    try {
+      const { container } = render(<BarcodeScanner onScan={onScan} defaultCameraEnabled={true} />);
+      const video = container.querySelector("video")!;
+      Object.defineProperty(video, "readyState", { value: 4, configurable: true });
+      Object.defineProperty(video, "videoWidth", { value: 1280, configurable: true });
+      Object.defineProperty(video, "videoHeight", { value: 720, configurable: true });
+
+      await waitFor(() => expect(onScan).toHaveBeenCalledWith("049000028904"), { timeout: 2000 });
+      await waitFor(
+        () => expect(onScan).toHaveBeenCalledWith("https://itemized.example.com/go/i/42"),
+        { timeout: 2000 }
+      );
+      expect(decodeSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+      if (origBarcodeDetector) {
+        Object.defineProperty(window, "BarcodeDetector", origBarcodeDetector);
+      } else {
+        delete (window as unknown as Record<string, unknown>).BarcodeDetector;
+      }
+    }
   });
 });

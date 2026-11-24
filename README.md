@@ -17,6 +17,15 @@ docker run -d \
 
 Open `http://localhost:8080` to complete first-run administrator setup.
 
+## HTTPS & Reverse Proxy (Required for Mobile Barcode Scanning)
+
+Modern mobile browsers (including iOS Safari and Chrome/Firefox on iOS) disable the camera API (`navigator.mediaDevices`) on plain `http://` LAN URLs such as `http://192.168.1.x:8080`. To use live camera barcode scanning on phones and tablets, serve Itemized over **HTTPS** by placing it behind a reverse proxy (such as Nginx Proxy Manager, Caddy, Traefik, SWAG, or Tailscale Serve).
+
+When running behind a reverse proxy, set:
+
+- `TRUST_PROXY=true` so login rate limiting reads client IPs from `X-Forwarded-For` / `X-Real-IP`.
+- `BASE_URL=https://itemized.example.com` so printed QR labels encode your HTTPS URL.
+
 ## Environment Variables
 
 | Variable | Default | Description |

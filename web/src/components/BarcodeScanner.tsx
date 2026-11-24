@@ -1,6 +1,24 @@
 import React, { useEffect, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/library";
+import { BarcodeFormat, BrowserMultiFormatReader, DecodeHintType } from "@zxing/library";
 import { Camera, Flashlight, FlashlightOff, RefreshCw, Search } from "lucide-react";
+
+const ZXING_FORMATS = [
+  BarcodeFormat.QR_CODE,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.ITF,
+];
+
+function createZxingReader(): BrowserMultiFormatReader {
+  const hints = new Map<DecodeHintType, unknown>();
+  hints.set(DecodeHintType.TRY_HARDER, true);
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, ZXING_FORMATS);
+  return new BrowserMultiFormatReader(hints);
+}
 
 interface BarcodeScannerProps {
   onScan: (value: string) => void;
@@ -41,7 +59,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   const [cameraEnabled, setCameraEnabled] = useState(defaultCameraEnabled);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [deviceIndex, setDeviceIndex] = useState(0);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const activeDeviceIdRef = useRef<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -64,26 +83,35 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (!active || !cameraEnabled) return;
     let cancelled = false;
     let frameId: number | null = null;
-    const zxingReader = new BrowserMultiFormatReader();
+    let zxingTimerId: number | null = null;
+    let zxingReader = createZxingReader();
+    let lastFrameWidth = 0;
+    let lastFrameHeight = 0;
 
     async function startCamera() {
       setCameraError(null);
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
-          setCameraError("Camera API unavailable in this browser.");
+          setCameraError(
+            window.isSecureContext === false
+              ? "Camera requires HTTPS. Access Itemized over HTTPS (e.g., via a reverse proxy) to use live barcode scanning."
+              : "Camera API unavailable in this browser."
+          );
           return;
         }
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = allDevices.filter((d) => d.kind === "videoinput");
-        if (!cancelled) setDevices(videoInputs);
 
-        const chosen = videoInputs[deviceIndex % Math.max(videoInputs.length, 1)];
-        const constraints: MediaStreamConstraints = {
-          video: chosen?.deviceId
-            ? { deviceId: { exact: chosen.deviceId } }
-            : { facingMode: "environment" },
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const videoConstraints: MediaTrackConstraints = selectedDeviceId
+          ? {
+              deviceId: { exact: selectedDeviceId },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }
+          : {
+              facingMode: "environment",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            };
+        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -91,6 +119,19 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         streamRef.current = stream;
 
         const track = stream.getVideoTracks()[0];
+        const settings = track?.getSettings?.();
+        activeDeviceIdRef.current = settings?.deviceId || selectedDeviceId;
+
+        if (navigator.mediaDevices.enumerateDevices) {
+          try {
+            const allDevices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = allDevices.filter((d) => d.kind === "videoinput" && d.deviceId);
+            if (!cancelled) setDevices(videoInputs);
+          } catch {
+            // Ignore device enumeration errors if camera stream already started
+          }
+        }
+
         const caps = track?.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
         setTorchSupported(Boolean(caps?.torch));
 
@@ -107,7 +148,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         };
         if (win.BarcodeDetector) {
           const detector = new win.BarcodeDetector({
-            formats: ["qr_code", "upc_a", "upc_e", "ean_13", "code_128", "code_39"],
+            formats: ["qr_code", "upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "itf"],
           });
           const loop = async () => {
             if (cancelled || !videoRef.current) return;
@@ -126,12 +167,35 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           frameId = requestAnimationFrame(loop);
         }
 
-        // Engine 2: ZXing fallback running concurrently
-        void zxingReader.decodeFromVideoElementContinuously(video, (result) => {
-          if (!cancelled && result?.getText()) {
-            emitScan(result.getText());
+        // Engine 2: Direct ZXing frame-decoding loop (avoids decodeFromVideoElementContinuously
+        // stalling on already-playing videos on iOS Safari where BarcodeDetector is unavailable)
+        const decodeZxingFrame = () => {
+          if (cancelled) return;
+          const el = videoRef.current;
+          if (el && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) {
+            if (
+              lastFrameWidth > 0 &&
+              (lastFrameWidth !== el.videoWidth || lastFrameHeight !== el.videoHeight)
+            ) {
+              zxingReader.reset();
+              zxingReader = createZxingReader();
+            }
+            lastFrameWidth = el.videoWidth;
+            lastFrameHeight = el.videoHeight;
+            try {
+              const result = zxingReader.decode(el);
+              if (!cancelled && result?.getText()) {
+                emitScan(result.getText());
+              }
+            } catch {
+              // Ignore NotFoundException and transient frame errors; keep scanning
+            }
           }
-        });
+          if (!cancelled) {
+            zxingTimerId = window.setTimeout(decodeZxingFrame, 150);
+          }
+        };
+        zxingTimerId = window.setTimeout(decodeZxingFrame, 150);
       } catch (err) {
         if (!cancelled) {
           setCameraError(err instanceof Error ? err.message : "Unable to start camera");
@@ -144,6 +208,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     return () => {
       cancelled = true;
       if (frameId !== null) cancelAnimationFrame(frameId);
+      if (zxingTimerId !== null) window.clearTimeout(zxingTimerId);
       zxingReader.reset();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
@@ -151,7 +216,17 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       }
       setTorchOn(false);
     };
-  }, [active, cameraEnabled, deviceIndex]);
+  }, [active, cameraEnabled, selectedDeviceId]);
+
+  const switchCamera = () => {
+    if (devices.length <= 1) return;
+    const currentId = activeDeviceIdRef.current;
+    const currentIdx = currentId ? devices.findIndex((d) => d.deviceId === currentId) : -1;
+    const nextDevice = devices[(currentIdx + 1) % devices.length];
+    if (nextDevice?.deviceId) {
+      setSelectedDeviceId(nextDevice.deviceId);
+    }
+  };
 
   const toggleTorch = async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -214,6 +289,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-black">
           <video
             ref={videoRef}
+            autoPlay
             playsInline
             muted
             className="h-52 w-full object-cover"
@@ -232,7 +308,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             {devices.length > 1 && (
               <button
                 type="button"
-                onClick={() => setDeviceIndex((i) => i + 1)}
+                onClick={switchCamera}
                 aria-label="Switch camera"
                 className="rounded-full bg-slate-900/80 p-2 text-slate-100 hover:bg-slate-800"
               >
