@@ -33,6 +33,10 @@ The web application SHALL provide a responsive layout with a persistent desktop 
 - **WHEN** the application runs as an added-to-home-screen full-screen app on an iOS device with a status bar notch or Dynamic Island
 - **THEN** the top header and slide-out navigation drawer include top safe-area inset padding (`env(safe-area-inset-top)`) and the shell uses dynamic viewport height (`100dvh`) so navigation controls remain unobstructed
 
+#### Scenario: Standalone iOS full-screen layout respects bottom safe-area inset without compressing the bottom dock
+- **WHEN** the application runs as an added-to-home-screen full-screen app on an iOS device with a home indicator (`env(safe-area-inset-bottom) > 0`)
+- **THEN** the mobile bottom navigation dock expands its total height by `env(safe-area-inset-bottom)` (`calc(4rem + env(safe-area-inset-bottom))`) alongside `pb-[env(safe-area-inset-bottom)]` so its `Inventory`, `Scan / Action`, and `Search` buttons retain a full `4rem` height without vertical squishing or clipping, and the mobile navigation drawer footer includes bottom safe-area inset padding so account controls remain clear of the home indicator
+
 ### Requirement: Sidebar status filters and hierarchy tree navigation
 The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`) with live item/product badge counts for actionable lists, alongside tabbed `Locations` and `Categories` hierarchy trees that filter the active view while preserving the selected status.
 
@@ -151,3 +155,18 @@ Every modal dialog in the web application (including the Scanner modal, Barcode 
 #### Scenario: Dragging from inside a modal dialog onto the backdrop does not close it
 - **WHEN** a modal dialog is open and the user presses the pointer inside the dialog panel (for example, to select text in an input) and releases it on the backdrop outside the dialog panel
 - **THEN** the modal dialog remains open
+
+### Requirement: iOS and mobile form control layout and dark-mode styling
+Form controls in multi-column responsive grids—including native `<input type="date">` and `<select>` controls—SHALL stay within their assigned column bounds without overflowing adjacent controls on iOS, maintain consistent heights across adjacent fields, and declare dark `color-scheme` styling for legible native chrome.
+
+#### Scenario: Due Date does not overlap Label Mode in the Purchase form on iOS
+- **WHEN** a user opens the `Scan & Action` Purchase form on an iOS mobile viewport (whether `Due Date` is empty or populated)
+- **THEN** the `Due Date` input stays strictly within its left grid column (`min-width: 0`, `max-width: 100%`) without extending behind the adjacent `Label Mode` selector
+
+#### Scenario: Adjacent Purchase form controls align vertically with consistent height
+- **WHEN** a user views the `Quantity`, `Location`, `Due Date`, and `Label Mode` grid in the `Scan & Action` Purchase form on iOS or desktop
+- **THEN** all four controls render with uniform height and aligned baselines without vertical collapse when `Due Date` is empty
+
+#### Scenario: Native form chrome respects dark theme contrast
+- **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop
+- **THEN** the root document declares `color-scheme: dark` so native select chevrons, calendar icons, and picker sheets render with dark-theme contrast

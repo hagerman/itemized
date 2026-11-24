@@ -619,4 +619,53 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     fireEvent.click(dialog);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("constrains Purchase form grid cells and Due Date input to prevent iOS column overlap", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(JSON.stringify({ kind: "unknown", barcode: "7272" }), { status: 200 });
+      }
+      if (url === "/api/upc/lookup") {
+        return new Response(JSON.stringify({ found: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ products: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Drinks", parent_id: null, hierarchy_name: "Drinks" }]}
+          locations={[{ id: 1, name: "Refrigerator", parent_id: null, is_freezer: false, hierarchy_name: "Refrigerator" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const mainInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(mainInput, { target: { value: "7272" } });
+    fireEvent.submit(mainInput.closest("form")!);
+
+    const dueDateInput = await screen.findByLabelText("Due Date");
+    const qtyInput = screen.getByLabelText("Quantity");
+    const labelModeSelect = screen.getByLabelText("Label Mode");
+    const locationBtn = screen.getByRole("button", { name: "Purchase location" });
+
+    // Verify Due Date input is constrained against iOS WebKit intrinsic-width overflow
+    expect(dueDateInput).toHaveClass("block", "h-10", "w-full", "min-w-0", "max-w-full", "appearance-none");
+    expect(qtyInput).toHaveClass("h-10", "w-full", "min-w-0", "max-w-full");
+    expect(labelModeSelect).toHaveClass("h-10", "w-full", "min-w-0", "max-w-full");
+    expect(locationBtn).toHaveClass("h-10", "w-full", "min-w-0");
+
+    // Verify all four grid cells include min-w-0 so CSS Grid tracks cannot overflow
+    const grid = dueDateInput.closest(".grid");
+    expect(grid).not.toBeNull();
+    expect(grid!.children.length).toBe(4);
+    for (const cell of Array.from(grid!.children)) {
+      expect(cell).toHaveClass("min-w-0");
+    }
+  });
 });

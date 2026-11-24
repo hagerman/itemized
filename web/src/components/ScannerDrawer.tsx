@@ -799,17 +799,17 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
                   )}
 
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <label className="block text-xs text-slate-400">
+                    <label className="block min-w-0 text-xs text-slate-400">
                       Quantity
                       <input
                         type="number"
                         min={1}
                         value={purchaseQty}
                         onChange={(e) => setPurchaseQty(Number(e.target.value))}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
                       />
                     </label>
-                    <div className="block text-xs text-slate-400">
+                    <div className="block min-w-0 text-xs text-slate-400">
                       <div className="mb-1">Location</div>
                       <HierarchySelect
                         items={locations}
@@ -822,21 +822,21 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
                         ariaLabel="Purchase location"
                       />
                     </div>
-                    <label className="block text-xs text-slate-400">
+                    <label className="block min-w-0 text-xs text-slate-400">
                       Due Date
                       <input
                         type="date"
                         value={purchaseDueDate}
                         onChange={(e) => setPurchaseDueDate(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        className="mt-1 block h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
                       />
                     </label>
-                    <label className="block text-xs text-slate-400">
+                    <label className="block min-w-0 text-xs text-slate-400">
                       Label Mode
                       <select
                         value={purchasePrintMode}
                         onChange={(e) => setPurchasePrintMode(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
                       >
                         <option value="per_item">Per Item</option>
                         <option value="single">Single Label</option>

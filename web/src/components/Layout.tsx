@@ -277,7 +277,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
         </div>
       </nav>
 
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t border-slate-800 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3">
         <div className="flex items-center justify-between text-xs text-slate-400">
           <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 truncate hover:text-white">
             <Settings className="h-4 w-4" />
@@ -327,7 +327,10 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
       </div>
 
       {/* Mobile Bottom Dock */}
-      <div className="fixed inset-x-0 bottom-0 z-40 grid h-16 grid-cols-3 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <nav
+        aria-label="Mobile navigation"
+        className="fixed inset-x-0 bottom-0 z-40 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-3 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      >
         <Link to="/" className="flex flex-col items-center justify-center gap-0.5 text-xs text-slate-300">
           <Box className="h-5 w-5" />
           <span>Inventory</span>
@@ -348,7 +351,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
           <Search className="h-5 w-5" />
           <span>Search</span>
         </button>
-      </div>
+      </nav>
 
       {/* Unified Scanner Drawer */}
       <ScannerDrawer

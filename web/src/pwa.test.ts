@@ -56,4 +56,20 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
     expect(unlayeredCss).toContain("select");
     expect(unlayeredCss).toMatch(/font-size:\s*16px/);
   });
+
+  it("declares dark color-scheme and normalizes iOS date input width in @layer base", async () => {
+    const indexCss = await readWebFile("src/index.css");
+    const baseMatch = indexCss.match(/@layer\s+base\s*\{[\s\S]*?\n\}/);
+    expect(baseMatch).not.toBeNull();
+    const baseCss = baseMatch![0];
+
+    expect(baseCss).toMatch(/color-scheme:\s*dark/);
+    expect(baseCss).toContain('input[type="date"]');
+    expect(baseCss).toMatch(/min-width:\s*0/);
+    expect(baseCss).toMatch(/max-width:\s*100%/);
+    expect(baseCss).toMatch(/-webkit-appearance:\s*none/);
+    expect(baseCss).toMatch(/appearance:\s*none/);
+    expect(baseCss).toContain('input[type="date"]::-webkit-date-and-time-value');
+    expect(baseCss).toMatch(/text-align:\s*left/);
+  });
 });

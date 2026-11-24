@@ -71,6 +71,17 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     const header = screen.getByRole("banner");
     expect(header.className).toContain("pt-[env(safe-area-inset-top)]");
     expect(header.closest("div.h-dvh")).not.toBeNull();
+
+    // Verify mobile bottom dock expands height for bottom safe-area inset instead of squishing inside fixed h-16
+    const mobileNav = screen.getByRole("navigation", { name: "Mobile navigation" });
+    expect(mobileNav.className).toContain("h-[calc(4rem+env(safe-area-inset-bottom))]");
+    expect(mobileNav.className).toContain("pb-[env(safe-area-inset-bottom)]");
+    expect(mobileNav.className).not.toMatch(/\bh-16\b/);
+
+    // Verify sidebar footer includes bottom safe-area inset padding for mobile drawer
+    const settingsLink = screen.getByRole("link", { name: "a@b.com" });
+    const sidebarFooter = settingsLink.closest("div.border-t");
+    expect(sidebarFooter?.className).toContain("pb-[calc(0.75rem+env(safe-area-inset-bottom))]");
   });
 
   it("closes Quick Search and Keyboard Shortcuts modals on backdrop click while keeping them open on inside clicks", async () => {
