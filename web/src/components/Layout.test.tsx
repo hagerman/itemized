@@ -66,5 +66,10 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     // Second click on already-selected Fridge clears location_id while keeping status=in_stock
     fireEvent.click(fridgeLink);
     expect(screen.getByTestId("current-url").textContent).toBe("/?status=in_stock");
+
+    // Verify shell uses dynamic viewport height and top safe-area inset for standalone iOS mode
+    const header = screen.getByRole("banner");
+    expect(header.className).toContain("pt-[env(safe-area-inset-top)]");
+    expect(header.closest("div.h-dvh")).not.toBeNull();
   });
 });

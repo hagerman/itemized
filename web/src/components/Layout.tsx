@@ -139,7 +139,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
 
   const sidebarContent = (
     <div className="flex h-full flex-col bg-slate-900 border-r border-slate-800">
-      <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4">
+      <div className="flex h-[calc(4rem+env(safe-area-inset-top))] items-center justify-between border-b border-slate-800 px-4 pt-[env(safe-area-inset-top)]">
         <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white">
           <BrandLogo className="h-8 w-8 shrink-0" />
           <span>itemized</span>
@@ -291,7 +291,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
       {/* Desktop persistent sidebar */}
       <aside className="hidden w-64 shrink-0 lg:block">{sidebarContent}</aside>
 
@@ -305,7 +305,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/70 px-4 backdrop-blur">
+        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/70 px-4 pt-[env(safe-area-inset-top)] backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"

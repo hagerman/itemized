@@ -7,7 +7,7 @@ Defines the responsive React web interface and installable PWA for browsing, sea
 ## Requirements
 
 ### Requirement: Responsive application shell and PWA support
-The web application SHALL provide a responsive layout with a persistent navigation sidebar on desktop viewports, a slide-out navigation drawer and bottom action dock (`Inventory`, prominent `Scan / Action`, `Search`) on mobile viewports, safe-area inset handling, a custom minimal box brand logo in the sidebar and auth screens, and an installable PWA web manifest with matching favicon, Apple Touch Icon, and PWA icon assets.
+The web application SHALL provide a responsive layout with a persistent desktop sidebar, a mobile drawer and bottom action dock (`Inventory`, `Scan / Action`, `Search`), top and bottom safe-area inset handling, automatic iOS input-focus zoom prevention without disabling manual pinch-to-zoom, the custom box brand logo in navigation and auth screens, and an installable PWA manifest with iOS full-screen home-screen meta tags, favicons, and Apple Touch Icon assets.
 
 #### Scenario: Mobile viewport displays bottom navigation dock
 - **WHEN** a user opens the application on a mobile viewport
@@ -23,7 +23,15 @@ The web application SHALL provide a responsive layout with a persistent navigati
 
 #### Scenario: Favicon and PWA icons configured for browser and home-screen install
 - **WHEN** a browser loads the application or installs it as a PWA on desktop, iOS, or Android
-- **THEN** `index.html` links the custom SVG/PNG favicons and `apple-touch-icon`, and `manifest.json` declares `192x192`, `512x512`, and maskable `512x512` PNG icons matching the custom brand logo
+- **THEN** `index.html` links the custom SVG/PNG favicons and `apple-touch-icon` (`/apple-touch-icon.png`), declares iOS/mobile standalone full-screen meta tags (`apple-mobile-web-app-capable`, `mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, and `viewport-fit=cover`), and `manifest.json` declares `192x192`, `512x512`, and maskable `512x512` PNG icons matching the custom brand logo
+
+#### Scenario: Focusing a text input on iOS does not trigger automatic page zoom
+- **WHEN** a user on iOS focuses any `<input>`, `<textarea>`, or `<select>` control in the application (such as Quick Search, scanner input, auth fields, or product forms)
+- **THEN** the control renders with a font size of at least `16px` so iOS Safari and standalone web apps do not automatically zoom the viewport or push navigation items off-screen, while preserving user pinch-to-zoom accessibility
+
+#### Scenario: Standalone iOS full-screen layout respects top safe-area inset
+- **WHEN** the application runs as an added-to-home-screen full-screen app on an iOS device with a status bar notch or Dynamic Island
+- **THEN** the top header and slide-out navigation drawer include top safe-area inset padding (`env(safe-area-inset-top)`) and the shell uses dynamic viewport height (`100dvh`) so navigation controls remain unobstructed
 
 ### Requirement: Sidebar status filters and hierarchy tree navigation
 The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`) with live item/product badge counts for actionable lists, alongside tabbed `Locations` and `Categories` hierarchy trees that filter the active view while preserving the selected status.

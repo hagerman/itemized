@@ -34,7 +34,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialized, oidcEnabled, on
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-4 pt-[calc(1rem+env(safe-area-inset-top))]">
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandLogo className="mb-3 h-12 w-12" />
