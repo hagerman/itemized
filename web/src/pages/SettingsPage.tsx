@@ -9,13 +9,24 @@ interface SettingsPageProps {
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
   const qc = useQueryClient();
+  const isAdmin = user.role === "admin";
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Instance Settings
+  // Account (All users)
+  const [accountEmail, setAccountEmail] = useState(user.email);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  useEffect(() => {
+    setAccountEmail(user.email);
+  }, [user.email]);
+
+  // Instance Settings (Admin only)
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiFetch<AppSettings>("/api/settings"),
+    enabled: isAdmin,
   });
   const [baseUrl, setBaseUrl] = useState("");
   const [avgCount, setAvgCount] = useState("3");
@@ -44,25 +55,27 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
   const { data: usersData } = useQuery({
     queryKey: ["users"],
     queryFn: () => apiFetch<{ users: User[] }>("/api/users"),
-    enabled: user.role === "admin",
+    enabled: isAdmin,
   });
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPass, setNewUserPass] = useState("");
   const [newUserRole, setNewUserRole] = useState<"member" | "admin">("member");
 
-  // Printers
+  // Printers (Admin only)
   const { data: printersData } = useQuery({
     queryKey: ["printers"],
     queryFn: () => apiFetch<{ printers: PrinterRecord[] }>("/api/printers"),
+    enabled: isAdmin,
   });
   const [pName, setPName] = useState("");
   const [pDriver, setPDriver] = useState<"ipp_zpl" | "raw_tcp_zpl">("ipp_zpl");
   const [pEndpoint, setPEndpoint] = useState("");
 
-  // Label Templates
+  // Label Templates (Admin only)
   const { data: tmplData } = useQuery({
     queryKey: ["label-templates"],
     queryFn: () => apiFetch<{ templates: LabelTemplate[] }>("/api/label-templates"),
+    enabled: isAdmin,
   });
   const [activeEntity, setActiveEntity] = useState<"item" | "product" | "location">("item");
   const [tmplContent, setTmplContent] = useState("");
@@ -75,6 +88,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
   const flash = (msg: string) => {
     setError(null);
     setNotice(msg);
+  };
+
+  const saveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiFetch("/api/auth/account", {
+        method: "PATCH",
+        body: JSON.stringify({
+          email: accountEmail,
+          ...(newPassword ? { current_password: currentPassword, new_password: newPassword } : {}),
+        }),
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      flash("Account updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update account");
+    }
   };
 
   const saveInstanceSettings = async (e: React.FormEvent) => {
@@ -109,7 +140,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
       {notice && <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm text-emerald-200">{notice}</div>}
       {error && <div className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-sm text-rose-200">{error}</div>}
 
-      {/* Instance Configuration */}
+      {/* Account (All Users) */}
+      <form onSubmit={saveAccount} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <h2 className="text-base font-semibold text-white">Account</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block text-xs text-slate-400">
+            Email address
+            <input type="email" required value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Current password
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Required to change password" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          </label>
+          <label className="block text-xs text-slate-400">
+            New password
+            <input type="password" minLength={newPassword ? 8 : undefined} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          </label>
+        </div>
+        <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Update Account</button>
+      </form>
+
+      {/* Instance Configuration (Admin Only) */}
+      {isAdmin && (
       <form onSubmit={saveInstanceSettings} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <h2 className="text-base font-semibold text-white">Instance Configuration</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -154,9 +206,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
 
         <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Save Settings</button>
       </form>
+      )}
 
       {/* Household Users (Admin Only) */}
-      {user.role === "admin" && (
+      {isAdmin && (
         <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <h2 className="text-base font-semibold text-white">Household Users (Admin)</h2>
           <form
@@ -211,7 +264,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
         </div>
       )}
 
-      {/* Printers */}
+      {/* Printers (Admin Only) */}
+      {isAdmin && (
       <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <h2 className="text-base font-semibold text-white">Label Printers</h2>
         <form
@@ -274,8 +328,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
           ))}
         </div>
       </div>
+      )}
 
-      {/* ZPL Label Templates */}
+      {/* ZPL Label Templates (Admin Only) */}
+      {isAdmin && (
       <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-white">ZPL Label Templates</h2>
@@ -334,6 +390,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 };

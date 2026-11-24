@@ -24,6 +24,7 @@ Open `http://localhost:8080` to complete first-run administrator setup.
 | `PORT` | `8080` | HTTP listen port |
 | `DB_PATH` | `/data/itemized.db` | SQLite database path |
 | `BASE_URL` | *(request host)* | Base URL encoded into printed QR labels |
+| `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so login rate limiting uses `X-Forwarded-For` / `X-Real-IP` |
 | `OIDC_ISSUER` | *(disabled)* | Optional OIDC issuer URL (Auth Code + PKCE) |
 | `OIDC_CLIENT_ID` | | Optional OIDC client ID |
 | `OIDC_CLIENT_SECRET` | | Optional OIDC client secret |
@@ -49,6 +50,8 @@ itemized-migrate \
 ## Unraid Community Apps
 
 An Unraid template is provided at `unraid/itemized.xml`. Bridge networking reaches LAN printers directly on outbound connections (e.g. `http://192.168.1.50:631/ipp/print` for Zebra ZSB or `192.168.1.50:9100` for Raw TCP ZPL printers).
+
+> **Note on `/data` permissions:** The container runs as a non-root user (`itemized`, UID/GID `1000:1000`). If you have an existing `/data` bind mount previously owned by `root`, update ownership with `chown -R 1000:1000 /path/to/appdata/itemized`.
 
 ## Development
 

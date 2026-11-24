@@ -265,8 +265,14 @@ func (s *Service) ResetPassword(ctx context.Context, id int64, newPassword strin
 	if err != nil {
 		return err
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	now := db.NowUTC()
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now, id)
+	res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now, id)
 	if err != nil {
 		return err
 	}
@@ -274,7 +280,10 @@ func (s *Service) ResetPassword(ctx context.Context, id int64, newPassword strin
 	if n == 0 {
 		return ErrUserNotFound
 	}
-	return nil
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Service) DeleteUser(ctx context.Context, id int64) error {
@@ -289,9 +298,15 @@ func (s *Service) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) UpdateAccount(ctx context.Context, userID int64, email, currentPassword, newPassword string) (*User, error) {
+func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID int64, email, currentPassword, newPassword string) (*User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	var existingEmail, existingHash string
-	err := s.db.QueryRowContext(ctx, `SELECT email, password_hash FROM users WHERE id = ?`, userID).Scan(&existingEmail, &existingHash)
+	err = tx.QueryRowContext(ctx, `SELECT email, password_hash FROM users WHERE id = ?`, userID).Scan(&existingEmail, &existingHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -317,13 +332,29 @@ func (s *Service) UpdateAccount(ctx context.Context, userID int64, email, curren
 	}
 
 	now := db.NowUTC()
-	_, err = s.db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		UPDATE users SET email = ?, password_hash = ?, updated_at = ? WHERE id = ?
 	`, nextEmail, nextHash, now, userID)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, ErrDuplicateEmail
 		}
+		return nil, err
+	}
+
+	if newPassword != "" {
+		if currentSessionID > 0 {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id != ?`, userID, currentSessionID); err != nil {
+				return nil, err
+			}
+		} else {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.GetUser(ctx, userID)

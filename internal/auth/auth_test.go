@@ -142,3 +142,55 @@ func TestOIDCUserLinkingAndAutoProvision(t *testing.T) {
 		t.Fatalf("expected empty OIDCConfig to be disabled")
 	}
 }
+
+func TestSessionRevocationOnPasswordResetAndChange(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ctx := context.Background()
+
+	u, err := svc.SetupAdmin(ctx, "admin@example.com", "password123")
+	if err != nil {
+		t.Fatalf("SetupAdmin: %v", err)
+	}
+
+	// Create two sessions for the user.
+	tok1, sess1, err := svc.CreateSession(ctx, u.ID, SessionKindCookie, "browser-1", "127.0.0.1", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession 1: %v", err)
+	}
+	tok2, _, err := svc.CreateSession(ctx, u.ID, SessionKindBearer, "mobile-2", "127.0.0.1", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession 2: %v", err)
+	}
+
+	// Changing own password keeps current session (sess1) and revokes other sessions (tok2).
+	if _, err := svc.UpdateAccount(ctx, u.ID, sess1.ID, "", "password123", "newpassword456"); err != nil {
+		t.Fatalf("UpdateAccount password change: %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, tok1); err != nil {
+		t.Fatalf("expected current session tok1 to remain valid, got %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, tok2); err != ErrUnauthorized {
+		t.Fatalf("expected other session tok2 to be revoked, got %v", err)
+	}
+
+	// Admin password reset revokes ALL sessions including tok1.
+	tok3, _, err := svc.CreateSession(ctx, u.ID, SessionKindBearer, "tablet-3", "127.0.0.1", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession 3: %v", err)
+	}
+	if err := svc.ResetPassword(ctx, u.ID, "resetpassword789"); err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, tok1); err != ErrUnauthorized {
+		t.Fatalf("expected tok1 revoked after ResetPassword, got %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, tok3); err != ErrUnauthorized {
+		t.Fatalf("expected tok3 revoked after ResetPassword, got %v", err)
+	}
+}

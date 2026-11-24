@@ -698,3 +698,254 @@ func TestAutoReprintOnDueDateChangeAndInventoryAudit(t *testing.T) {
 		t.Fatalf("expected no print for label_print_mode=single, got %d", len(fake.jobs))
 	}
 }
+
+func TestSecurityAdminOnlyEndpointsAndMemberPrinting(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	fake := &fakeDriver{}
+	srv.Printer.RegisterDriver(printer.DriverIPPZPL, fake)
+	h := srv.Handler()
+
+	// Setup admin + create member
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct{ Token string `json:"token"` }
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	adminTok := loginResp.Token
+
+	doReq(t, h, http.MethodPost, "/api/users", map[string]any{"email": "member@home.local", "password": "password123", "role": "member"}, adminTok)
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "member@home.local", "password": "password123", "mode": "bearer"}, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	memberTok := loginResp.Token
+
+	// Admin creates printer, category, location, product
+	rec = doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+		"name": "Zebra", "driver": "ipp_zpl", "endpoint": "http://192.168.1.50:631/ipp/print", "enabled": true,
+	}, adminTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("admin create printer expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var prResp struct{ Printer PrinterRecord }
+	_ = json.Unmarshal(rec.Body.Bytes(), &prResp)
+
+	// Member must get 403 on settings, printers, and label templates
+	forbiddenChecks := []struct {
+		method string
+		path   string
+		body   any
+	}{
+		{http.MethodGet, "/api/settings", nil},
+		{http.MethodPatch, "/api/settings", map[string]any{"base_url": "https://evil.example"}},
+		{http.MethodGet, "/api/printers", nil},
+		{http.MethodPost, "/api/printers", map[string]any{"name": "Rogue", "driver": "ipp_zpl", "endpoint": "http://127.0.0.1:9999"}},
+		{http.MethodPatch, "/api/printers/1", map[string]any{"name": "X", "driver": "ipp_zpl", "endpoint": "http://127.0.0.1:9999", "enabled": true}},
+		{http.MethodDelete, "/api/printers/1", nil},
+		{http.MethodPost, "/api/printers/1/test", nil},
+		{http.MethodGet, "/api/label-templates", nil},
+		{http.MethodPut, "/api/label-templates/item", map[string]any{"content": "^XA^XZ"}},
+		{http.MethodDelete, "/api/label-templates/item", nil},
+	}
+	for _, tc := range forbiddenChecks {
+		rec := doReq(t, h, tc.method, tc.path, tc.body, memberTok)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("member %s %s expected 403, got %d: %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Admin succeeds on settings, printer test, and label templates
+	if rec := doReq(t, h, http.MethodGet, "/api/settings", nil, adminTok); rec.Code != http.StatusOK {
+		t.Fatalf("admin GET /api/settings expected 200, got %d", rec.Code)
+	}
+	if rec := doReq(t, h, http.MethodPost, "/api/printers/1/test", nil, adminTok); rec.Code != http.StatusOK {
+		t.Fatalf("admin test printer expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Member can still trigger normal inventory label printing
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Pantry"}, memberTok)
+	var catResp struct{ Category Category }
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Shelf"}, memberTok)
+	var locResp struct{ Location Location }
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "Beans", "category_id": catResp.Category.ID, "default_location_id": locResp.Location.ID, "label_print_mode": "per_item",
+	}, memberTok)
+	var prodResp struct{ Product Product }
+	_ = json.Unmarshal(rec.Body.Bytes(), &prodResp)
+
+	jobsBefore := len(fake.jobs)
+	rec = doReq(t, h, http.MethodPost, "/api/items", map[string]any{"product_id": prodResp.Product.ID, "quantity": 1}, memberTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("member create item expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(fake.jobs) != jobsBefore+1 {
+		t.Fatalf("expected member item creation to trigger label print, jobs before=%d after=%d", jobsBefore, len(fake.jobs))
+	}
+}
+
+func TestSecuritySessionRevocationAndLoginRateLimiting(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	srv.LoginLimiter = newLoginRateLimiter(3, 60*1e9) // 3 per minute for test
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct{ Token string `json:"token"` }
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	adminTok1 := loginResp.Token
+
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	adminTok2 := loginResp.Token
+
+	// Change password via adminTok1 -> adminTok2 is revoked, adminTok1 remains valid
+	rec = doReq(t, h, http.MethodPatch, "/api/auth/account", map[string]any{
+		"current_password": "password123", "new_password": "newpassword456",
+	}, adminTok1)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("account password change expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doReq(t, h, http.MethodGet, "/api/auth/me", nil, adminTok1); rec.Code != http.StatusOK {
+		t.Fatalf("expected current session adminTok1 valid, got %d", rec.Code)
+	}
+	if rec := doReq(t, h, http.MethodGet, "/api/auth/me", nil, adminTok2); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected other session adminTok2 revoked (401), got %d", rec.Code)
+	}
+
+	// Create member, log in, then admin resets member's password -> member token revoked
+	rec = doReq(t, h, http.MethodPost, "/api/users", map[string]any{"email": "m@home.local", "password": "password123", "role": "member"}, adminTok1)
+	var userResp struct {
+		User struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &userResp)
+
+	// Fresh limiter for rate-limit subtests
+	srv.LoginLimiter = newLoginRateLimiter(2, 60*1e9)
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "m@home.local", "password": "password123", "mode": "bearer"}, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	memberTok := loginResp.Token
+
+	if rec := doReq(t, h, http.MethodPost, "/api/users/2/reset-password", map[string]any{"password": "resetpass789"}, adminTok1); rec.Code != http.StatusOK {
+		t.Fatalf("reset password expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := doReq(t, h, http.MethodGet, "/api/auth/me", nil, memberTok); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected member token revoked after reset, got %d", rec.Code)
+	}
+
+	// Rate limiting: TrustProxy=false ignores spoofed X-Forwarded-For
+	srv.TrustProxy = false
+	srv.LoginLimiter = newLoginRateLimiter(2, 60*1e9)
+	sendLogin := func(remoteAddr, xff, email string) int {
+		body, _ := json.Marshal(map[string]any{"email": email, "password": "wrong"})
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+		req.RemoteAddr = remoteAddr
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		r := httptest.NewRecorder()
+		h.ServeHTTP(r, req)
+		return r.Code
+	}
+	if code := sendLogin("203.0.113.10:1234", "198.51.100.1", "a@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("attempt 1 expected 401, got %d", code)
+	}
+	if code := sendLogin("203.0.113.10:1234", "198.51.100.2", "b@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("attempt 2 expected 401, got %d", code)
+	}
+	if code := sendLogin("203.0.113.10:1234", "198.51.100.3", "c@home.local"); code != http.StatusTooManyRequests {
+		t.Fatalf("attempt 3 with spoofed XFF expected 429, got %d", code)
+	}
+
+	// Rate limiting: TrustProxy=true uses rightmost non-private IP in X-Forwarded-For
+	srv.TrustProxy = true
+	srv.LoginLimiter = newLoginRateLimiter(2, 60*1e9)
+	// Same proxy RemoteAddr (10.0.0.2), different real client IPs -> distinct IP buckets
+	if code := sendLogin("10.0.0.2:443", "198.51.100.10", "u1@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("proxy client 1 expected 401, got %d", code)
+	}
+	if code := sendLogin("10.0.0.2:443", "198.51.100.11", "u2@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("proxy client 2 expected 401, got %d", code)
+	}
+	if code := sendLogin("10.0.0.2:443", "198.51.100.12", "u3@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("proxy client 3 expected 401 (distinct XFF), got %d", code)
+	}
+	// Same email across different IPs -> throttled by email bucket on 3rd attempt
+	if code := sendLogin("10.0.0.2:443", "198.51.100.20", "victim@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("email attempt 1 expected 401, got %d", code)
+	}
+	if code := sendLogin("10.0.0.2:443", "198.51.100.21", "victim@home.local"); code != http.StatusUnauthorized {
+		t.Fatalf("email attempt 2 expected 401, got %d", code)
+	}
+	if code := sendLogin("10.0.0.2:443", "198.51.100.22", "victim@home.local"); code != http.StatusTooManyRequests {
+		t.Fatalf("email attempt 3 expected 429, got %d", code)
+	}
+}
+
+func TestSecurityBodyLimitAndQuantityCaps(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct{ Token string `json:"token"` }
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// Oversized JSON body (>1 MiB) -> 413
+	huge := `{"name":"` + strings.Repeat("a", maxJSONBodyBytes+1024) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(huge))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tok)
+	bigRec := httptest.NewRecorder()
+	h.ServeHTTP(bigRec, req)
+	if bigRec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized JSON expected 413, got %d: %s", bigRec.Code, bigRec.Body.String())
+	}
+
+	// Quantity > 500 rejected with 422 on items, purchase, and inventory apply
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Food"}, tok)
+	var catResp struct{ Category Category }
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Pantry"}, tok)
+	var locResp struct{ Location Location }
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "Rice", "category_id": catResp.Category.ID, "default_location_id": locResp.Location.ID,
+	}, tok)
+	var prodResp struct{ Product Product }
+	_ = json.Unmarshal(rec.Body.Bytes(), &prodResp)
+
+	if rec := doReq(t, h, http.MethodPost, "/api/items", map[string]any{"product_id": prodResp.Product.ID, "quantity": 501}, tok); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /api/items quantity=501 expected 422, got %d", rec.Code)
+	}
+	if rec := doReq(t, h, http.MethodPost, "/api/workflows/purchase", map[string]any{"product_id": prodResp.Product.ID, "quantity": 501}, tok); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /api/workflows/purchase quantity=501 expected 422, got %d", rec.Code)
+	}
+	if rec := doReq(t, h, http.MethodPost, "/api/workflows/inventory/apply", map[string]any{
+		"location_id": locResp.Location.ID,
+		"create_items": []map[string]any{
+			{"product_id": prodResp.Product.ID, "quantity": 501},
+		},
+	}, tok); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /api/workflows/inventory/apply quantity=501 expected 422, got %d", rec.Code)
+	}
+}

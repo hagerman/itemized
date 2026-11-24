@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -20,25 +21,34 @@ import (
 	"itemized/internal/upc"
 )
 
+const (
+	maxJSONBodyBytes = 1 << 20 // 1 MiB
+	maxBatchQuantity = 500
+)
+
 type Server struct {
-	DB       *sql.DB
-	Auth     *auth.Service
-	OIDC     *auth.OIDCManager
-	Printer  *printer.Service
-	UPC      *upc.Client
-	LLM      *llm.Classifier
-	StaticFS fs.FS
+	DB           *sql.DB
+	Auth         *auth.Service
+	OIDC         *auth.OIDCManager
+	Printer      *printer.Service
+	UPC          *upc.Client
+	LLM          *llm.Classifier
+	StaticFS     fs.FS
+	LoginLimiter *loginRateLimiter
+	TrustProxy   bool
 }
 
 func NewServer(conn *sql.DB, staticFS fs.FS) *Server {
 	return &Server{
-		DB:       conn,
-		Auth:     auth.NewService(conn),
-		OIDC:     auth.NewOIDCManager(),
-		Printer:  printer.NewService(),
-		UPC:      upc.NewClient(),
-		LLM:      llm.NewClassifier(),
-		StaticFS: staticFS,
+		DB:           conn,
+		Auth:         auth.NewService(conn),
+		OIDC:         auth.NewOIDCManager(),
+		Printer:      printer.NewService(),
+		UPC:          upc.NewClient(),
+		LLM:          llm.NewClassifier(),
+		StaticFS:     staticFS,
+		LoginLimiter: newLoginRateLimiter(defaultLoginRateLimit, defaultLoginRateWindow),
+		TrustProxy:   strings.EqualFold(strings.TrimSpace(os.Getenv("TRUST_PROXY")), "true"),
 	}
 }
 
@@ -76,9 +86,9 @@ func (s *Server) Handler() http.Handler {
 	authed.Handle("POST /api/users/{id}/reset-password", adminOnly(s.handleResetUserPassword))
 	authed.Handle("DELETE /api/users/{id}", adminOnly(s.handleDeleteUser))
 
-	// Settings
-	authed.HandleFunc("GET /api/settings", s.handleGetSettings)
-	authed.HandleFunc("PATCH /api/settings", s.handleUpdateSettings)
+	// Settings (Admin-only)
+	authed.Handle("GET /api/settings", adminOnly(s.handleGetSettings))
+	authed.Handle("PATCH /api/settings", adminOnly(s.handleUpdateSettings))
 
 	// Categories
 	authed.HandleFunc("GET /api/categories", s.handleListCategories)
@@ -129,15 +139,15 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("POST /api/upc/lookup", s.handleUPCLookup)
 	authed.HandleFunc("POST /api/upc/classify", s.handleUPCClassify)
 
-	// Printers & Label Templates
-	authed.HandleFunc("GET /api/printers", s.handleListPrinters)
-	authed.HandleFunc("POST /api/printers", s.handleCreatePrinter)
-	authed.HandleFunc("PATCH /api/printers/{id}", s.handleUpdatePrinter)
-	authed.HandleFunc("DELETE /api/printers/{id}", s.handleDeletePrinter)
-	authed.HandleFunc("POST /api/printers/{id}/test", s.handleTestPrinter)
-	authed.HandleFunc("GET /api/label-templates", s.handleListLabelTemplates)
-	authed.HandleFunc("PUT /api/label-templates/{entityType}", s.handleUpsertLabelTemplate)
-	authed.HandleFunc("DELETE /api/label-templates/{entityType}", s.handleResetLabelTemplate)
+	// Printers & Label Templates (Admin-only)
+	authed.Handle("GET /api/printers", adminOnly(s.handleListPrinters))
+	authed.Handle("POST /api/printers", adminOnly(s.handleCreatePrinter))
+	authed.Handle("PATCH /api/printers/{id}", adminOnly(s.handleUpdatePrinter))
+	authed.Handle("DELETE /api/printers/{id}", adminOnly(s.handleDeletePrinter))
+	authed.Handle("POST /api/printers/{id}/test", adminOnly(s.handleTestPrinter))
+	authed.Handle("GET /api/label-templates", adminOnly(s.handleListLabelTemplates))
+	authed.Handle("PUT /api/label-templates/{entityType}", adminOnly(s.handleUpsertLabelTemplate))
+	authed.Handle("DELETE /api/label-templates/{entityType}", adminOnly(s.handleResetLabelTemplate))
 
 	mux.Handle("/api/", auth.RequireAuth(s.Auth, authed))
 
@@ -184,9 +194,24 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-func decodeJSON(r *http.Request, dst any) error {
+func writeInternalError(w http.ResponseWriter, contextMsg string, err error) {
+	log.Printf("%s: %v", contextMsg, err)
+	writeError(w, http.StatusInternalServerError, "internal server error")
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	dec := json.NewDecoder(r.Body)
-	return dec.Decode(dst)
+	if err := dec.Decode(dst); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "invalid json")
+		return false
+	}
+	return true
 }
 
 func parseIDParam(r *http.Request, name string) (int64, error) {
@@ -270,7 +295,7 @@ func (s *Server) llmConfig(ctx context.Context) llm.Config {
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	count, err := s.Auth.UserCount(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "auth status user count", err)
 		return
 	}
 	var currentUser *auth.User
@@ -291,8 +316,7 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	user, err := s.Auth.SetupAdmin(r.Context(), req.Email, req.Password)
@@ -304,9 +328,9 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, auth.SessionKindCookie, r.UserAgent(), r.RemoteAddr, auth.DefaultSessionTTL)
+	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, auth.SessionKindCookie, r.UserAgent(), clientIP(r, s.TrustProxy), auth.DefaultSessionTTL)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "setup create session", err)
 		return
 	}
 	auth.SetSessionCookie(w, r, raw, auth.DefaultSessionTTL)
@@ -314,14 +338,24 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r, s.TrustProxy)
+	if s.LoginLimiter != nil && !s.LoginLimiter.Allow("ip:"+ip) {
+		writeError(w, http.StatusTooManyRequests, "too many login attempts, please try again later")
+		return
+	}
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 		Mode     string `json:"mode"` // "cookie" (default) or "bearer"
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
+	}
+	if normEmail := strings.ToLower(strings.TrimSpace(req.Email)); normEmail != "" {
+		if s.LoginLimiter != nil && !s.LoginLimiter.Allow("email:"+normEmail) {
+			writeError(w, http.StatusTooManyRequests, "too many login attempts, please try again later")
+			return
+		}
 	}
 	user, err := s.Auth.Authenticate(r.Context(), req.Email, req.Password)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
@@ -329,7 +363,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "login authenticate", err)
 		return
 	}
 
@@ -337,9 +371,9 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if strings.EqualFold(req.Mode, auth.SessionKindBearer) {
 		kind = auth.SessionKindBearer
 	}
-	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, kind, r.UserAgent(), r.RemoteAddr, auth.DefaultSessionTTL)
+	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, kind, r.UserAgent(), ip, auth.DefaultSessionTTL)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "login create session", err)
 		return
 	}
 
@@ -372,7 +406,8 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	authURL, err := s.OIDC.BeginAuth(r.Context(), cfg, kind)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		log.Printf("oidc begin auth: %v", err)
+		writeError(w, http.StatusBadGateway, "oidc provider unavailable")
 		return
 	}
 	http.Redirect(w, r, authURL, http.StatusFound)
@@ -382,7 +417,8 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	cfg := s.oidcConfig(r.Context(), r)
 	res, err := s.OIDC.CompleteAuth(r.Context(), cfg, r.URL.Query().Get("state"), r.URL.Query().Get("code"))
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		log.Printf("oidc complete auth: %v", err)
+		writeError(w, http.StatusUnauthorized, "oidc authentication failed")
 		return
 	}
 	user, err := s.Auth.FindOrLinkOIDCUser(r.Context(), res.Issuer, res.Subject, res.Email, cfg.AutoProvision)
@@ -390,9 +426,9 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "no matching household account")
 		return
 	}
-	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, res.SessionKind, r.UserAgent(), r.RemoteAddr, auth.DefaultSessionTTL)
+	raw, _, err := s.Auth.CreateSession(r.Context(), user.ID, res.SessionKind, r.UserAgent(), clientIP(r, s.TrustProxy), auth.DefaultSessionTTL)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "oidc create session", err)
 		return
 	}
 	if res.SessionKind == auth.SessionKindBearer {
@@ -413,12 +449,15 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	u := auth.UserFromContext(r.Context())
-	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, req.Email, req.CurrentPassword, req.NewPassword)
+	var sessID int64
+	if sess := auth.SessionFromContext(r.Context()); sess != nil {
+		sessID = sess.ID
+	}
+	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, sessID, req.Email, req.CurrentPassword, req.NewPassword)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
 		writeError(w, http.StatusUnprocessableEntity, "current password is incorrect")
 		return
@@ -437,7 +476,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.Auth.ListUsers(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "list users", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users})
@@ -449,8 +488,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Role     string `json:"role"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	u, err := s.Auth.CreateUser(r.Context(), req.Email, req.Password, req.Role)
@@ -474,8 +512,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Role string `json:"role"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	u, err := s.Auth.UpdateUserRole(r.Context(), id, req.Role)
@@ -499,8 +536,7 @@ func (s *Server) handleResetUserPassword(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	err = s.Auth.ResetPassword(r.Context(), id, req.Password)
@@ -529,7 +565,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "user not found")
 		return
 	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "delete user", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -557,8 +593,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	allowed := map[string]bool{
@@ -578,7 +613,7 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if err := s.setSetting(r.Context(), k, fmt.Sprintf("%v", v)); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeInternalError(w, "update setting", err)
 			return
 		}
 	}

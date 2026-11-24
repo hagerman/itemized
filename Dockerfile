@@ -21,7 +21,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/itemized ./cmd/ite
 # Stage 3: Minimal runtime image
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata \
- && mkdir -p /data
+ && addgroup -S -g 1000 itemized \
+ && adduser -S -u 1000 -G itemized itemized \
+ && mkdir -p /data \
+ && chown -R itemized:itemized /data
 COPY --from=go-builder /out/itemized /usr/local/bin/itemized
 COPY --from=go-builder /out/itemized-migrate /usr/local/bin/itemized-migrate
 
@@ -30,6 +33,7 @@ ENV PORT=8080 \
 
 EXPOSE 8080
 VOLUME ["/data"]
+USER itemized
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/up || exit 1

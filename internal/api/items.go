@@ -178,8 +178,7 @@ func (s *Server) handleCreateItems(w http.ResponseWriter, r *http.Request) {
 		Quantity        int     `json:"quantity"`
 		LabelPrintMode  string  `json:"label_print_mode"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.ProductID <= 0 {
@@ -189,6 +188,10 @@ func (s *Server) handleCreateItems(w http.ResponseWriter, r *http.Request) {
 	if req.Quantity <= 0 {
 		req.Quantity = 1
 	}
+	if req.Quantity > maxBatchQuantity {
+		writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("quantity cannot exceed %d", maxBatchQuantity))
+		return
+	}
 
 	p, err := s.getProductByID(r.Context(), req.ProductID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -196,7 +199,7 @@ func (s *Server) handleCreateItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "create items load product", err)
 		return
 	}
 
@@ -226,7 +229,7 @@ func (s *Server) handleCreateItems(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "create items begin tx", err)
 		return
 	}
 	defer tx.Rollback()
@@ -239,18 +242,18 @@ func (s *Server) handleCreateItems(w http.ResponseWriter, r *http.Request) {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		`, p.ID, req.VariantID, locID, purchStr, dueStr, req.Notes, now, now)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to create item")
 			return
 		}
 		id, _ := res.LastInsertId()
 		createdIDs = append(createdIDs, id)
 	}
 	if _, err := tx.ExecContext(r.Context(), `UPDATE products SET manually_added_to_shopping_list = 0, updated_at = ? WHERE id = ? AND manually_added_to_shopping_list != 0`, now, p.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "create items clear shopping list", err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "create items commit", err)
 		return
 	}
 
@@ -285,13 +288,12 @@ func (s *Server) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "update item load", err)
 		return
 	}
 
 	var req map[string]any
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -326,7 +328,7 @@ func (s *Server) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, varID, locID, purch, opened, due, consumed, notes, now, id)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeError(w, http.StatusUnprocessableEntity, "unable to update item")
 		return
 	}
 	updated, _ := s.getItemByID(r.Context(), id)
@@ -356,7 +358,7 @@ func (s *Server) handleDeleteItem(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.ExecContext(r.Context(), `DELETE FROM items WHERE id = ?`, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "delete item", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -378,13 +380,13 @@ func (s *Server) handleConsumeItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "consume item load", err)
 		return
 	}
 	today := todayUTC().Format(domain.DateLayout)
 	now := db.NowUTC()
 	if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET consumed_on_date = ?, updated_at = ? WHERE id = ?`, today, now, id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "consume item update", err)
 		return
 	}
 	updated, _ := s.getItemByID(r.Context(), id)
@@ -403,12 +405,12 @@ func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "open item load", err)
 		return
 	}
 	p, err := s.getProductByID(r.Context(), prev.ProductID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "open item load product", err)
 		return
 	}
 
@@ -421,7 +423,7 @@ func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {
 	openStr := today.Format(domain.DateLayout)
 	now := db.NowUTC()
 	if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET opened_on_date = ?, due_on_date = ?, updated_at = ? WHERE id = ?`, openStr, nextDue, now, id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "open item update", err)
 		return
 	}
 	updated, _ := s.getItemByID(r.Context(), id)
@@ -438,7 +440,10 @@ func (s *Server) handleTransferItem(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		LocationID int64 `json:"location_id"`
 	}
-	if err := decodeJSON(r, &req); err != nil || req.LocationID <= 0 {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.LocationID <= 0 {
 		writeError(w, http.StatusBadRequest, "location_id is required")
 		return
 	}
@@ -448,7 +453,7 @@ func (s *Server) handleTransferItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "transfer item", err)
 		return
 	}
 	warnings := s.reprintIfDueDateChanged(r.Context(), r, p, prev.DueOnDate, updated)
@@ -525,7 +530,7 @@ func (s *Server) handlePrintItemLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "print item label load", err)
 		return
 	}
 	warnings := s.printItemLabel(r.Context(), r, *it)
@@ -563,8 +568,7 @@ func (s *Server) handleBulkItems(w http.ResponseWriter, r *http.Request) {
 		DueOnDate  *string `json:"due_on_date"`
 		VariantID  *int64  `json:"variant_id"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if len(req.ItemIDs) == 0 {

@@ -29,8 +29,7 @@ func (s *Server) handleScanResolve(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Input string `json:"input"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	raw := strings.TrimSpace(req.Input)
@@ -202,8 +201,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 		Notes              *string       `json:"notes"`
 		LabelPrintMode     string        `json:"label_print_mode"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.ProductID == nil && req.NewProduct == nil {
@@ -231,10 +229,14 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 	if req.Quantity <= 0 {
 		req.Quantity = 1
 	}
+	if req.Quantity > maxBatchQuantity {
+		writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("quantity cannot exceed %d", maxBatchQuantity))
+		return
+	}
 
 	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "purchase begin tx", err)
 		return
 	}
 	defer tx.Rollback()
@@ -246,7 +248,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 	} else {
 		productID, err = s.insertProduct(r.Context(), tx, *req.NewProduct)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to create product")
 			return
 		}
 	}
@@ -266,7 +268,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, productID, vName, req.VariantVolumeValue, req.VariantVolumeUnit, req.VariantWeightValue, req.VariantWeightUnit, req.VariantLengthValue, req.VariantLengthUnit, now, now)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to create variant")
 			return
 		}
 		vid, _ := res.LastInsertId()
@@ -282,7 +284,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 			INSERT OR IGNORE INTO barcodes (variant_id, barcode, default_quantity, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?)
 		`, *variantID, primaryBarcode, qty, now, now); err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to save barcode")
 			return
 		}
 	}
@@ -295,7 +297,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 			INSERT OR IGNORE INTO barcodes (variant_id, barcode, default_quantity, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?)
 		`, *variantID, secondBarcode, qty, now, now); err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to save barcode")
 			return
 		}
 	}
@@ -327,7 +329,7 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		`, productID, variantID, locID, purchStr, req.DueOnDate, req.Notes, now, now)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, "unable to create item")
 			return
 		}
 		id, _ := res.LastInsertId()
@@ -335,12 +337,12 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if _, err := tx.ExecContext(r.Context(), `UPDATE products SET manually_added_to_shopping_list = 0, updated_at = ? WHERE id = ? AND manually_added_to_shopping_list != 0`, now, productID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "purchase clear shopping list", err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "purchase commit", err)
 		return
 	}
 
@@ -385,7 +387,10 @@ func (s *Server) handleInventorySummary(w http.ResponseWriter, r *http.Request) 
 			Quantity  int   `json:"quantity"`
 		} `json:"scanned_products"`
 	}
-	if err := decodeJSON(r, &req); err != nil || req.LocationID <= 0 {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.LocationID <= 0 {
 		writeError(w, http.StatusBadRequest, "location_id is required")
 		return
 	}
@@ -393,7 +398,7 @@ func (s *Server) handleInventorySummary(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	atLoc, err := s.listItemsByLocation(ctx, req.LocationID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "inventory summary list items", err)
 		return
 	}
 	atLocByID := make(map[int64]Item, len(atLoc))
@@ -508,15 +513,32 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 			DueOnDate *string `json:"due_on_date"`
 		} `json:"create_items"`
 	}
-	if err := decodeJSON(r, &req); err != nil || req.LocationID <= 0 {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.LocationID <= 0 {
 		writeError(w, http.StatusBadRequest, "location_id is required")
 		return
+	}
+	totalCreate := 0
+	for _, c := range req.CreateItems {
+		if c.Quantity > maxBatchQuantity {
+			writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("quantity cannot exceed %d", maxBatchQuantity))
+			return
+		}
+		if c.Quantity > 0 {
+			totalCreate += c.Quantity
+			if totalCreate > maxBatchQuantity {
+				writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("total create quantity cannot exceed %d", maxBatchQuantity))
+				return
+			}
+		}
 	}
 
 	ctx := r.Context()
 	_, locMap, err := s.listAllLocations(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "inventory apply list locations", err)
 		return
 	}
 	toLoc, ok := locMap[req.LocationID]
@@ -577,7 +599,7 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "inventory apply begin tx", err)
 		return
 	}
 	defer tx.Rollback()
@@ -588,7 +610,7 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 	for _, id := range req.ConsumeItemIDs {
 		res, err := tx.ExecContext(ctx, `UPDATE items SET consumed_on_date = ?, updated_at = ? WHERE id = ? AND consumed_on_date IS NULL`, todayStr, now, id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeInternalError(w, "inventory apply consume", err)
 			return
 		}
 		if n, _ := res.RowsAffected(); n > 0 {
@@ -600,7 +622,7 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 	for _, tp := range transferPlans {
 		res, err := tx.ExecContext(ctx, `UPDATE items SET location_id = ?, due_on_date = ?, updated_at = ? WHERE id = ? AND consumed_on_date IS NULL`, req.LocationID, tp.nextDue, now, tp.itemID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeInternalError(w, "inventory apply transfer", err)
 			return
 		}
 		if n, _ := res.RowsAffected(); n > 0 {
@@ -618,7 +640,7 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 				INSERT INTO items (product_id, location_id, purchased_on_date, due_on_date, created_at, updated_at)
 				VALUES (?, ?, ?, ?, ?, ?)
 			`, c.ProductID, req.LocationID, todayStr, createDueDates[idx], now, now); err != nil {
-				writeError(w, http.StatusUnprocessableEntity, err.Error())
+				writeError(w, http.StatusUnprocessableEntity, "unable to create item")
 				return
 			}
 			createdCount++
@@ -626,7 +648,7 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := tx.Commit(); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "inventory apply commit", err)
 		return
 	}
 
@@ -651,14 +673,18 @@ func (s *Server) handleUPCLookup(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Barcode string `json:"barcode"`
 	}
-	if err := decodeJSON(r, &req); err != nil || strings.TrimSpace(req.Barcode) == "" {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Barcode) == "" {
 		writeError(w, http.StatusBadRequest, "barcode is required")
 		return
 	}
 	res, err := s.UPC.Lookup(r.Context(), req.Barcode)
 	if err != nil {
+		log.Printf("upc lookup warning: %v", err)
 		// Graceful degradation so Purchase workflow can continue manually.
-		writeJSON(w, http.StatusOK, map[string]any{"found": false, "warning": err.Error()})
+		writeJSON(w, http.StatusOK, map[string]any{"found": false, "warning": "upc lookup unavailable"})
 		return
 	}
 	if res == nil {
@@ -673,8 +699,7 @@ func (s *Server) handleUPCClassify(w http.ResponseWriter, r *http.Request) {
 		Title    string `json:"title"`
 		Quantity string `json:"quantity"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	cfg := s.llmConfig(r.Context())
@@ -684,7 +709,7 @@ func (s *Server) handleUPCClassify(w http.ResponseWriter, r *http.Request) {
 	}
 	cats, _, err := s.listAllCategories(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "upc classify list categories", err)
 		return
 	}
 	opts := make([]llm.CategoryOption, 0, len(cats))
@@ -694,7 +719,7 @@ func (s *Server) handleUPCClassify(w http.ResponseWriter, r *http.Request) {
 	out, err := s.LLM.Classify(r.Context(), cfg, req.Title, req.Quantity, opts)
 	if err != nil {
 		log.Printf("upc classify warning (provider=%s model=%s): %v", cfg.Provider, cfg.Model, err)
-		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "classification": nil, "warning": err.Error()})
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "classification": nil, "warning": "classification unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "classification": out})
@@ -800,7 +825,7 @@ func (s *Server) printBatchForPurchase(ctx context.Context, r *http.Request, p *
 func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request) {
 	list, err := s.listPrinters(r.Context(), false)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "list printers", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"printers": list})
@@ -815,8 +840,7 @@ func (s *Server) handleCreatePrinter(w http.ResponseWriter, r *http.Request) {
 		PrinterModel *string `json:"printer_model"`
 		Enabled      *bool   `json:"enabled"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -842,7 +866,7 @@ func (s *Server) handleCreatePrinter(w http.ResponseWriter, r *http.Request) {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`, req.Name, req.Description, req.Driver, req.Endpoint, req.PrinterModel, boolToInt(enabled), now, now)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeError(w, http.StatusUnprocessableEntity, "unable to create printer")
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -869,8 +893,7 @@ func (s *Server) handleUpdatePrinter(w http.ResponseWriter, r *http.Request) {
 		PrinterModel *string `json:"printer_model"`
 		Enabled      bool    `json:"enabled"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Driver != printer.DriverIPPZPL && req.Driver != printer.DriverRawTCPZPL {
@@ -883,7 +906,7 @@ func (s *Server) handleUpdatePrinter(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, strings.TrimSpace(req.Name), req.Description, req.Driver, strings.TrimSpace(req.Endpoint), req.PrinterModel, boolToInt(req.Enabled), now, id)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeError(w, http.StatusUnprocessableEntity, "unable to update printer")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -901,7 +924,7 @@ func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.ExecContext(r.Context(), `DELETE FROM printers WHERE id = ?`, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "delete printer", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -924,7 +947,7 @@ func (s *Server) handleTestPrinter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "test printer load", err)
 		return
 	}
 	override := s.getTemplateOverride(r.Context(), printer.EntityItem)
@@ -939,7 +962,8 @@ func (s *Server) handleTestPrinter(w http.ResponseWriter, r *http.Request) {
 		ID: p.ID, Name: p.Name, Driver: p.Driver, Endpoint: p.Endpoint, Enabled: true,
 	}, printer.EntityItem, override, payload)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		log.Printf("test printer %d (%s) failed: %v", p.ID, p.Name, err)
+		writeError(w, http.StatusBadGateway, "printer test failed")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -981,7 +1005,10 @@ func (s *Server) handleUpsertLabelTemplate(w http.ResponseWriter, r *http.Reques
 	var req struct {
 		Content string `json:"content"`
 	}
-	if err := decodeJSON(r, &req); err != nil || strings.TrimSpace(req.Content) == "" {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
 		writeError(w, http.StatusUnprocessableEntity, "content is required")
 		return
 	}
@@ -996,7 +1023,7 @@ func (s *Server) handleUpsertLabelTemplate(w http.ResponseWriter, r *http.Reques
 		ON CONFLICT(entity_type) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at
 	`, et, req.Content, now)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "upsert label template", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -1009,7 +1036,7 @@ func (s *Server) handleResetLabelTemplate(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, err := s.DB.ExecContext(r.Context(), `DELETE FROM label_templates WHERE entity_type = ?`, et); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "reset label template", err)
 		return
 	}
 	def, _ := printer.DefaultTemplate(et)

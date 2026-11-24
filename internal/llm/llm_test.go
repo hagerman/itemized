@@ -136,3 +136,41 @@ func TestClassifierFlexibleJSONParsing(t *testing.T) {
 		t.Fatalf("unexpected flexible parse result: %+v", got)
 	}
 }
+
+func TestClassifierGeminiUsesHeaderAuth(t *testing.T) {
+	c := NewClassifier()
+	var capturedURL string
+	var capturedHeader string
+	c.HTTPClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			capturedURL = r.URL.String()
+			capturedHeader = r.Header.Get("x-goog-api-key")
+			body := `{"candidates":[{"content":{"parts":[{"text":"{\"product_name\":\"Milk, Whole\",\"product_value\":1,\"product_unit_type\":\"volume\",\"product_unit\":\"gal\",\"category_id\":null}"}]}}]}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+
+	cfg := Config{
+		Provider: "gemini",
+		Model:    "gemini-2.5-flash",
+		APIKey:   "super-secret-gemini-key",
+		BaseURL:  "https://gemini.test",
+	}
+	got, err := c.Classify(context.Background(), cfg, "Horizon Whole Milk", "1 gal", nil)
+	if err != nil {
+		t.Fatalf("Classify gemini failed: %v", err)
+	}
+	if got == nil || got.ProductName != "Milk, Whole" {
+		t.Fatalf("unexpected gemini classification: %+v", got)
+	}
+	if strings.Contains(capturedURL, "key=") || strings.Contains(capturedURL, "super-secret-gemini-key") {
+		t.Fatalf("expected API key NOT in request URL, got %q", capturedURL)
+	}
+	if capturedHeader != "super-secret-gemini-key" {
+		t.Fatalf("expected x-goog-api-key header, got %q", capturedHeader)
+	}
+}

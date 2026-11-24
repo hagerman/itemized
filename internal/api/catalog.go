@@ -162,7 +162,7 @@ func collectDescendantCategoryIDs(rootID int64, list []Category) map[int64]bool 
 func (s *Server) handleListCategories(w http.ResponseWriter, r *http.Request) {
 	cats, _, err := s.listAllCategories(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if cats == nil {
@@ -176,8 +176,7 @@ func (s *Server) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		ParentID *int64 `json:"parent_id"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -206,7 +205,7 @@ func (s *Server) handleGetCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	_, byID, err := s.listAllCategories(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	c, ok := byID[id]
@@ -227,8 +226,7 @@ func (s *Server) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		ParentID *int64 `json:"parent_id"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.ParentID != nil && *req.ParentID == id {
@@ -343,7 +341,7 @@ func collectDescendantLocationIDs(rootID int64, list []Location) map[int64]bool 
 func (s *Server) handleListLocations(w http.ResponseWriter, r *http.Request) {
 	locs, _, err := s.listAllLocations(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); q != "" {
@@ -367,8 +365,7 @@ func (s *Server) handleCreateLocation(w http.ResponseWriter, r *http.Request) {
 		ParentID  *int64 `json:"parent_id"`
 		IsFreezer bool   `json:"is_freezer"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -397,7 +394,7 @@ func (s *Server) handleGetLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	_, byID, err := s.listAllLocations(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	loc, ok := byID[id]
@@ -407,7 +404,7 @@ func (s *Server) handleGetLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := s.listItemsByLocation(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"location": loc, "items": items})
@@ -424,8 +421,7 @@ func (s *Server) handleUpdateLocation(w http.ResponseWriter, r *http.Request) {
 		ParentID  *int64 `json:"parent_id"`
 		IsFreezer bool   `json:"is_freezer"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if req.ParentID != nil && *req.ParentID == id {
@@ -474,7 +470,7 @@ func (s *Server) handlePrintLocationLabel(w http.ResponseWriter, r *http.Request
 	}
 	_, byID, err := s.listAllLocations(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	loc, ok := byID[id]
@@ -735,7 +731,7 @@ func (s *Server) handleListProducts(w http.ResponseWriter, r *http.Request) {
 
 	allProducts, err := s.loadProducts(ctx, q)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 
@@ -930,17 +926,17 @@ func (s *Server) handleGetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	variants, err := s.listVariantsWithBarcodes(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	items, err := s.listItemsByProduct(r.Context(), id, r.URL.Query().Get("include_consumed") == "true")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -952,8 +948,7 @@ func (s *Server) handleGetProduct(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req productInput
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if err := req.validate(); err != nil {
@@ -1001,8 +996,7 @@ func (s *Server) handleUpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req productInput
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if err := req.validate(); err != nil {
@@ -1043,7 +1037,7 @@ func (s *Server) handleDeleteProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.ExecContext(r.Context(), `DELETE FROM products WHERE id = ?`, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -1067,7 +1061,7 @@ func (s *Server) handleToggleShoppingList(w http.ResponseWriter, r *http.Request
 		WHERE id = ?
 	`, now, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -1090,7 +1084,7 @@ func (s *Server) handlePrintProductLabel(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	payload := printer.LabelPayload{
@@ -1120,8 +1114,7 @@ func (s *Server) handleCreateVariant(w http.ResponseWriter, r *http.Request) {
 		LengthValue *float64 `json:"length_value"`
 		LengthUnit  *string  `json:"length_unit"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -1173,8 +1166,7 @@ func (s *Server) handleUpdateVariant(w http.ResponseWriter, r *http.Request) {
 		LengthValue *float64 `json:"length_value"`
 		LengthUnit  *string  `json:"length_unit"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	if err := domain.ValidateMeasurement(domain.Measurement{
@@ -1209,7 +1201,7 @@ func (s *Server) handleDeleteVariant(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.ExecContext(r.Context(), `DELETE FROM variants WHERE id = ?`, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -1229,8 +1221,7 @@ func (s *Server) handleCreateBarcode(w http.ResponseWriter, r *http.Request) {
 		Barcode         string `json:"barcode"`
 		DefaultQuantity int    `json:"default_quantity"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json")
+	if !decodeJSON(w, r, &req) {
 		return
 	}
 	req.Barcode = strings.TrimSpace(req.Barcode)
@@ -1271,7 +1262,7 @@ func (s *Server) handleDeleteBarcode(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.DB.ExecContext(r.Context(), `DELETE FROM barcodes WHERE id = ?`, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeInternalError(w, "catalog internal error", err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

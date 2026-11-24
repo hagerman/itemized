@@ -7,7 +7,7 @@ Embeds direct LAN label printing into the server with pluggable printer protocol
 ## Requirements
 
 ### Requirement: Direct LAN printer management and pluggable drivers
-The system SHALL allow household users to configure shared `Printer` records specifying a name, enabled status, driver protocol (`ipp_zpl` or `raw_tcp_zpl`), and network endpoint (IPP URL such as `http://<ip>:631/ipp/print` or host/port such as `<ip>:9100`), and SHALL send rendered ZPL directly from the server without a companion desktop app.
+The system SHALL allow authenticated administrators to configure, list, test, and delete shared `Printer` records specifying a name, enabled status, driver protocol (`ipp_zpl` or `raw_tcp_zpl`), and network endpoint (IPP URL such as `http://<ip>:631/ipp/print` or host/port such as `<ip>:9100`), and SHALL send rendered ZPL directly from the server without a companion desktop app. Non-admin `member` users SHALL still trigger normal label prints during inventory workflows, while printer administration endpoints (`/api/printers*`) SHALL reject non-admin users with HTTP 403.
 
 #### Scenario: Printing via IPP ZPL (Zebra ZSB)
 - **WHEN** a print is triggered for an enabled `ipp_zpl` printer
@@ -18,19 +18,27 @@ The system SHALL allow household users to configure shared `Printer` records spe
 - **THEN** the server renders the ZPL template and writes the ZPL bytes directly to the configured TCP socket
 
 #### Scenario: Printer connectivity test
-- **WHEN** a user triggers a test print or connection check on a printer in Settings
-- **THEN** the system reports success or a clear network/printer error message
+- **WHEN** an administrator triggers a test print or connection check on a printer in Settings
+- **THEN** the system reports success or a sanitized printer error message
+
+#### Scenario: Non-admin attempts to manage printers
+- **WHEN** an authenticated `member` requests `GET/POST /api/printers`, `PATCH/DELETE /api/printers/{id}`, or `POST /api/printers/{id}/test`
+- **THEN** the system rejects the request with HTTP 403 Forbidden
 
 ### Requirement: Built-in ZPL templates with UI overrides
-The system SHALL ship embedded default ZPL templates for `item`, `product`, and `location` labels, and SHALL allow users to view, edit, preview template variables, and reset custom overrides per entity type in the Web UI (persisted in `LabelTemplate`).
+The system SHALL ship embedded default ZPL templates for `item`, `product`, and `location` labels, and SHALL allow authenticated administrators to view, edit, preview template variables, and reset custom overrides per entity type in the Web UI (persisted in `LabelTemplate`). Non-admin requests to `/api/label-templates*` SHALL be rejected with HTTP 403.
 
 #### Scenario: Custom template overrides embedded default
-- **WHEN** a user saves a custom ZPL template for `item` labels in Settings
+- **WHEN** an administrator saves a custom ZPL template for `item` labels in Settings
 - **THEN** subsequent item label prints render the custom template instead of the embedded default
 
 #### Scenario: Resetting a template restores default
-- **WHEN** a user resets a customized template
+- **WHEN** an administrator resets a customized template
 - **THEN** the system removes or clears the override and reverts to the embedded default template
+
+#### Scenario: Non-admin attempts to manage label templates
+- **WHEN** an authenticated `member` requests `GET /api/label-templates` or `PUT/DELETE /api/label-templates/{entityType}`
+- **THEN** the system rejects the request with HTTP 403 Forbidden
 
 ### Requirement: Label print mode enforcement
 When items are created in Purchase mode, the system SHALL respect `label_print_mode` (`none`, `single`, or `per_item`), encoding `<base_url>/go/{i,p,l}/<id>` in QR payloads. For products configured with `label_print_mode = "per_item"`, whenever opening or transferring an item (single, bulk, or Inventory Audit) changes its `due_on_date`, the system SHALL automatically print a new `item` label reflecting the updated due date.

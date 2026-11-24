@@ -222,7 +222,7 @@ func (c *Classifier) callGemini(ctx context.Context, cfg Config, prompt string) 
 	if base == "" {
 		base = "https://generativelanguage.googleapis.com"
 	}
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", base, cfg.Model, cfg.APIKey)
+	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", base, cfg.Model)
 	payload := map[string]any{
 		"contents": []map[string]any{
 			{"parts": []map[string]string{{"text": prompt}}},
@@ -237,6 +237,9 @@ func (c *Classifier) callGemini(ctx context.Context, cfg Config, prompt string) 
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if cfg.APIKey != "" {
+		req.Header.Set("x-goog-api-key", cfg.APIKey)
+	}
 
 	resp, err := c.client().Do(req)
 	if err != nil {
