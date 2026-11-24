@@ -213,4 +213,43 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
 
     await waitFor(() => expect(screen.getByTestId("default-due-days-value")).toHaveTextContent("~14"));
   });
+
+  it("closes the Barcode Scan modal when clicking outside the dialog panel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const scanBtn = await waitFor(() => screen.getByRole("button", { name: "Scan barcode for Default" }));
+    fireEvent.click(scanBtn);
+
+    const dialog = screen.getByRole("dialog", { name: "Scan Variant Barcode" });
+    const modalInput = screen.getByLabelText("Barcode or search input");
+
+    // Clicking inside keeps the modal open
+    fireEvent.mouseDown(modalInput);
+    fireEvent.click(modalInput);
+    expect(screen.getByRole("dialog", { name: "Scan Variant Barcode" })).toBeInTheDocument();
+
+    // Clicking the backdrop closes the modal
+    fireEvent.mouseDown(dialog);
+    fireEvent.click(dialog);
+    expect(screen.queryByRole("dialog", { name: "Scan Variant Barcode" })).not.toBeInTheDocument();
+  });
 });

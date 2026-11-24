@@ -72,4 +72,61 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     expect(header.className).toContain("pt-[env(safe-area-inset-top)]");
     expect(header.closest("div.h-dvh")).not.toBeNull();
   });
+
+  it("closes Quick Search and Keyboard Shortcuts modals on backdrop click while keeping them open on inside clicks", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ products: [], status_counts: {} }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Open Quick Search modal
+    const searchButtons = screen.getAllByRole("button", { name: /Search/i });
+    fireEvent.click(searchButtons[0]);
+    const searchDialog = screen.getByRole("dialog", { name: "Quick Search" });
+    const searchInput = screen.getByPlaceholderText("Search products...");
+
+    fireEvent.mouseDown(searchInput);
+    fireEvent.click(searchInput);
+    expect(screen.getByRole("dialog", { name: "Quick Search" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(searchDialog);
+    fireEvent.click(searchDialog);
+    expect(screen.queryByRole("dialog", { name: "Quick Search" })).not.toBeInTheDocument();
+
+    // Open Keyboard Shortcuts modal via "?" key
+    fireEvent.keyDown(window, { key: "?" });
+    const helpDialog = screen.getByRole("dialog", { name: "Keyboard Shortcuts" });
+    const helpHeading = screen.getByText("Keyboard Shortcuts");
+
+    fireEvent.mouseDown(helpHeading);
+    fireEvent.click(helpHeading);
+    expect(screen.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(helpDialog);
+    fireEvent.click(helpDialog);
+    expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).not.toBeInTheDocument();
+  });
 });

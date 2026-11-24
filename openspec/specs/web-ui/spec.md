@@ -119,8 +119,35 @@ The web application SHALL support Gmail-style keyboard shortcuts when focus is n
 - **THEN** no navigation shortcut is triggered
 
 ### Requirement: Authentication and settings views
-The web application SHALL provide dedicated views for first-run Admin setup, Login (displaying an OIDC sign-in button only when OIDC is configured), and Settings organized into Account (accessible to all authenticated users) and Admin-only sections for Household Users (creation, role management, and password reset), Instance Configuration (`base_url`, `due_date_average_count`, OIDC, LLM), Printers (CRUD + test print), and ZPL Label Templates (editor with variable reference and reset-to-default).
+The web application SHALL provide dedicated views for first-run Admin setup, Login (displaying an OIDC sign-in button when OIDC is configured, or automatically redirecting to `/api/auth/oidc/login` without rendering the local email/password form when Force OIDC is active on an initialized instance), and Settings organized into Account (accessible to all authenticated users) and Admin-only sections for Household Users (creation, role promotion/demotion between `member` and `admin`, deletion, and password reset), Instance Configuration (`base_url`, `due_date_average_count`, OIDC including Force OIDC, LLM), Printers (CRUD + test print), and ZPL Label Templates (editor with variable reference and reset-to-default).
 
 #### Scenario: Non-admin user opens Settings
 - **WHEN** a logged-in `member` opens Settings
 - **THEN** only Account controls are displayed while Admin-only sections (Instance Configuration, Household Users, Label Printers, and ZPL Label Templates) are hidden and their admin API endpoints are not queried
+
+#### Scenario: Admin changes another user's role in Settings
+- **WHEN** a logged-in `admin` changes another user's role dropdown in Household Users from `member` to `admin` (or `admin` to `member`)
+- **THEN** the application calls `PATCH /api/users/{id}` with the new role, refreshes the user list, and displays confirmation (while keeping the signed-in admin's own role non-editable)
+
+#### Scenario: Admin configures OIDC options in Settings
+- **WHEN** a logged-in `admin` opens Instance Configuration in Settings
+- **THEN** both the "Auto-provision new household members on OIDC login" and "Force OIDC login" checkboxes under OIDC settings are disabled until both Issuer URL and Client ID are populated, and saving persists `oidc_auto_provision` and `oidc_force` via `PATCH /api/settings`
+
+#### Scenario: Unauthenticated user lands on login screen with Force OIDC active
+- **WHEN** an unauthenticated visitor opens the application on an initialized instance where `GET /api/auth/status` returns `oidc_enabled: true` and `oidc_force: true`
+- **THEN** the login view does not render the local email/password form, automatically redirects the browser to `/api/auth/oidc/login`, and displays a redirecting message with a manual "Sign in with OIDC" fallback link
+
+### Requirement: Modal dialog backdrop dismissal
+Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, and Keyboard Shortcuts help dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
+
+#### Scenario: Clicking outside a modal dialog closes it
+- **WHEN** a modal dialog (Scanner, Barcode Scan, Quick Search, or Keyboard Shortcuts) is open and the user clicks or taps the darkened backdrop outside the dialog panel
+- **THEN** the modal dialog closes (triggering the same close behavior as its close button)
+
+#### Scenario: Clicking inside a modal dialog does not close it
+- **WHEN** a modal dialog is open and the user clicks or taps inside the dialog panel (including its header, body, form inputs, or non-closing controls)
+- **THEN** the modal dialog remains open
+
+#### Scenario: Dragging from inside a modal dialog onto the backdrop does not close it
+- **WHEN** a modal dialog is open and the user presses the pointer inside the dialog panel (for example, to select text in an input) and releases it on the backdrop outside the dialog panel
+- **THEN** the modal dialog remains open

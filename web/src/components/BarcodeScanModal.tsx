@@ -1,6 +1,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { ModalBackdrop } from "./ModalBackdrop";
 
 interface BarcodeScanModalProps {
   open: boolean;
@@ -18,10 +19,10 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
-      role="dialog"
-      aria-label={title}
+    <ModalBackdrop
+      onClose={onClose}
+      ariaLabel={title}
+      className="flex items-end justify-center p-4 sm:items-center"
     >
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-4 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
@@ -44,6 +45,6 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
           }}
         />
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

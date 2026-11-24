@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { HierarchySelect } from "./HierarchySelect";
+import { ModalBackdrop } from "./ModalBackdrop";
 import {
   EMPTY_MEASUREMENT,
   MeasurementDraft,
@@ -628,7 +629,7 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 sm:items-center" role="dialog" aria-label="Scanner">
+    <ModalBackdrop onClose={onClose} ariaLabel="Scanner" className="flex items-end justify-center sm:items-center">
       <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl sm:rounded-2xl">
         {/* Header & Mode Switcher */}
         <div className="border-b border-slate-800 px-4 py-3">
@@ -1204,6 +1205,6 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 };

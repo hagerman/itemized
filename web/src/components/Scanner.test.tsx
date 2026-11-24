@@ -592,4 +592,31 @@ describe("BarcodeScanner and ScannerDrawer", () => {
       }
     }
   });
+
+  it("closes ScannerDrawer when clicking the backdrop but stays open on inside clicks", () => {
+    const onClose = vi.fn();
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={onClose}
+          categories={[]}
+          locations={[]}
+        />
+      </QueryClientProvider>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Scanner" });
+    const heading = screen.getByText("Scan & Action");
+
+    fireEvent.mouseDown(heading);
+    fireEvent.click(heading);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(dialog);
+    fireEvent.click(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

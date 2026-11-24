@@ -20,6 +20,7 @@ import {
 import { apiFetch, Category, Location, Product, User } from "../api";
 import { BrandLogo } from "./BrandLogo";
 import { buildHierarchyTree, flattenHierarchyTree } from "./HierarchySelect";
+import { ModalBackdrop } from "./ModalBackdrop";
 import { ScannerDrawer, ScanMode } from "./ScannerDrawer";
 
 interface LayoutProps {
@@ -360,7 +361,11 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
 
       {/* Quick Search Modal */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-20" role="dialog" aria-label="Quick Search">
+        <ModalBackdrop
+          onClose={() => setSearchOpen(false)}
+          ariaLabel="Quick Search"
+          className="flex items-start justify-center p-4 pt-20"
+        >
           <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-2xl">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <Search className="h-4 w-4 text-slate-400" />
@@ -393,12 +398,16 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
               ))}
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
 
       {/* Keyboard Shortcuts Help Modal */}
       {helpOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-label="Keyboard Shortcuts">
+        <ModalBackdrop
+          onClose={() => setHelpOpen(false)}
+          ariaLabel="Keyboard Shortcuts"
+          className="flex items-center justify-center p-4"
+        >
           <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-white">Keyboard Shortcuts</h2>
@@ -415,7 +424,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
               <li className="flex justify-between"><span>Help</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">?</kbd></li>
             </ul>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
     </div>
   );
