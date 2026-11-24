@@ -68,11 +68,11 @@ The web application SHALL provide a Scanner modal (bottom-aligned on mobile, mid
 - **THEN** the scanner requests `{ facingMode: "environment" }` and refreshes the list of available video input devices after the camera stream starts so the lens switcher can cycle between cameras on iOS and other mobile browsers
 
 ### Requirement: Live barcode and QR decoding without native BarcodeDetector
-The live camera scanner SHALL continuously decode both 1D retail barcodes (UPC-A, UPC-E, EAN-13, EAN-8, Code 128, Code 39, ITF) and 2D QR codes from the active video stream on browsers that do not implement the native `BarcodeDetector` API (including iOS Safari), without stalling on already-playing video elements or terminating on transient frame decode errors.
+The live camera scanner SHALL continuously decode both 1D retail barcodes (UPC-A, UPC-E, EAN-13, EAN-8, Code 128, Code 39, ITF) and 2D QR codes from the active video stream on browsers that do not implement the native `BarcodeDetector` API (including iOS Safari), using a self-hosted WebAssembly decoder bundled with the application (with no external CDN requests), without stalling on already-playing video elements or terminating on transient frame decode errors, and surfacing an error if the decoder fails to initialize.
 
 #### Scenario: Decoding UPC or QR codes on iOS Safari without native BarcodeDetector
 - **WHEN** the live camera stream starts and begins playing in a browser where `window.BarcodeDetector` is unavailable
-- **THEN** the scanner immediately begins decoding video frames once dimensions are available (`readyState >= 2`, `videoWidth > 0`, `videoHeight > 0`) and emits decoded UPC barcodes and printed QR URLs to the active scan workflow
+- **THEN** the scanner captures frames from the active video stream once dimensions are available (`readyState >= 2`, `videoWidth > 0`, `videoHeight > 0`), decodes them using the self-hosted WebAssembly decoder, and emits decoded UPC barcodes and printed QR URLs to the active scan workflow
 
 #### Scenario: Transient frame error does not halt continuous scanning
 - **WHEN** a frame decode attempt fails with a transient error (such as no barcode in frame or an unready frame)
@@ -81,6 +81,10 @@ The live camera scanner SHALL continuously decode both 1D retail barcodes (UPC-A
 #### Scenario: High-resolution rear camera constraints requested for sharp 1D/2D scanning
 - **WHEN** the scanner starts the live camera
 - **THEN** it requests ideal HD video dimensions (`1280x720`) alongside the selected camera constraint so fine 1D UPC bars and small printed QR codes remain legible on mobile devices
+
+#### Scenario: Decoder initialization failure is surfaced to the user
+- **WHEN** the self-hosted WebAssembly decoder fails to load or initialize
+- **THEN** the scanner displays a visible error message in the camera banner instead of failing silently
 
 ### Requirement: Streamlined Purchase workflow
 The Purchase workflow SHALL resolve scanned barcodes or product searches, pre-fill `Due Date` from `calculated_due_days` or `default_due_days`, show loading indicators during UPC lookup and LLM classification for unknown barcodes, pre-fill the variant name from the UPC title and collapsible measurements from LLM classification, allow selecting or creating a product with one or two barcodes, create items with calculated due dates, and trigger label printing per `label_print_mode`.

@@ -1,13 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserMultiFormatReader } from "@zxing/library";
+
+const { prepareZXingModuleMock, readBarcodesMock } = vi.hoisted(() => ({
+  prepareZXingModuleMock: vi.fn(),
+  readBarcodesMock: vi.fn(),
+}));
+
+vi.mock("zxing-wasm/reader", () => ({
+  prepareZXingModule: prepareZXingModuleMock,
+  readBarcodes: readBarcodesMock,
+}));
+
+vi.mock("zxing-wasm/reader/zxing_reader.wasm?url", () => ({
+  default: "/assets/zxing_reader-test.wasm",
+}));
+
 import { BarcodeScanner } from "./BarcodeScanner";
 import { ScannerDrawer } from "./ScannerDrawer";
 
 describe("BarcodeScanner and ScannerDrawer", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    prepareZXingModuleMock.mockReset();
+    prepareZXingModuleMock.mockResolvedValue({});
+    readBarcodesMock.mockReset();
+    readBarcodesMock.mockResolvedValue([]);
   });
 
   it("emits scanned value from manual/HID input and debounces duplicates", () => {
@@ -443,7 +461,7 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     }
   });
 
-  it("decodes UPC and QR codes via ZXing on already-playing video without BarcodeDetector and recovers from transient errors", async () => {
+  it("decodes UPC and QR codes via self-hosted zxing-wasm on already-playing video without BarcodeDetector and recovers from transient errors", async () => {
     const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
     const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
     const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
@@ -470,19 +488,28 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     });
     vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
 
+    const drawImage = vi.fn();
+    const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
+      data: new Uint8ClampedArray(width * height * 4),
+      width,
+      height,
+    }));
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+      getImageData,
+    } as unknown as CanvasRenderingContext2D);
+
     let attempt = 0;
-    const decodeSpy = vi
-      .spyOn(BrowserMultiFormatReader.prototype, "decode")
-      .mockImplementation(() => {
-        attempt += 1;
-        if (attempt === 1) {
-          throw new Error("transient frame error");
-        }
-        if (attempt === 2) {
-          return { getText: () => "049000028904" } as never;
-        }
-        return { getText: () => "https://itemized.example.com/go/i/42" } as never;
-      });
+    readBarcodesMock.mockImplementation(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error("transient frame error");
+      }
+      if (attempt === 2) {
+        return [{ text: "049000028904" }];
+      }
+      return [{ text: "https://itemized.example.com/go/i/42" }];
+    });
 
     const onScan = vi.fn();
 
@@ -498,7 +525,63 @@ describe("BarcodeScanner and ScannerDrawer", () => {
         () => expect(onScan).toHaveBeenCalledWith("https://itemized.example.com/go/i/42"),
         { timeout: 2000 }
       );
-      expect(decodeSpy.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(prepareZXingModuleMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fireImmediately: true,
+          overrides: expect.objectContaining({ locateFile: expect.any(Function) }),
+        })
+      );
+      const locateFile = prepareZXingModuleMock.mock.calls[0][0].overrides.locateFile as () => string;
+      expect(locateFile()).toBe("/assets/zxing_reader-test.wasm");
+      // 1280x720 scaled down to max 1024px long edge -> 1024x576
+      expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 1024, 576);
+      expect(readBarcodesMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+      if (origBarcodeDetector) {
+        Object.defineProperty(window, "BarcodeDetector", origBarcodeDetector);
+      } else {
+        delete (window as unknown as Record<string, unknown>).BarcodeDetector;
+      }
+    }
+  });
+
+  it("surfaces decoder initialization failures in the camera error banner", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
+
+    const stream = {
+      getVideoTracks: () => [
+        {
+          getSettings: () => ({ deviceId: "cam-rear" }),
+          getCapabilities: () => ({}),
+          stop: vi.fn(),
+        },
+      ],
+      getTracks: () => [{ stop: vi.fn() }],
+    } as unknown as MediaStream;
+
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(window, "BarcodeDetector", { value: undefined, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue(stream),
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    prepareZXingModuleMock.mockRejectedValueOnce(new Error("failed to fetch wasm"));
+
+    try {
+      render(<BarcodeScanner onScan={vi.fn()} defaultCameraEnabled={true} />);
+      await waitFor(() =>
+        expect(
+          screen.getByText("Barcode decoder failed to initialize: failed to fetch wasm")
+        ).toBeInTheDocument()
+      );
     } finally {
       if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
       if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);

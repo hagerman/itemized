@@ -1,24 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
-import { BarcodeFormat, BrowserMultiFormatReader, DecodeHintType } from "@zxing/library";
+import { prepareZXingModule, readBarcodes, type ReaderOptions } from "zxing-wasm/reader";
+import zxingReaderWasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 import { Camera, Flashlight, FlashlightOff, RefreshCw, Search } from "lucide-react";
 
-const ZXING_FORMATS = [
-  BarcodeFormat.QR_CODE,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.ITF,
+const ZXING_READER_OPTIONS: ReaderOptions = {
+  formats: ["QRCode", "UPCA", "UPCE", "EAN13", "EAN8", "Code128", "Code39", "ITF"],
+  tryHarder: true,
+  tryRotate: true,
+  tryInvert: true,
+  tryDownscale: true,
+  maxNumberOfSymbols: 1,
+};
+
+const NATIVE_DETECTOR_FORMATS = [
+  "qr_code",
+  "upc_a",
+  "upc_e",
+  "ean_13",
+  "ean_8",
+  "code_128",
+  "code_39",
+  "itf",
 ];
 
-function createZxingReader(): BrowserMultiFormatReader {
-  const hints = new Map<DecodeHintType, unknown>();
-  hints.set(DecodeHintType.TRY_HARDER, true);
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, ZXING_FORMATS);
-  return new BrowserMultiFormatReader(hints);
-}
+const MAX_CAPTURE_DIMENSION = 1024;
+const WASM_DECODE_INTERVAL_MS = 120;
 
 interface BarcodeScannerProps {
   onScan: (value: string) => void;
@@ -44,6 +50,18 @@ function playBeep() {
   } catch {
     // Audio playback may be unavailable in headless environments
   }
+}
+
+function computeCaptureSize(videoWidth: number, videoHeight: number): { width: number; height: number } {
+  const longest = Math.max(videoWidth, videoHeight);
+  if (longest <= MAX_CAPTURE_DIMENSION) {
+    return { width: videoWidth, height: videoHeight };
+  }
+  const scale = MAX_CAPTURE_DIMENSION / longest;
+  return {
+    width: Math.max(1, Math.round(videoWidth * scale)),
+    height: Math.max(1, Math.round(videoHeight * scale)),
+  };
 }
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
@@ -83,10 +101,9 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (!active || !cameraEnabled) return;
     let cancelled = false;
     let frameId: number | null = null;
-    let zxingTimerId: number | null = null;
-    let zxingReader = createZxingReader();
-    let lastFrameWidth = 0;
-    let lastFrameHeight = 0;
+    let wasmTimerId: number | null = null;
+    let captureCanvas: HTMLCanvasElement | null = null;
+    let captureCtx: CanvasRenderingContext2D | null = null;
 
     async function startCamera() {
       setCameraError(null);
@@ -138,64 +155,110 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
-        await video.play();
+        try {
+          await video.play();
+        } catch {
+          // autoPlay handles playback; ignore AbortError from concurrent play attempts
+        }
+        if (cancelled) return;
 
         // Engine 1: Native hardware-accelerated BarcodeDetector when available
         const win = window as unknown as {
-          BarcodeDetector?: new (opts?: { formats?: string[] }) => {
-            detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+          BarcodeDetector?: {
+            new (opts?: { formats?: string[] }): {
+              detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+            };
+            getSupportedFormats?: () => Promise<string[]>;
           };
         };
         if (win.BarcodeDetector) {
-          const detector = new win.BarcodeDetector({
-            formats: ["qr_code", "upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "itf"],
-          });
-          const loop = async () => {
-            if (cancelled || !videoRef.current) return;
-            if (videoRef.current.readyState >= 2) {
-              try {
-                const hits = await detector.detect(videoRef.current);
-                if (hits[0]?.rawValue) {
-                  emitScan(hits[0].rawValue);
-                }
-              } catch {
-                // Ignore transient frame errors
+          try {
+            let formats = NATIVE_DETECTOR_FORMATS;
+            if (typeof win.BarcodeDetector.getSupportedFormats === "function") {
+              const supported = await win.BarcodeDetector.getSupportedFormats();
+              const filtered = NATIVE_DETECTOR_FORMATS.filter((f) => supported.includes(f));
+              if (filtered.length > 0) {
+                formats = filtered;
               }
             }
-            frameId = requestAnimationFrame(loop);
-          };
-          frameId = requestAnimationFrame(loop);
+            if (!cancelled) {
+              const detector = new win.BarcodeDetector({ formats });
+              const loop = async () => {
+                if (cancelled || !videoRef.current) return;
+                if (videoRef.current.readyState >= 2) {
+                  try {
+                    const hits = await detector.detect(videoRef.current);
+                    if (hits[0]?.rawValue) {
+                      emitScan(hits[0].rawValue);
+                    }
+                  } catch {
+                    // Ignore transient frame errors
+                  }
+                }
+                if (!cancelled) {
+                  frameId = requestAnimationFrame(loop);
+                }
+              };
+              frameId = requestAnimationFrame(loop);
+            }
+          } catch {
+            // Fall through to self-hosted ZXing-WASM engine
+          }
         }
 
-        // Engine 2: Direct ZXing frame-decoding loop (avoids decodeFromVideoElementContinuously
-        // stalling on already-playing videos on iOS Safari where BarcodeDetector is unavailable)
-        const decodeZxingFrame = () => {
+        // Engine 2: Self-hosted ZXing-C++ WebAssembly decoder (primary engine on iOS Safari)
+        try {
+          await prepareZXingModule({
+            overrides: {
+              locateFile: () => zxingReaderWasmUrl,
+            },
+            fireImmediately: true,
+          });
+        } catch (err) {
+          if (!cancelled) {
+            setCameraError(
+              `Barcode decoder failed to initialize: ${err instanceof Error ? err.message : "unknown error"}`
+            );
+          }
+          return;
+        }
+        if (cancelled) return;
+
+        const decodeWasmFrame = async () => {
           if (cancelled) return;
           const el = videoRef.current;
           if (el && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) {
-            if (
-              lastFrameWidth > 0 &&
-              (lastFrameWidth !== el.videoWidth || lastFrameHeight !== el.videoHeight)
-            ) {
-              zxingReader.reset();
-              zxingReader = createZxingReader();
-            }
-            lastFrameWidth = el.videoWidth;
-            lastFrameHeight = el.videoHeight;
             try {
-              const result = zxingReader.decode(el);
-              if (!cancelled && result?.getText()) {
-                emitScan(result.getText());
+              const { width, height } = computeCaptureSize(el.videoWidth, el.videoHeight);
+              if (!captureCanvas) {
+                captureCanvas = document.createElement("canvas");
+                captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
+              }
+              if (captureCanvas.width !== width || captureCanvas.height !== height) {
+                captureCanvas.width = width;
+                captureCanvas.height = height;
+              }
+              if (captureCtx) {
+                captureCtx.drawImage(el, 0, 0, width, height);
+                const imageData = captureCtx.getImageData(0, 0, width, height);
+                const results = await readBarcodes(imageData, ZXING_READER_OPTIONS);
+                if (!cancelled && results[0]?.text) {
+                  emitScan(results[0].text);
+                }
               }
             } catch {
-              // Ignore NotFoundException and transient frame errors; keep scanning
+              // Ignore transient frame errors and keep scanning
             }
           }
           if (!cancelled) {
-            zxingTimerId = window.setTimeout(decodeZxingFrame, 150);
+            wasmTimerId = window.setTimeout(() => {
+              void decodeWasmFrame();
+            }, WASM_DECODE_INTERVAL_MS);
           }
         };
-        zxingTimerId = window.setTimeout(decodeZxingFrame, 150);
+        wasmTimerId = window.setTimeout(() => {
+          void decodeWasmFrame();
+        }, WASM_DECODE_INTERVAL_MS);
       } catch (err) {
         if (!cancelled) {
           setCameraError(err instanceof Error ? err.message : "Unable to start camera");
@@ -208,8 +271,9 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     return () => {
       cancelled = true;
       if (frameId !== null) cancelAnimationFrame(frameId);
-      if (zxingTimerId !== null) window.clearTimeout(zxingTimerId);
-      zxingReader.reset();
+      if (wasmTimerId !== null) window.clearTimeout(wasmTimerId);
+      captureCanvas = null;
+      captureCtx = null;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;

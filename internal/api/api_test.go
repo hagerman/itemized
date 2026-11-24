@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"itemized/internal/db"
 	"itemized/internal/printer"
@@ -947,5 +948,31 @@ func TestSecurityBodyLimitAndQuantityCaps(t *testing.T) {
 		},
 	}, tok); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("POST /api/workflows/inventory/apply quantity=501 expected 422, got %d", rec.Code)
+	}
+}
+
+func TestSPAServesWasmContentType(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	staticFS := fstest.MapFS{
+		"index.html":               {Data: []byte("<!doctype html><html></html>")},
+		"assets/zxing_reader.wasm": {Data: []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}},
+	}
+	srv := NewServer(conn, staticFS)
+	h := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/assets/zxing_reader.wasm", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for wasm asset, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/wasm") {
+		t.Fatalf("expected Content-Type application/wasm, got %q", ct)
 	}
 }
