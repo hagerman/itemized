@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsPage } from "./SettingsPage";
 import { User } from "../api";
@@ -62,6 +62,7 @@ describe("SettingsPage role-based visibility", () => {
             oidc_client_id: "",
             oidc_has_secret: false,
             oidc_auto_provision: false,
+            oidc_force: false,
             llm_provider: "",
             llm_model: "",
             llm_base_url: "",
@@ -99,6 +100,105 @@ describe("SettingsPage role-based visibility", () => {
       expect(fetchMock).toHaveBeenCalledWith("/api/users", expect.any(Object));
       expect(fetchMock).toHaveBeenCalledWith("/api/printers", expect.any(Object));
       expect(fetchMock).toHaveBeenCalledWith("/api/label-templates", expect.any(Object));
+    });
+  });
+
+  it("allows admins to promote/demote other users and configure Force OIDC", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/settings" && (!init?.method || init.method === "GET")) {
+        return new Response(
+          JSON.stringify({
+            base_url: "https://itemized.example.com",
+            due_date_average_count: 3,
+            oidc_issuer: "",
+            oidc_client_id: "",
+            oidc_has_secret: false,
+            oidc_auto_provision: false,
+            oidc_force: false,
+            llm_provider: "",
+            llm_model: "",
+            llm_base_url: "",
+            llm_has_api_key: false,
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/settings" && init?.method === "PATCH") {
+        return new Response(
+          JSON.stringify({
+            base_url: "https://itemized.example.com",
+            due_date_average_count: 3,
+            oidc_issuer: "https://idp.example.com",
+            oidc_client_id: "itemized",
+            oidc_has_secret: false,
+            oidc_auto_provision: false,
+            oidc_force: true,
+            llm_provider: "",
+            llm_model: "",
+            llm_base_url: "",
+            llm_has_api_key: false,
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/users") {
+        return new Response(JSON.stringify({ users: [ADMIN_USER, MEMBER_USER] }), { status: 200 });
+      }
+      if (url === "/api/users/2" && init?.method === "PATCH") {
+        return new Response(JSON.stringify({ user: { ...MEMBER_USER, role: "admin" } }), { status: 200 });
+      }
+      if (url === "/api/printers") {
+        return new Response(JSON.stringify({ printers: [] }), { status: 200 });
+      }
+      if (url === "/api/label-templates") {
+        return new Response(JSON.stringify({ templates: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithQuery(ADMIN_USER);
+
+    // Other user has role selector; current admin does not
+    const roleSelect = await screen.findByLabelText("Role for member@home.local");
+    expect(screen.queryByLabelText("Role for admin@home.local")).not.toBeInTheDocument();
+
+    fireEvent.change(roleSelect, { target: { value: "admin" } });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/users/2",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ role: "admin" }),
+        })
+      );
+    });
+
+    // Both OIDC checkboxes disabled until issuer and client ID are populated
+    const autoProvCheckbox = screen.getByLabelText(/Auto-provision new household members on OIDC login/i) as HTMLInputElement;
+    const forceCheckbox = screen.getByLabelText(/Force OIDC login/i) as HTMLInputElement;
+    expect(autoProvCheckbox).toBeDisabled();
+    expect(forceCheckbox).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("Issuer URL"), {
+      target: { value: "https://idp.example.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Client ID"), {
+      target: { value: "itemized" },
+    });
+    expect(autoProvCheckbox).not.toBeDisabled();
+    expect(forceCheckbox).not.toBeDisabled();
+
+    fireEvent.click(forceCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save Settings" }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        ([url, init]) => url === "/api/settings" && (init as RequestInit | undefined)?.method === "PATCH"
+      );
+      expect(patchCall).toBeTruthy();
+      const body = JSON.parse(String((patchCall![1] as RequestInit).body));
+      expect(body.oidc_force).toBe("true");
     });
   });
 });

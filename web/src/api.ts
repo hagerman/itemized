@@ -11,6 +11,7 @@ export interface User {
 export interface AuthStatus {
   initialized: boolean;
   oidc_enabled: boolean;
+  oidc_force: boolean;
   user: User | null;
 }
 
@@ -123,6 +124,7 @@ export interface AppSettings {
   oidc_client_id: string;
   oidc_has_secret: boolean;
   oidc_auto_provision: boolean;
+  oidc_force: boolean;
   llm_provider: string;
   llm_model: string;
   llm_base_url: string;

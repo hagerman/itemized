@@ -34,6 +34,7 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrDuplicateEmail     = errors.New("email already in use")
 	ErrInvalidRole        = errors.New("invalid role")
+	ErrLastAdmin          = errors.New("cannot demote the last administrator")
 )
 
 type User struct {
@@ -248,14 +249,37 @@ func (s *Service) UpdateUserRole(ctx context.Context, id int64, role string) (*U
 	if role != RoleAdmin && role != RoleMember {
 		return nil, ErrInvalidRole
 	}
-	now := db.NowUTC()
-	res, err := s.db.ExecContext(ctx, `UPDATE users SET role = ?, updated_at = ? WHERE id = ?`, role, now, id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	defer tx.Rollback()
+
+	var currentRole string
+	err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&currentRole)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if currentRole == RoleAdmin && role == RoleMember {
+		var adminCount int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM users WHERE role = ?`, RoleAdmin).Scan(&adminCount); err != nil {
+			return nil, err
+		}
+		if adminCount <= 1 {
+			return nil, ErrLastAdmin
+		}
+	}
+
+	now := db.NowUTC()
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET role = ?, updated_at = ? WHERE id = ?`, role, now, id); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return s.GetUser(ctx, id)
 }

@@ -272,12 +272,14 @@ func (s *Server) dueDateAverageCount(ctx context.Context) int {
 
 func (s *Server) oidcConfig(ctx context.Context, r *http.Request) auth.OIDCConfig {
 	autoProv := strings.EqualFold(s.getSetting(ctx, "oidc_auto_provision", "OIDC_AUTO_PROVISION", "false"), "true")
+	force := strings.EqualFold(s.getSetting(ctx, "oidc_force", "OIDC_FORCE", "false"), "true")
 	return auth.OIDCConfig{
 		Issuer:        s.getSetting(ctx, "oidc_issuer", "OIDC_ISSUER", ""),
 		ClientID:      s.getSetting(ctx, "oidc_client_id", "OIDC_CLIENT_ID", ""),
 		ClientSecret:  s.getSetting(ctx, "oidc_client_secret", "OIDC_CLIENT_SECRET", ""),
 		RedirectURL:   s.baseURL(ctx, r) + "/api/auth/oidc/callback",
 		AutoProvision: autoProv,
+		Force:         force,
 	}
 }
 
@@ -304,9 +306,11 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 			currentUser = u
 		}
 	}
+	oidcCfg := s.oidcConfig(r.Context(), r)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"initialized":  count > 0,
-		"oidc_enabled": s.oidcConfig(r.Context(), r).Enabled(),
+		"oidc_enabled": oidcCfg.Enabled(),
+		"oidc_force":   oidcCfg.ForceActive(),
 		"user":         currentUser,
 	})
 }
@@ -338,6 +342,10 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if s.oidcConfig(r.Context(), r).ForceActive() {
+		writeError(w, http.StatusForbidden, "local password login is disabled; sign in with OIDC")
+		return
+	}
 	ip := clientIP(r, s.TrustProxy)
 	if s.LoginLimiter != nil && !s.LoginLimiter.Allow("ip:"+ip) {
 		writeError(w, http.StatusTooManyRequests, "too many login attempts, please try again later")
@@ -509,6 +517,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid user id")
 		return
 	}
+	if current := auth.UserFromContext(r.Context()); current != nil && current.ID == id {
+		writeError(w, http.StatusUnprocessableEntity, "cannot change your own role")
+		return
+	}
 	var req struct {
 		Role string `json:"role"`
 	}
@@ -518,6 +530,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	u, err := s.Auth.UpdateUserRole(r.Context(), id, req.Role)
 	if errors.Is(err, auth.ErrUserNotFound) {
 		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	if errors.Is(err, auth.ErrLastAdmin) {
+		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	if err != nil {
@@ -584,6 +600,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"oidc_client_id":         oidcCfg.ClientID,
 		"oidc_has_secret":        oidcCfg.ClientSecret != "",
 		"oidc_auto_provision":    oidcCfg.AutoProvision,
+		"oidc_force":             oidcCfg.ForceActive(),
 		"llm_provider":           llmCfg.Provider,
 		"llm_model":              llmCfg.Model,
 		"llm_base_url":           llmCfg.BaseURL,
@@ -603,11 +620,45 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		"oidc_client_id":         true,
 		"oidc_client_secret":     true,
 		"oidc_auto_provision":    true,
+		"oidc_force":             true,
 		"llm_provider":           true,
 		"llm_model":              true,
 		"llm_api_key":            true,
 		"llm_base_url":           true,
 	}
+
+	oidcCfg := s.oidcConfig(r.Context(), r)
+	nextIssuer := oidcCfg.Issuer
+	nextClientID := oidcCfg.ClientID
+	nextForce := oidcCfg.Force
+	explicitForce := false
+
+	if v, ok := req["oidc_issuer"]; ok && v != nil {
+		nextIssuer = strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
+	if v, ok := req["oidc_client_id"]; ok && v != nil {
+		nextClientID = strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
+	if v, ok := req["oidc_force"]; ok && v != nil {
+		nextForce = strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", v)), "true")
+		explicitForce = true
+	}
+
+	nextEnabled := nextIssuer != "" && nextClientID != ""
+	if nextForce && !nextEnabled {
+		if explicitForce {
+			writeError(w, http.StatusUnprocessableEntity, "configure OIDC issuer and client ID before forcing OIDC")
+			return
+		}
+		req["oidc_force"] = "false"
+	} else if explicitForce {
+		if nextForce {
+			req["oidc_force"] = "true"
+		} else {
+			req["oidc_force"] = "false"
+		}
+	}
+
 	for k, v := range req {
 		if !allowed[k] || v == nil {
 			continue

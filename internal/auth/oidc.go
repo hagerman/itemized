@@ -20,10 +20,15 @@ type OIDCConfig struct {
 	ClientSecret  string
 	RedirectURL   string
 	AutoProvision bool
+	Force         bool
 }
 
 func (c OIDCConfig) Enabled() bool {
 	return strings.TrimSpace(c.Issuer) != "" && strings.TrimSpace(c.ClientID) != ""
+}
+
+func (c OIDCConfig) ForceActive() bool {
+	return c.Enabled() && c.Force
 }
 
 type pendingOIDCState struct {

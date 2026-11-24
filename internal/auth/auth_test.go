@@ -194,3 +194,48 @@ func TestSessionRevocationOnPasswordResetAndChange(t *testing.T) {
 		t.Fatalf("expected tok3 revoked after ResetPassword, got %v", err)
 	}
 }
+
+func TestUpdateUserRoleSafeguards(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ctx := context.Background()
+
+	admin1, err := svc.SetupAdmin(ctx, "admin1@example.com", "password123")
+	if err != nil {
+		t.Fatalf("SetupAdmin: %v", err)
+	}
+	member, err := svc.CreateUser(ctx, "member@example.com", "password123", RoleMember)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	// Cannot demote the only remaining admin.
+	if _, err := svc.UpdateUserRole(ctx, admin1.ID, RoleMember); err != ErrLastAdmin {
+		t.Fatalf("expected ErrLastAdmin, got %v", err)
+	}
+
+	// Promote member to admin.
+	promoted, err := svc.UpdateUserRole(ctx, member.ID, RoleAdmin)
+	if err != nil || promoted.Role != RoleAdmin {
+		t.Fatalf("expected promoted admin, got user=%+v err=%v", promoted, err)
+	}
+
+	// With two admins, demoting one to member succeeds.
+	demoted, err := svc.UpdateUserRole(ctx, promoted.ID, RoleMember)
+	if err != nil || demoted.Role != RoleMember {
+		t.Fatalf("expected demoted member, got user=%+v err=%v", demoted, err)
+	}
+
+	// Invalid role and unknown user errors.
+	if _, err := svc.UpdateUserRole(ctx, member.ID, "owner"); err != ErrInvalidRole {
+		t.Fatalf("expected ErrInvalidRole, got %v", err)
+	}
+	if _, err := svc.UpdateUserRole(ctx, 9999, RoleAdmin); err != ErrUserNotFound {
+		t.Fatalf("expected ErrUserNotFound, got %v", err)
+	}
+}

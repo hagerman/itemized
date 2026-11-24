@@ -30,6 +30,7 @@ const AppRoutes: React.FC = () => {
       <AuthPage
         initialized={authStatus.initialized}
         oidcEnabled={authStatus.oidc_enabled}
+        oidcForce={authStatus.oidc_force}
         onAuthenticated={() => void qc.invalidateQueries({ queryKey: ["auth-status"] })}
       />
     );

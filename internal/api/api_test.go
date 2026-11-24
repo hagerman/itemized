@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -1068,5 +1069,222 @@ func TestRawTCPPrinterEndpointNormalizationAndTestPrint(t *testing.T) {
 	}
 	if zpl := <-received; !strings.Contains(zpl, "^XA") {
 		t.Fatalf("expected ZPL payload over raw TCP, got %q", zpl)
+	}
+}
+
+func TestAdminUserRoleManagement(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	// Setup initial admin
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Login as admin
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+		User  struct {
+			ID int64 `json:"id"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	adminTok := loginResp.Token
+	adminID := loginResp.User.ID
+
+	// Create a member
+	rec = doReq(t, h, http.MethodPost, "/api/users", map[string]any{
+		"email": "member@home.local", "password": "password123", "role": "member",
+	}, adminTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create member expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var createResp struct {
+		User struct {
+			ID   int64  `json:"id"`
+			Role string `json:"role"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &createResp)
+	memberID := createResp.User.ID
+
+	// Login as member
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "member@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	memberTok := loginResp.Token
+
+	// Member cannot update user roles -> 403
+	rec = doReq(t, h, http.MethodPatch, "/api/users/"+strconv.FormatInt(adminID, 10), map[string]any{
+		"role": "member",
+	}, memberTok)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("member PATCH /api/users expected 403, got %d", rec.Code)
+	}
+
+	// Admin cannot change own role -> 422
+	rec = doReq(t, h, http.MethodPatch, "/api/users/"+strconv.FormatInt(adminID, 10), map[string]any{
+		"role": "member",
+	}, adminTok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("self role change expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Admin promotes member to admin -> 200
+	rec = doReq(t, h, http.MethodPatch, "/api/users/"+strconv.FormatInt(memberID, 10), map[string]any{
+		"role": "admin",
+	}, adminTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("promote member expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &createResp)
+	if createResp.User.Role != "admin" {
+		t.Fatalf("expected role admin, got %q", createResp.User.Role)
+	}
+
+	// Admin demotes other admin back to member -> 200
+	rec = doReq(t, h, http.MethodPatch, "/api/users/"+strconv.FormatInt(memberID, 10), map[string]any{
+		"role": "member",
+	}, adminTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("demote admin expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &createResp)
+	if createResp.User.Role != "member" {
+		t.Fatalf("expected role member, got %q", createResp.User.Role)
+	}
+
+	// Invalid role -> 422
+	rec = doReq(t, h, http.MethodPatch, "/api/users/"+strconv.FormatInt(memberID, 10), map[string]any{
+		"role": "superuser",
+	}, adminTok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid role expected 422, got %d", rec.Code)
+	}
+}
+
+func TestForceOIDCSettingAndLoginEnforcement(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	// Setup admin and get bearer token
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	adminTok := loginResp.Token
+
+	// Default status: oidc_enabled=false, oidc_force=false
+	rec = doReq(t, h, http.MethodGet, "/api/auth/status", nil, "")
+	var statusResp struct {
+		Initialized bool `json:"initialized"`
+		OIDCEnabled bool `json:"oidc_enabled"`
+		OIDCForce   bool `json:"oidc_force"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &statusResp)
+	if !statusResp.Initialized || statusResp.OIDCEnabled || statusResp.OIDCForce {
+		t.Fatalf("unexpected initial auth status: %+v", statusResp)
+	}
+
+	// Enabling oidc_force without OIDC config fails with 422
+	rec = doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"oidc_force": true,
+	}, adminTok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("forcing OIDC without config expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Configure OIDC + enable oidc_force -> 200
+	rec = doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"oidc_issuer":    "http://127.0.0.1:1/issuer",
+		"oidc_client_id": "itemized-client",
+		"oidc_force":     true,
+	}, adminTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enable OIDC force expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var settingsResp struct {
+		OIDCForce bool `json:"oidc_force"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &settingsResp)
+	if !settingsResp.OIDCForce {
+		t.Fatalf("expected settings oidc_force=true")
+	}
+
+	// Auth status advertises oidc_enabled=true and oidc_force=true
+	rec = doReq(t, h, http.MethodGet, "/api/auth/status", nil, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &statusResp)
+	if !statusResp.OIDCEnabled || !statusResp.OIDCForce {
+		t.Fatalf("expected oidc_enabled=true and oidc_force=true, got %+v", statusResp)
+	}
+
+	// Local login (cookie mode) rejected with 403
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("local cookie login when forced expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Local login (bearer mode) rejected with 403
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("local bearer login when forced expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// OIDC login endpoint remains enabled (not 403/404; fails discovery with 502 on unreachable issuer)
+	rec = doReq(t, h, http.MethodGet, "/api/auth/oidc/login", nil, "")
+	if rec.Code == http.StatusForbidden || rec.Code == http.StatusNotFound {
+		t.Fatalf("expected OIDC login endpoint to remain enabled, got %d", rec.Code)
+	}
+
+	// Clearing oidc_issuer automatically resets oidc_force to false
+	rec = doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"oidc_issuer": "",
+	}, adminTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clearing oidc_issuer expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &settingsResp)
+	if settingsResp.OIDCForce {
+		t.Fatalf("expected oidc_force reset to false after clearing oidc_issuer")
+	}
+
+	// Local login works again
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("local login after disabling OIDC expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -34,10 +34,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
   const [oidcClientId, setOidcClientId] = useState("");
   const [oidcClientSecret, setOidcClientSecret] = useState("");
   const [oidcAutoProv, setOidcAutoProv] = useState(false);
+  const [oidcForce, setOidcForce] = useState(false);
   const [llmProvider, setLlmProvider] = useState("");
   const [llmModel, setLlmModel] = useState("");
   const [llmBaseUrl, setLlmBaseUrl] = useState("");
   const [llmApiKey, setLlmApiKey] = useState("");
+
+  const oidcConfigured = oidcIssuer.trim() !== "" && oidcClientId.trim() !== "";
 
   useEffect(() => {
     if (!settings) return;
@@ -46,6 +49,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
     setOidcIssuer(settings.oidc_issuer);
     setOidcClientId(settings.oidc_client_id);
     setOidcAutoProv(settings.oidc_auto_provision);
+    setOidcForce(settings.oidc_force);
     setLlmProvider(settings.llm_provider);
     setLlmModel(settings.llm_model);
     setLlmBaseUrl(settings.llm_base_url);
@@ -119,7 +123,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
           oidc_issuer: oidcIssuer,
           oidc_client_id: oidcClientId,
           ...(oidcClientSecret ? { oidc_client_secret: oidcClientSecret } : {}),
-          oidc_auto_provision: oidcAutoProv ? "true" : "false",
+          oidc_auto_provision: oidcConfigured && oidcAutoProv ? "true" : "false",
+          oidc_force: oidcConfigured && oidcForce ? "true" : "false",
           llm_provider: llmProvider,
           llm_model: llmModel,
           llm_base_url: llmBaseUrl,
@@ -129,6 +134,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
       setOidcClientSecret("");
       setLlmApiKey("");
       void qc.invalidateQueries({ queryKey: ["settings"] });
+      void qc.invalidateQueries({ queryKey: ["auth-status"] });
       flash("Settings saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
@@ -182,9 +188,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
             <input value={oidcClientId} onChange={(e) => setOidcClientId(e.target.value)} placeholder="Client ID" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
             <input type="password" value={oidcClientSecret} onChange={(e) => setOidcClientSecret(e.target.value)} placeholder={settings?.oidc_has_secret ? "Secret saved (leave blank)" : "Client Secret"} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
           </div>
-          <label className="mt-2 flex items-center gap-2 text-xs text-slate-300">
-            <input type="checkbox" checked={oidcAutoProv} onChange={(e) => setOidcAutoProv(e.target.checked)} />
+          <label className={`mt-2 flex items-center gap-2 text-xs ${oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
+            <input
+              type="checkbox"
+              checked={oidcConfigured && oidcAutoProv}
+              disabled={!oidcConfigured}
+              onChange={(e) => setOidcAutoProv(e.target.checked)}
+            />
             Auto-provision new household members on OIDC login
+          </label>
+          <label className={`mt-2 flex items-center gap-2 text-xs ${oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
+            <input
+              type="checkbox"
+              checked={oidcConfigured && oidcForce}
+              disabled={!oidcConfigured}
+              onChange={(e) => setOidcForce(e.target.checked)}
+            />
+            Force OIDC login (disable local password sign-in)
           </label>
         </div>
 
@@ -241,22 +261,48 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
 
           <div className="divide-y divide-slate-800">
             {(usersData?.users || []).map((u) => (
-              <div key={u.id} className="flex items-center justify-between py-2.5 text-sm">
-                <div>
+              <div key={u.id} className="flex items-center justify-between gap-2 py-2.5 text-sm">
+                <div className="flex items-center gap-2">
                   <span className="text-slate-100">{u.email}</span>
-                  <span className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">{u.role}</span>
+                  {u.id === user.id && (
+                    <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">{u.role} (you)</span>
+                  )}
                 </div>
                 {u.id !== user.id && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await apiFetch(`/api/users/${u.id}`, { method: "DELETE" });
-                      void qc.invalidateQueries({ queryKey: ["users"] });
-                    }}
-                    className="rounded p-1.5 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      aria-label={`Role for ${u.email}`}
+                      value={u.role}
+                      onChange={async (e) => {
+                        const nextRole = e.target.value as "member" | "admin";
+                        try {
+                          await apiFetch(`/api/users/${u.id}`, {
+                            method: "PATCH",
+                            body: JSON.stringify({ role: nextRole }),
+                          });
+                          void qc.invalidateQueries({ queryKey: ["users"] });
+                          flash(`Updated role for ${u.email} to ${nextRole}.`);
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Failed to update user role");
+                        }
+                      }}
+                      className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-xs text-white"
+                    >
+                      <option value="member">member</option>
+                      <option value="admin">admin</option>
+                    </select>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${u.email}`}
+                      onClick={async () => {
+                        await apiFetch(`/api/users/${u.id}`, { method: "DELETE" });
+                        void qc.invalidateQueries({ queryKey: ["users"] });
+                      }}
+                      className="rounded p-1.5 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

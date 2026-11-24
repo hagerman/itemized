@@ -40,6 +40,7 @@ When running behind a reverse proxy, set:
 | `OIDC_CLIENT_ID` | | Optional OIDC client ID |
 | `OIDC_CLIENT_SECRET` | | Optional OIDC client secret |
 | `OIDC_AUTO_PROVISION` | `false` | Auto-create `member` accounts on first OIDC login |
+| `OIDC_FORCE` | `false` | Require OIDC sign-in (redirect login page to IdP and disable local password login) |
 | `LLM_PROVIDER` | *(disabled)* | `anthropic`, `openai`, `gemini`, or `openai-compatible` |
 | `LLM_MODEL` | | LLM model name for optional UPC normalization |
 | `LLM_BASE_URL` | | Custom endpoint (e.g. `http://ollama:11434/v1`) |
