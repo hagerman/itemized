@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -974,5 +976,97 @@ func TestSPAServesWasmContentType(t *testing.T) {
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/wasm") {
 		t.Fatalf("expected Content-Type application/wasm, got %q", ct)
+	}
+}
+
+func TestRawTCPPrinterEndpointNormalizationAndTestPrint(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct{ Token string `json:"token"` }
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// POST normalizes URL-formatted raw_tcp_zpl endpoint
+	rec = doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+		"name": "Zebra Raw", "driver": "raw_tcp_zpl", "endpoint": "http://192.168.1.102:9100", "enabled": true,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/printers expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var createResp struct{ Printer PrinterRecord }
+	_ = json.Unmarshal(rec.Body.Bytes(), &createResp)
+	if createResp.Printer.Endpoint != "192.168.1.102:9100" {
+		t.Fatalf("expected normalized endpoint 192.168.1.102:9100, got %q", createResp.Printer.Endpoint)
+	}
+
+	// PATCH normalizes bare host to :9100
+	rec = doReq(t, h, http.MethodPatch, "/api/printers/1", map[string]any{
+		"name": "Zebra Raw", "driver": "raw_tcp_zpl", "endpoint": "http://192.168.1.105", "enabled": true,
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/printers/1 expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var storedEndpoint string
+	if err := conn.QueryRow(`SELECT endpoint FROM printers WHERE id = 1`).Scan(&storedEndpoint); err != nil {
+		t.Fatalf("query stored endpoint: %v", err)
+	}
+	if storedEndpoint != "192.168.1.105:9100" {
+		t.Fatalf("expected updated normalized endpoint 192.168.1.105:9100, got %q", storedEndpoint)
+	}
+
+	// POST and PATCH reject invalid raw_tcp_zpl endpoints with 422
+	for _, bad := range []string{"http://", "192.168.1.102:99999", "192.168.1.102:abc"} {
+		rec = doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+			"name": "Bad", "driver": "raw_tcp_zpl", "endpoint": bad, "enabled": true,
+		}, tok)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("POST invalid endpoint %q expected 422, got %d: %s", bad, rec.Code, rec.Body.String())
+		}
+		rec = doReq(t, h, http.MethodPatch, "/api/printers/1", map[string]any{
+			"name": "Bad", "driver": "raw_tcp_zpl", "endpoint": bad, "enabled": true,
+		}, tok)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("PATCH invalid endpoint %q expected 422, got %d: %s", bad, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Existing legacy DB row with http://<host>:<port> succeeds on POST /api/printers/{id}/test
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp: %v", err)
+	}
+	defer ln.Close()
+	received := make(chan string, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		b, _ := io.ReadAll(c)
+		received <- string(b)
+	}()
+
+	now := db.NowUTC()
+	_, err = conn.Exec(`INSERT INTO printers (name, driver, endpoint, enabled, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)`,
+		"Legacy Raw", "raw_tcp_zpl", "http://"+ln.Addr().String(), now, now)
+	if err != nil {
+		t.Fatalf("insert legacy printer: %v", err)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/printers/2/test", nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/printers/2/test expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if zpl := <-received; !strings.Contains(zpl, "^XA") {
+		t.Fatalf("expected ZPL payload over raw TCP, got %q", zpl)
 	}
 }

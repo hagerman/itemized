@@ -271,14 +271,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            await apiFetch("/api/printers", {
-              method: "POST",
-              body: JSON.stringify({ name: pName, driver: pDriver, endpoint: pEndpoint, enabled: true }),
-            });
-            setPName("");
-            setPEndpoint("");
-            void qc.invalidateQueries({ queryKey: ["printers"] });
-            flash("Printer added.");
+            try {
+              await apiFetch("/api/printers", {
+                method: "POST",
+                body: JSON.stringify({ name: pName, driver: pDriver, endpoint: pEndpoint, enabled: true }),
+              });
+              setPName("");
+              setPEndpoint("");
+              void qc.invalidateQueries({ queryKey: ["printers"] });
+              flash("Printer added.");
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to add printer");
+            }
           }}
           className="grid grid-cols-1 gap-2 sm:grid-cols-4"
         >
@@ -287,7 +291,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
             <option value="ipp_zpl">IPP ZPL (Zebra ZSB)</option>
             <option value="raw_tcp_zpl">Raw TCP :9100 ZPL</option>
           </select>
-          <input required value={pEndpoint} onChange={(e) => setPEndpoint(e.target.value)} placeholder="http://192.168.1.50:631/ipp/print" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <input
+            required
+            value={pEndpoint}
+            onChange={(e) => setPEndpoint(e.target.value)}
+            placeholder={pDriver === "raw_tcp_zpl" ? "192.168.1.50:9100" : "http://192.168.1.50:631/ipp/print"}
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
           <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Add Printer</button>
         </form>
 

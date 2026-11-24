@@ -856,6 +856,14 @@ func (s *Server) handleCreatePrinter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid driver")
 		return
 	}
+	if req.Driver == printer.DriverRawTCPZPL {
+		normalized, err := printer.NormalizeRawTCPEndpoint(req.Endpoint)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid raw tcp endpoint")
+			return
+		}
+		req.Endpoint = normalized
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -900,11 +908,21 @@ func (s *Server) handleUpdatePrinter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid driver")
 		return
 	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.Endpoint = strings.TrimSpace(req.Endpoint)
+	if req.Driver == printer.DriverRawTCPZPL {
+		normalized, err := printer.NormalizeRawTCPEndpoint(req.Endpoint)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "invalid raw tcp endpoint")
+			return
+		}
+		req.Endpoint = normalized
+	}
 	now := db.NowUTC()
 	res, err := s.DB.ExecContext(r.Context(), `
 		UPDATE printers SET name = ?, description = ?, driver = ?, endpoint = ?, printer_model = ?, enabled = ?, updated_at = ?
 		WHERE id = ?
-	`, strings.TrimSpace(req.Name), req.Description, req.Driver, strings.TrimSpace(req.Endpoint), req.PrinterModel, boolToInt(req.Enabled), now, id)
+	`, req.Name, req.Description, req.Driver, req.Endpoint, req.PrinterModel, boolToInt(req.Enabled), now, id)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "unable to update printer")
 		return

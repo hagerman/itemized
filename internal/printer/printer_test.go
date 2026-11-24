@@ -91,3 +91,82 @@ func TestRenderAndDrivers(t *testing.T) {
 		t.Fatalf("expected IPP print job with custom template, requests=%d body=%q", ippRequests, gotBody)
 	}
 }
+
+func TestNormalizeRawTCPEndpoint(t *testing.T) {
+	valid := []struct {
+		in   string
+		want string
+	}{
+		{"192.168.1.102:9100", "192.168.1.102:9100"},
+		{"192.168.1.102", "192.168.1.102:9100"},
+		{"  192.168.1.102:9101  ", "192.168.1.102:9101"},
+		{"192.168.1.102:9100/", "192.168.1.102:9100"},
+		{"printer.local", "printer.local:9100"},
+		{"http://192.168.1.102:9100", "192.168.1.102:9100"},
+		{"http://192.168.1.102", "192.168.1.102:9100"},
+		{"https://printer.local:9101/path?x=1", "printer.local:9101"},
+		{"tcp://192.168.1.102:9100", "192.168.1.102:9100"},
+		{"socket://192.168.1.102:9100/", "192.168.1.102:9100"},
+		{"::1", "[::1]:9100"},
+		{"[::1]", "[::1]:9100"},
+		{"[::1]:9100", "[::1]:9100"},
+		{"http://[::1]:9100", "[::1]:9100"},
+	}
+	for _, tc := range valid {
+		got, err := NormalizeRawTCPEndpoint(tc.in)
+		if err != nil {
+			t.Errorf("NormalizeRawTCPEndpoint(%q) unexpected error: %v", tc.in, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("NormalizeRawTCPEndpoint(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"   ",
+		"http://",
+		"http://:9100",
+		":9100",
+		"192.168.1.102:0",
+		"192.168.1.102:99999",
+		"192.168.1.102:abc",
+		"http://192.168.1.102:99999",
+		"http://192.168.1.102:abc",
+		"192.168.1.102:9100:extra",
+		"[::1",
+		"bad host:9100",
+	}
+	for _, in := range invalid {
+		if got, err := NormalizeRawTCPEndpoint(in); err == nil {
+			t.Errorf("NormalizeRawTCPEndpoint(%q) = %q, want error", in, got)
+		}
+	}
+}
+
+func TestRawTCPDriverNormalizesEndpointOnDial(t *testing.T) {
+	var dialedAddr string
+	clientConn, serverConn := net.Pipe()
+	go func() {
+		defer serverConn.Close()
+		_, _ = io.ReadAll(serverConn)
+	}()
+
+	drv := &RawTCPDriver{
+		DialContext: func(_ context.Context, _, addr string) (net.Conn, error) {
+			dialedAddr = addr
+			return clientConn, nil
+		},
+	}
+	if err := drv.Print(context.Background(), "http://192.168.1.102:9100", []byte("^XA^XZ")); err != nil {
+		t.Fatalf("RawTCPDriver.Print with URL endpoint failed: %v", err)
+	}
+	if dialedAddr != "192.168.1.102:9100" {
+		t.Fatalf("dialed %q, want %q", dialedAddr, "192.168.1.102:9100")
+	}
+
+	if err := drv.Print(context.Background(), "http://", []byte("^XA^XZ")); err == nil {
+		t.Fatalf("expected error for invalid raw tcp endpoint")
+	}
+}

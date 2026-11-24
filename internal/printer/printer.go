@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -154,10 +156,62 @@ type RawTCPDriver struct {
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
+// NormalizeRawTCPEndpoint normalizes a raw TCP ZPL printer endpoint into canonical host:port form.
+// It accepts host:port, bare host/IP (defaulting port to 9100), IPv6 literals, and URL-formatted
+// strings (e.g., http://192.168.1.102:9100, tcp://192.168.1.102, socket://192.168.1.102:9100/).
+func NormalizeRawTCPEndpoint(endpoint string) (string, error) {
+	raw := strings.TrimSpace(endpoint)
+	if raw == "" {
+		return "", fmt.Errorf("endpoint is required")
+	}
+
+	var host, port string
+	if strings.Contains(raw, "://") {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return "", fmt.Errorf("invalid endpoint URL: %w", err)
+		}
+		host = u.Hostname()
+		port = u.Port()
+	} else {
+		hostPort, _, _ := strings.Cut(raw, "/")
+		hostPort = strings.TrimSpace(hostPort)
+		if h, p, err := net.SplitHostPort(hostPort); err == nil {
+			host = h
+			port = p
+		} else {
+			unbracketed := hostPort
+			if strings.HasPrefix(hostPort, "[") && strings.HasSuffix(hostPort, "]") {
+				unbracketed = hostPort[1 : len(hostPort)-1]
+			}
+			if ip := net.ParseIP(unbracketed); ip != nil {
+				host = unbracketed
+			} else if strings.Contains(hostPort, ":") || strings.ContainsAny(hostPort, "[]") {
+				return "", fmt.Errorf("invalid raw tcp endpoint %q", endpoint)
+			} else {
+				host = hostPort
+			}
+		}
+	}
+
+	host = strings.TrimSpace(host)
+	if host == "" || strings.ContainsAny(host, " \t\r\n/") {
+		return "", fmt.Errorf("invalid raw tcp endpoint host in %q", endpoint)
+	}
+	if port == "" {
+		port = "9100"
+	}
+	pNum, err := strconv.Atoi(port)
+	if err != nil || pNum < 1 || pNum > 65535 {
+		return "", fmt.Errorf("invalid raw tcp endpoint port %q", port)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(pNum)), nil
+}
+
 func (d *RawTCPDriver) Print(ctx context.Context, endpoint string, zpl []byte) error {
-	addr := strings.TrimSpace(endpoint)
-	if !strings.Contains(addr, ":") {
-		addr += ":9100"
+	addr, err := NormalizeRawTCPEndpoint(endpoint)
+	if err != nil {
+		return fmt.Errorf("invalid raw tcp printer endpoint %q: %w", endpoint, err)
 	}
 	timeout := d.Timeout
 	if timeout <= 0 {
