@@ -2357,3 +2357,110 @@ func TestBulkReclassifySuggestAndApply(t *testing.T) {
 		t.Fatalf("expected appleB to survive as 'Apples, Gala' with 4 items, got name=%q items=%d", appleDetail.Product.Name, len(appleDetail.Items))
 	}
 }
+
+func TestReclassifySuggestPrefixAwareAndCategoryContext(t *testing.T) {
+	srv, h, tok, _, locID := setupCatalogTestServer(t)
+
+	rec := doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Canned Goods & Soups"}, tok)
+	var soupCat struct {
+		Category Category `json:"category"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &soupCat)
+
+	createProd := func(name string) Product {
+		rec := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+			"name": name, "category_id": soupCat.Category.ID, "default_location_id": locID,
+		}, tok)
+		var out struct {
+			Product Product `json:"product"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return out.Product
+	}
+
+	// Create 31 other prefixes with >=2 products each so "Soup" (only 2 products) would fall outside global top 30
+	for i := 0; i < 31; i++ {
+		prefix := fmt.Sprintf("Prefix%02d", i)
+		createProd(prefix + ", One")
+		createProd(prefix + ", Two")
+	}
+	createProd("Beans, Black")
+	createProd("Beans, Pinto")
+	createProd("Beans, Kidney")
+	soupTarget := createProd("Soup, Italian Bean")
+	createProd("Soup, Tomato")
+
+	// Attach one redundant variant matching current name and one brand variant
+	doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", soupTarget.ID), map[string]any{
+		"name": "Soup, Italian Bean",
+	}, tok)
+	doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", soupTarget.ID), map[string]any{
+		"name": "Progresso Italian Style Bean Soup",
+	}, tok)
+
+	// Verify loadCatalogNamingContext includes "Soup" in prefixes and ranks "Soup, Tomato" ahead of "Beans, ..."
+	candidates, prefixes, err := srv.loadCatalogNamingContext(context.Background(), []string{"Soup, Italian Bean"}, map[int64]bool{soupTarget.ID: true})
+	if err != nil {
+		t.Fatalf("loadCatalogNamingContext failed: %v", err)
+	}
+	foundSoupPrefix := false
+	for _, p := range prefixes {
+		if p == "Soup" {
+			foundSoupPrefix = true
+			break
+		}
+	}
+	if !foundSoupPrefix {
+		t.Fatalf("expected 'Soup' to be guaranteed in common_prefixes, got %v", prefixes)
+	}
+	if len(candidates) == 0 || candidates[0].Name != "Soup, Tomato" {
+		t.Fatalf("expected 'Soup, Tomato' to rank first ahead of Beans candidates, got %+v", candidates)
+	}
+
+	// Verify handleReclassifySuggest passes category_name and filters redundant variant name
+	doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"llm_provider": "openai-compatible",
+		"llm_model":    "llama3.2",
+		"llm_base_url": "http://llm.test/v1",
+	}, tok)
+
+	var capturedBody string
+	srv.LLM.HTTPClient = &http.Client{
+		Transport: apiRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(r.Body)
+			capturedBody = string(b)
+			content := fmt.Sprintf(`{"items":[{"product_id":%d,"suggested_name":"Soup, Italian Bean"}]}`, soupTarget.ID)
+			body := fmt.Sprintf(`{"choices":[{"message":{"content":%q}}]}`, content)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/products/reclassify/suggest", map[string]any{
+		"product_ids": []int64{soupTarget.ID},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reclassify suggest expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var openAIReq struct {
+		Messages []struct {
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(capturedBody), &openAIReq); err != nil || len(openAIReq.Messages) < 2 {
+		t.Fatalf("failed to decode captured OpenAI request: %v (%s)", err, capturedBody)
+	}
+	promptText := openAIReq.Messages[1].Content
+	if !strings.Contains(promptText, "Canned Goods \\u0026 Soups") && !strings.Contains(promptText, "Canned Goods & Soups") {
+		t.Fatalf("expected prompt to include category_name, got: %s", promptText)
+	}
+	if !strings.Contains(promptText, "Progresso Italian Style Bean Soup") {
+		t.Fatalf("expected prompt to include non-redundant variant name, got: %s", promptText)
+	}
+	if strings.Contains(promptText, `"variant_names":["Soup, Italian Bean"`) {
+		t.Fatalf("expected redundant variant name equal to current_name to be omitted, got: %s", promptText)
+	}
+}

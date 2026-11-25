@@ -53,6 +53,7 @@ type Classification struct {
 type ReclassifyInput struct {
 	ProductID    int64    `json:"product_id"`
 	CurrentName  string   `json:"current_name"`
+	CategoryName string   `json:"category_name,omitempty"`
 	VariantNames []string `json:"variant_names,omitempty"`
 }
 
@@ -532,15 +533,17 @@ func extractJSONObject(s string) string {
 
 const namingConventionRules = `Naming rules for standardized generic product names:
 - Format: comma-inverted Title Case "Item", "Item, Variety", or "Item, Variety, Detail" (no brand, store, size, weight, or packaging).
-- Start with the concrete base item noun, NEVER a broad catalog category prefix like "Meat,", "Produce,", "Bakery,", "Beverage,", "Snack,", or "Prepared Foods," (category is tracked separately).
-- Prefer plural for countable items (e.g., "Apples", "Beans", "Peppers", "Chips", "Cookies") and singular for uncountable/mass nouns (e.g., "Milk", "Cheese", "Chicken", "Flour", "Mustard", "Spinach").
-- Mirror established prefixes from the household's common catalog prefixes when applicable.
+- Start with the concrete base item or dish noun, NEVER a broad store-department prefix like "Meat,", "Produce,", "Bakery,", "Beverage,", "Snack,", "Prepared Foods,", "Canned,", or "Frozen," (category is tracked separately).
+- ALWAYS preserve the product's actual dish or product-type noun as the leading Item (e.g., "Soup,", "Salad,", "Sauce,", "Stew,", "Chili,", "Broth,", "Juice,", "Soda,"). NEVER change the fundamental product type (for example, do NOT turn a Soup into Beans, a Sauce into Tomatoes, or a Salad into Pasta).
+- Prefer plural for countable items (e.g., "Apples", "Beans", "Peppers", "Chips", "Cookies") and singular for uncountable/mass nouns (e.g., "Milk", "Cheese", "Chicken", "Flour", "Mustard", "Spinach", "Soup").
+- Mirror established prefixes from the household's common catalog prefixes only when they represent the same product type.
 - Examples:
   * "Kirkland Signature Organic Gala Apples" -> "Apples, Gala"
   * "Burman's Dijon Mustard" -> "Mustard, Dijon"
   * "Publix Organic Baby Spinach" -> "Spinach, Baby"
   * "Perdue Boneless Skinless Chicken Breasts" -> "Chicken, Breast"
-  * "Bush's Seasoned Black Beans" -> "Beans, Black, Seasoned"`
+  * "Bush's Seasoned Black Beans" -> "Beans, Black, Seasoned"
+  * "Soup, Italian Bean" -> "Soup, Italian Bean"`
 
 func buildPrompt(title, quantity string, categories []CategoryOption) string {
 	return buildPromptWithContext(title, quantity, categories, ClassifyContext{})

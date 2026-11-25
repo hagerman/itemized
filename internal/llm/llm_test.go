@@ -187,7 +187,9 @@ func TestClassifierCatalogContextAndMatchedProductValidation(t *testing.T) {
 	prompt := buildPromptWithContext("Burman's Dijon Mustard", "12 oz", []CategoryOption{{ID: 1, Name: "Condiments"}}, ctx)
 	for _, want := range []string{
 		"Item, Variety, Detail",
-		"NEVER a broad catalog category prefix",
+		"NEVER a broad store-department prefix",
+		"NEVER change the fundamental product type",
+		"Soup, Italian Bean",
 		"Organic dijon mustard condiment",
 		"Mustard, Dijon",
 		`"Apples"`,

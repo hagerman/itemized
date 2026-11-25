@@ -1331,6 +1331,20 @@ var broadTaxonomyPrefixes = map[string]bool{
 	"condiments":     true,
 }
 
+func leadingCommaPrefix(s string) string {
+	if idx := strings.Index(s, ","); idx > 0 {
+		return strings.ToLower(strings.TrimSpace(s[:idx]))
+	}
+	return ""
+}
+
+func prefixMatches(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return a == b || a+"s" == b || b+"s" == a || a+"es" == b || b+"es" == a
+}
+
 func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string, excludeIDs map[int64]bool) ([]llm.ProductCandidate, []string, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT id, name FROM products ORDER BY id ASC`)
 	if err != nil {
@@ -1363,37 +1377,20 @@ func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string,
 		return nil, nil, err
 	}
 
-	type prefixEntry struct {
-		display string
-		count   int
-	}
-	var pEntries []prefixEntry
-	for k, cnt := range prefixCounts {
-		pEntries = append(pEntries, prefixEntry{display: prefixDisplay[k], count: cnt})
-	}
-	sort.Slice(pEntries, func(i, j int) bool {
-		if pEntries[i].count != pEntries[j].count {
-			return pEntries[i].count > pEntries[j].count
-		}
-		return pEntries[i].display < pEntries[j].display
-	})
-	maxPrefixes := 30
-	if len(pEntries) < maxPrefixes {
-		maxPrefixes = len(pEntries)
-	}
-	prefixes := make([]string, 0, maxPrefixes)
-	for i := 0; i < maxPrefixes; i++ {
-		prefixes = append(prefixes, pEntries[i].display)
-	}
-
-	// Prepare normalized query sets
+	// Prepare normalized query sets and extract any leading prefixes from queries.
 	type parsedQuery struct {
-		clean    string
-		keywords []string
-		wordSet  map[string]bool
+		clean         string
+		leadingPrefix string
+		keywords      []string
+		wordSet       map[string]bool
 	}
 	var pQueries []parsedQuery
+	var queryLeadingPrefixes []string
 	for _, q := range queries {
+		lp := leadingCommaPrefix(q)
+		if lp != "" && !broadTaxonomyPrefixes[lp] {
+			queryLeadingPrefixes = append(queryLeadingPrefixes, lp)
+		}
 		clean := domain.NormalizeSearchQuery(q)
 		kws := domain.SearchKeywords(clean)
 		if len(kws) == 0 {
@@ -1403,7 +1400,50 @@ func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string,
 		for _, w := range kws {
 			ws[w] = true
 		}
-		pQueries = append(pQueries, parsedQuery{clean: clean, keywords: kws, wordSet: ws})
+		pQueries = append(pQueries, parsedQuery{
+			clean:         clean,
+			leadingPrefix: lp,
+			keywords:      kws,
+			wordSet:       ws,
+		})
+	}
+
+	type prefixEntry struct {
+		lower   string
+		display string
+		count   int
+	}
+	var pEntries []prefixEntry
+	for k, cnt := range prefixCounts {
+		pEntries = append(pEntries, prefixEntry{lower: k, display: prefixDisplay[k], count: cnt})
+	}
+	sort.Slice(pEntries, func(i, j int) bool {
+		if pEntries[i].count != pEntries[j].count {
+			return pEntries[i].count > pEntries[j].count
+		}
+		return pEntries[i].display < pEntries[j].display
+	})
+
+	// Guarantee inclusion of any existing non-department catalog prefix matching a query's leading prefix,
+	// even if it falls outside the global top 30.
+	prefixes := make([]string, 0, 35)
+	addedPrefix := make(map[string]bool)
+	for _, qlp := range queryLeadingPrefixes {
+		for _, entry := range pEntries {
+			if !addedPrefix[entry.lower] && prefixMatches(qlp, entry.lower) {
+				addedPrefix[entry.lower] = true
+				prefixes = append(prefixes, entry.display)
+			}
+		}
+	}
+	for _, entry := range pEntries {
+		if len(prefixes) >= 30 {
+			break
+		}
+		if !addedPrefix[entry.lower] {
+			addedPrefix[entry.lower] = true
+			prefixes = append(prefixes, entry.display)
+		}
 	}
 
 	if len(pQueries) == 0 {
@@ -1422,9 +1462,14 @@ func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string,
 		bestScore := 0.0
 		prodClean := domain.NormalizeSearchQuery(prod.Name)
 		prodWords := domain.SearchKeywords(prodClean)
+		prodPrefix := leadingCommaPrefix(prod.Name)
 		for _, pq := range pQueries {
+			leadingBonus := 0.0
+			if prefixMatches(prodPrefix, pq.leadingPrefix) {
+				leadingBonus = 35.0
+			}
 			if m := domain.MatchProductSearch(prod.Name, pq.clean, pq.keywords); m.Matched {
-				s := float64(m.Tier)*10.0 + m.Similarity
+				s := float64(m.Tier)*10.0 + m.Similarity + leadingBonus
 				if s > bestScore {
 					bestScore = s
 				}
@@ -1451,11 +1496,13 @@ func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string,
 				}
 				if hits > 0 {
 					coverage := float64(hits) / float64(len(prodWords))
-					tokenScore := coverage*25.0 + float64(hits)*2.0
+					tokenScore := coverage*25.0 + float64(hits)*2.0 + leadingBonus
 					if tokenScore > bestScore {
 						bestScore = tokenScore
 					}
 				}
+			} else if leadingBonus > bestScore {
+				bestScore = leadingBonus
 			}
 		}
 		if bestScore > 0 {
@@ -1521,21 +1568,24 @@ func (s *Server) handleReclassifySuggest(w http.ResponseWriter, r *http.Request)
 		args[i] = id
 	}
 
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, name FROM products WHERE id IN (`+placeholders+`)`, args...)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name, category_id FROM products WHERE id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		writeInternalError(w, "reclassify suggest load products", err)
 		return
 	}
 	nameByID := make(map[int64]string, len(ids))
+	catIDByProd := make(map[int64]int64, len(ids))
 	for rows.Next() {
 		var id int64
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var catID int64
+		if err := rows.Scan(&id, &name, &catID); err != nil {
 			rows.Close()
 			writeInternalError(w, "reclassify suggest scan product", err)
 			return
 		}
 		nameByID[id] = name
+		catIDByProd[id] = catID
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -1546,6 +1596,12 @@ func (s *Server) handleReclassifySuggest(w http.ResponseWriter, r *http.Request)
 
 	if len(nameByID) != len(ids) {
 		writeError(w, http.StatusNotFound, "one or more products not found")
+		return
+	}
+
+	_, catMap, err := s.listAllCategories(ctx)
+	if err != nil {
+		writeInternalError(w, "reclassify suggest load categories", err)
 		return
 	}
 
@@ -1564,7 +1620,10 @@ func (s *Server) handleReclassifySuggest(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		vName = strings.TrimSpace(vName)
-		if vName != "" && !strings.EqualFold(vName, "default") && !strings.EqualFold(vName, "default variant") {
+		if vName != "" &&
+			!strings.EqualFold(vName, "default") &&
+			!strings.EqualFold(vName, "default variant") &&
+			!strings.EqualFold(vName, strings.TrimSpace(nameByID[pid])) {
 			variantsByProd[pid] = append(variantsByProd[pid], vName)
 		}
 	}
@@ -1580,9 +1639,14 @@ func (s *Server) handleReclassifySuggest(w http.ResponseWriter, r *http.Request)
 	for _, id := range ids {
 		name := nameByID[id]
 		vNames := variantsByProd[id]
+		catName := ""
+		if c, ok := catMap[catIDByProd[id]]; ok {
+			catName = c.HierarchyName
+		}
 		inputs = append(inputs, llm.ReclassifyInput{
 			ProductID:    id,
 			CurrentName:  name,
+			CategoryName: catName,
 			VariantNames: vNames,
 		})
 		queries = append(queries, name)
