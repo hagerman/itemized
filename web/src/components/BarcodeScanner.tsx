@@ -31,6 +31,7 @@ interface BarcodeScannerProps {
   placeholder?: string;
   active?: boolean;
   defaultCameraEnabled?: boolean;
+  flashOnScan?: boolean;
 }
 
 function playBeep() {
@@ -69,11 +70,15 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   placeholder = "Scan barcode, QR URL, or type to search...",
   active = true,
   defaultCameraEnabled = false,
+  flashOnScan = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
+  const flashOnScanRef = useRef(flashOnScan);
+  flashOnScanRef.current = flashOnScan;
+  const flashTimerRef = useRef<number | null>(null);
 
   const [cameraEnabled, setCameraEnabled] = useState(defaultCameraEnabled);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -83,7 +88,29 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const [torchSupported, setTorchSupported] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState("");
+  const [scanFlashing, setScanFlashing] = useState(false);
   const lastCodeRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current !== null) {
+        window.clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const triggerScanFlash = () => {
+    if (!flashOnScanRef.current) return;
+    if (flashTimerRef.current !== null) {
+      window.clearTimeout(flashTimerRef.current);
+    }
+    setScanFlashing(true);
+    flashTimerRef.current = window.setTimeout(() => {
+      setScanFlashing(false);
+      flashTimerRef.current = null;
+    }, 280);
+  };
 
   const emitScan = (raw: string) => {
     const code = raw.trim();
@@ -94,6 +121,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     }
     lastCodeRef.current = { code, at: now };
     playBeep();
+    triggerScanFlash();
     onScanRef.current(code);
   };
 
@@ -315,7 +343,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   return (
     <div className="space-y-3">
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form
+        onSubmit={handleSubmit}
+        data-testid="scanner-bar"
+        data-scan-flash={scanFlashing ? "true" : "false"}
+        className={`flex gap-2 rounded-xl transition-all duration-150 ${
+          scanFlashing ? "bg-emerald-500/20 ring-2 ring-emerald-400" : ""
+        }`}
+      >
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -325,7 +360,11 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             placeholder={placeholder}
             aria-label="Barcode or search input"
             autoFocus={!defaultCameraEnabled}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2.5 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className={`w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm text-slate-100 placeholder-slate-500 transition-colors duration-150 focus:outline-none ${
+              scanFlashing
+                ? "border-emerald-400 bg-emerald-950/60"
+                : "border-slate-700 bg-slate-900 focus:border-indigo-500"
+            }`}
           />
         </div>
         <button
@@ -358,6 +397,13 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             muted
             className="h-52 w-full object-cover"
           />
+          {scanFlashing && (
+            <div
+              data-testid="scan-flash-overlay"
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-10 bg-emerald-400/45 ring-4 ring-inset ring-emerald-300 transition-opacity duration-200"
+            />
+          )}
           <div className="absolute right-2 top-2 flex gap-2">
             {torchSupported && (
               <button

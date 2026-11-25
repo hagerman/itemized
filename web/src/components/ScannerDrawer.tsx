@@ -180,12 +180,14 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
   // Consume / Open / Transfer item selection state
   const [candidateItems, setCandidateItems] = useState<Item[]>([]);
+  const [candidateHeading, setCandidateHeading] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [unknownBarcodeForAssoc, setUnknownBarcodeForAssoc] = useState<string | null>(null);
   const [assocQuery, setAssocQuery] = useState("");
   const [assocMatches, setAssocMatches] = useState<Product[]>([]);
 
   // Transfer state
+  const [transferItems, setTransferItems] = useState<Item[]>([]);
   const [transferDest, setTransferDest] = useState<Location | null>(null);
 
   // Inventory Audit state
@@ -231,7 +233,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     setPurchaseBarcode("");
     setSecondBarcode("");
     setCandidateItems([]);
+    setCandidateHeading(null);
     setSelectedItemIds([]);
+    setTransferItems([]);
+    setTransferDest(null);
     setUnknownBarcodeForAssoc(null);
     setInvSummary(null);
     setScanTarget(null);
@@ -490,6 +495,12 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
   const handleConsumeOpenScan = async (raw: string, res: ScanResolution, action: "consume" | "open") => {
     if (res.kind === "item") {
+      if (res.item.consumed_on_date) {
+        const itemName = res.item.product_name || res.product?.name || `Item #${res.item.id}`;
+        setToast(null);
+        setErrorMsg(`${itemName} was already consumed (${res.item.consumed_on_date}).`);
+        return;
+      }
       const resp = await apiFetch<{ item: Item; previous: Item }>(`/api/items/${res.item.id}/${action}`, {
         method: "POST",
       });
@@ -504,6 +515,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       return;
     }
     if (res.kind === "product" || res.kind === "barcode" || res.kind === "location") {
+      setCandidateHeading(null);
       setCandidateItems(res.items);
       setSelectedItemIds(res.items.length > 0 ? [res.items[0].id] : []);
       if (res.items.length === 0) {
@@ -572,38 +584,114 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     }
   };
 
-  const handleTransferScan = async (_raw: string, res: ScanResolution) => {
-    if (!transferDest) {
-      if (res.kind === "location") {
-        setTransferDest(res.location);
-        setStatusMsg(`Destination locked: ${res.location.hierarchy_name}`);
-      } else {
-        setErrorMsg("Select or scan a destination location first.");
-      }
+  const executeTransfer = async (dest: Location) => {
+    if (transferItems.length === 0) {
+      setErrorMsg("Scan one or more items to transfer first.");
       return;
     }
+    try {
+      const res = await apiFetch<{ processed?: number; print_warnings?: string[] }>("/api/items/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "transfer",
+          item_ids: transferItems.map((it) => it.id),
+          location_id: dest.id,
+        }),
+      });
+      const count = transferItems.length;
+      const warn = res.print_warnings?.length ? ` (Print warning: ${res.print_warnings.join("; ")})` : "";
+      setTransferItems([]);
+      setTransferDest(null);
+      setCandidateItems([]);
+      setCandidateHeading(null);
+      setSelectedItemIds([]);
+      setStatusMsg(`Transferred ${count} item(s) to ${dest.hierarchy_name || dest.name}${warn}`);
+      invalidateInventory();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Transfer failed");
+    }
+  };
+
+  const addCandidatesToTransfer = () => {
+    if (selectedItemIds.length === 0) return;
+    const chosen = candidateItems.filter((it) => selectedItemIds.includes(it.id));
+    const existingIds = new Set(transferItems.map((it) => it.id));
+    const newlyAdded = chosen.filter((it) => !existingIds.has(it.id));
+    if (newlyAdded.length > 0) {
+      setTransferItems((prev) => {
+        const seen = new Set(prev.map((it) => it.id));
+        const next = [...prev];
+        for (const it of newlyAdded) {
+          if (!seen.has(it.id)) {
+            seen.add(it.id);
+            next.push(it);
+          }
+        }
+        return next;
+      });
+      setStatusMsg(`Added ${newlyAdded.length} item(s) to transfer list.`);
+    } else {
+      setStatusMsg("Selected item(s) are already in the transfer list.");
+    }
+    setCandidateItems([]);
+    setCandidateHeading(null);
+    setSelectedItemIds([]);
+  };
+
+  const handleTransferScan = async (_raw: string, res: ScanResolution) => {
     if (res.kind === "location") {
-      setTransferDest(res.location);
-      setStatusMsg(`Switched destination to: ${res.location.hierarchy_name}`);
+      if (transferItems.length === 0) {
+        setErrorMsg("Scan one or more items to transfer first.");
+        return;
+      }
+      await executeTransfer(res.location);
       return;
     }
     if (res.kind === "item") {
-      const resp = await apiFetch<{ item: Item; previous: Item }>(`/api/items/${res.item.id}/transfer`, {
-        method: "POST",
-        body: JSON.stringify({ location_id: transferDest.id }),
-      });
-      setToast({
-        message: `Moved ${resp.item.product_name} -> ${transferDest.name}`,
-        itemId: resp.item.id,
-        patch: { location_id: resp.previous.location_id, due_on_date: resp.previous.due_on_date },
-      });
-      invalidateInventory();
+      if (res.item.consumed_on_date) {
+        const itemName = res.item.product_name || res.product?.name || `Item #${res.item.id}`;
+        setErrorMsg(`${itemName} was already consumed (${res.item.consumed_on_date}).`);
+        return;
+      }
+      if (transferItems.some((it) => it.id === res.item.id)) {
+        setStatusMsg(`${res.item.product_name} (#${res.item.id}) is already in the transfer list.`);
+        return;
+      }
+      setTransferItems((prev) => (prev.some((it) => it.id === res.item.id) ? prev : [...prev, res.item]));
+      setStatusMsg(`Added ${res.item.product_name} to transfer list.`);
       return;
     }
-    if (res.kind === "product" || res.kind === "barcode") {
-      setCandidateItems(res.items);
-      setSelectedItemIds(res.items.length > 0 ? [res.items[0].id] : []);
+    if (res.kind === "product") {
+      const items = res.items || [];
+      if (items.length === 0) {
+        setCandidateItems([]);
+        setCandidateHeading(null);
+        setSelectedItemIds([]);
+        setStatusMsg(`No in-stock items found for ${res.product.name}.`);
+        return;
+      }
+      const firstUnstaged = items.find((it) => !transferItems.some((t) => t.id === it.id));
+      setCandidateHeading(`Select items of ${res.product.name}`);
+      setCandidateItems(items);
+      setSelectedItemIds(firstUnstaged ? [firstUnstaged.id] : []);
+      return;
     }
+    if (res.kind === "barcode") {
+      const variantItems = (res.items || []).filter((it) => it.variant_id === res.variant_id);
+      if (variantItems.length === 0) {
+        setCandidateItems([]);
+        setCandidateHeading(null);
+        setSelectedItemIds([]);
+        setStatusMsg(`No in-stock items found for ${res.product.name} (${res.variant_name}).`);
+        return;
+      }
+      const firstUnstaged = variantItems.find((it) => !transferItems.some((t) => t.id === it.id));
+      setCandidateHeading(`Select items of ${res.product.name} (${res.variant_name})`);
+      setCandidateItems(variantItems);
+      setSelectedItemIds(firstUnstaged ? [firstUnstaged.id] : []);
+      return;
+    }
+    setErrorMsg("Unrecognized barcode or QR code.");
   };
 
   const handleInventoryScan = async (_raw: string, res: ScanResolution) => {
@@ -727,7 +815,12 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         {/* Body */}
         <div data-testid="scanner-body" className="flex-1 space-y-4 overflow-y-auto p-4">
           {/* Persistent single-stream scanner across all modes */}
-          <BarcodeScanner active={true} defaultCameraEnabled={isMobileDevice()} onScan={handleScan} />
+          <BarcodeScanner
+            active={true}
+            defaultCameraEnabled={isMobileDevice()}
+            flashOnScan={mode === "consume"}
+            onScan={handleScan}
+          />
 
           {toast && (
             <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">
@@ -1040,21 +1133,86 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
             </div>
           )}
 
-          {/* TRANSFER DESTINATION PICKER */}
+          {/* TRANSFER STAGED LIST & DESTINATION COMPLETION */}
           {mode === "transfer" && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-              <div className="mb-1 text-xs font-medium text-slate-400">
-                Destination Location (scan location QR or select)
+            <div className="space-y-3">
+              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                    Items to Transfer ({transferItems.length})
+                  </div>
+                  {transferItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTransferItems([])}
+                      className="text-xs text-slate-400 hover:text-slate-200"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {transferItems.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    Scan item, product, or UPC barcodes to add items to the transfer list.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5" data-testid="transfer-staged-list">
+                    {transferItems.map((it) => (
+                      <div
+                        key={it.id}
+                        className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-slate-100">
+                            {it.product_name}
+                            {it.variant_name ? (
+                              <span className="ml-1.5 text-xs font-normal text-slate-400">({it.variant_name})</span>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {it.location_name || "No location"} {it.due_on_date ? `• Due ${it.due_on_date}` : ""}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setTransferItems((prev) => prev.filter((x) => x.id !== it.id))}
+                          aria-label={`Remove ${it.product_name} #${it.id}`}
+                          className="ml-2 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <HierarchySelect
-                items={locations}
-                value={transferDest?.id ?? null}
-                onChange={(v) => setTransferDest(locations.find((l) => l.id === v) || null)}
-                allowEmpty
-                emptyLabel="-- Choose destination --"
-                ariaLabel="Destination location"
-                inlineMenu
-              />
+
+              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                <div className="text-xs font-medium text-slate-400">
+                  Destination Location (scan location QR or select to complete transfer)
+                </div>
+                <HierarchySelect
+                  items={locations}
+                  value={transferDest?.id ?? null}
+                  onChange={(v) => setTransferDest(locations.find((l) => l.id === v) || null)}
+                  allowEmpty
+                  emptyLabel="-- Choose destination --"
+                  ariaLabel="Destination location"
+                  inlineMenu
+                />
+                <button
+                  type="button"
+                  disabled={transferItems.length === 0 || !transferDest}
+                  onClick={() => {
+                    if (transferDest) {
+                      void executeTransfer(transferDest);
+                    }
+                  }}
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Complete Transfer ({transferItems.length})
+                </button>
+              </div>
             </div>
           )}
 
@@ -1100,10 +1258,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
           {candidateItems.length > 0 && mode !== "purchase" && mode !== "inventory" && (
             <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
               <div className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                Select items (soonest due first)
+                {candidateHeading || "Select items (soonest due first)"}
               </div>
               {candidateItems.map((it) => {
                 const checked = selectedItemIds.includes(it.id);
+                const alreadyStaged = mode === "transfer" && transferItems.some((t) => t.id === it.id);
                 return (
                   <label key={it.id} className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
                     <div className="flex items-center gap-2">
@@ -1117,22 +1276,43 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         }
                       />
                       <div>
-                        <div className="font-medium text-slate-100">{it.product_name}</div>
+                        <div className="font-medium text-slate-100">
+                          {it.product_name}
+                          {it.variant_name ? (
+                            <span className="ml-1.5 text-xs font-normal text-slate-400">({it.variant_name})</span>
+                          ) : null}
+                        </div>
                         <div className="text-xs text-slate-400">
                           {it.location_name || "No location"} {it.due_on_date ? `• Due ${it.due_on_date}` : ""}
                         </div>
                       </div>
                     </div>
+                    {alreadyStaged && (
+                      <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[11px] font-medium text-indigo-300">
+                        In list
+                      </span>
+                    )}
                   </label>
                 );
               })}
-              <button
-                type="button"
-                onClick={applyCandidateItems}
-                className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-              >
-                Apply {mode} ({selectedItemIds.length})
-              </button>
+              {mode === "transfer" ? (
+                <button
+                  type="button"
+                  disabled={selectedItemIds.length === 0}
+                  onClick={addCandidatesToTransfer}
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add to Transfer List ({selectedItemIds.length})
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={applyCandidateItems}
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                >
+                  Apply {mode} ({selectedItemIds.length})
+                </button>
+              )}
             </div>
           )}
 

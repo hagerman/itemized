@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const { prepareZXingModuleMock, readBarcodesMock } = vi.hoisted(() => ({
@@ -943,5 +943,309 @@ describe("BarcodeScanner and ScannerDrawer", () => {
 
     await waitFor(() => expect(screen.getByText("Matching Products")).toBeInTheDocument());
     expect(body.children.length).toBe(2);
+  });
+
+  it("triggers a brief visual flash alongside the beep on Consume scans and clears automatically", async () => {
+    vi.useFakeTimers();
+    try {
+      const onScan = vi.fn();
+      const { rerender } = render(
+        <BarcodeScanner onScan={onScan} defaultCameraEnabled={true} flashOnScan={false} />
+      );
+
+      const input = screen.getByLabelText("Barcode or search input");
+      fireEvent.change(input, { target: { value: "https://itemized.local/go/i/1" } });
+      fireEvent.submit(input.closest("form")!);
+      expect(screen.getByTestId("scanner-bar")).toHaveAttribute("data-scan-flash", "false");
+      expect(screen.queryByTestId("scan-flash-overlay")).not.toBeInTheDocument();
+
+      rerender(<BarcodeScanner onScan={onScan} defaultCameraEnabled={true} flashOnScan={true} />);
+      fireEvent.change(input, { target: { value: "https://itemized.local/go/i/2" } });
+      fireEvent.submit(input.closest("form")!);
+
+      expect(screen.getByTestId("scanner-bar")).toHaveAttribute("data-scan-flash", "true");
+      expect(screen.getByTestId("scan-flash-overlay")).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(screen.getByTestId("scanner-bar")).toHaveAttribute("data-scan-flash", "false");
+      expect(screen.queryByTestId("scan-flash-overlay")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows an already-consumed message with item name and skips consume API when rescanning a consumed item", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(
+          JSON.stringify({
+            kind: "item",
+            item: {
+              id: 22,
+              product_id: 1,
+              product_name: "Milk, Whole",
+              consumed_on_date: "2026-11-20",
+            },
+            product: { id: 1, name: "Milk, Whole" },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="consume"
+          onClose={() => {}}
+          categories={[]}
+          locations={[]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "https://itemized.local/go/i/22" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Milk, Whole was already consumed/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("button", { name: /Undo/i })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/items/22/consume",
+      expect.anything()
+    );
+  });
+
+  it("stages items, product selections, and variant-filtered UPC selections in Transfer mode and completes via location QR or picker", async () => {
+    const bulkCalls: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        const body = JSON.parse(String(init?.body || "{}"));
+        const inp = String(body.input || "");
+        if (inp === "https://itemized.local/go/l/2") {
+          return new Response(
+            JSON.stringify({
+              kind: "location",
+              location: { id: 2, name: "Freezer", parent_id: null, is_freezer: true, hierarchy_name: "Freezer" },
+              items: [],
+            }),
+            { status: 200 }
+          );
+        }
+        if (inp === "https://itemized.local/go/i/101") {
+          return new Response(
+            JSON.stringify({
+              kind: "item",
+              item: {
+                id: 101,
+                product_id: 10,
+                product_name: "Chicken Breast",
+                variant_id: null,
+                variant_name: "",
+                location_id: 1,
+                location_name: "Fridge",
+                due_on_date: "2026-11-28",
+                consumed_on_date: null,
+              },
+              product: { id: 10, name: "Chicken Breast" },
+            }),
+            { status: 200 }
+          );
+        }
+        if (inp === "https://itemized.local/go/i/199") {
+          return new Response(
+            JSON.stringify({
+              kind: "item",
+              item: {
+                id: 199,
+                product_id: 10,
+                product_name: "Old Soup",
+                variant_id: null,
+                variant_name: "",
+                location_id: 1,
+                location_name: "Fridge",
+                due_on_date: null,
+                consumed_on_date: "2026-11-10",
+              },
+              product: { id: 10, name: "Old Soup" },
+            }),
+            { status: 200 }
+          );
+        }
+        if (inp === "https://itemized.local/go/p/20") {
+          return new Response(
+            JSON.stringify({
+              kind: "product",
+              product: { id: 20, name: "Pasta Sauce" },
+              items: [
+                {
+                  id: 201,
+                  product_id: 20,
+                  product_name: "Pasta Sauce",
+                  variant_id: 30,
+                  variant_name: "Marinara 24oz",
+                  location_id: 1,
+                  location_name: "Pantry",
+                  due_on_date: "2026-12-01",
+                  consumed_on_date: null,
+                },
+                {
+                  id: 202,
+                  product_id: 20,
+                  product_name: "Pasta Sauce",
+                  variant_id: 31,
+                  variant_name: "Alfredo 15oz",
+                  location_id: 1,
+                  location_name: "Pantry",
+                  due_on_date: "2026-12-15",
+                  consumed_on_date: null,
+                },
+              ],
+            }),
+            { status: 200 }
+          );
+        }
+        if (inp === "012345678905") {
+          return new Response(
+            JSON.stringify({
+              kind: "barcode",
+              barcode: { id: 1, variant_id: 40, barcode: "012345678905", default_quantity: 1 },
+              variant_id: 40,
+              variant_name: "12 oz Can",
+              product: { id: 30, name: "Soda" },
+              items: [
+                {
+                  id: 301,
+                  product_id: 30,
+                  product_name: "Soda",
+                  variant_id: 40,
+                  variant_name: "12 oz Can",
+                  location_id: 1,
+                  location_name: "Pantry",
+                  due_on_date: "2027-01-01",
+                  consumed_on_date: null,
+                },
+                {
+                  id: 302,
+                  product_id: 30,
+                  product_name: "Soda",
+                  variant_id: 41,
+                  variant_name: "2 Liter Bottle",
+                  location_id: 1,
+                  location_name: "Pantry",
+                  due_on_date: "2027-01-05",
+                  consumed_on_date: null,
+                },
+              ],
+            }),
+            { status: 200 }
+          );
+        }
+      }
+      if (url === "/api/items/bulk") {
+        bulkCalls.push(JSON.parse(String(init?.body || "{}")));
+        return new Response(JSON.stringify({ processed: 2, print_warnings: [] }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="transfer"
+          onClose={() => {}}
+          categories={[]}
+          locations={[
+            { id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" },
+            { id: 2, name: "Freezer", parent_id: null, is_freezer: true, hierarchy_name: "Freezer" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    const scan = (val: string) => {
+      fireEvent.change(input, { target: { value: val } });
+      fireEvent.submit(input.closest("form")!);
+    };
+
+    // 1. Scanning location QR with empty list prompts to scan items first
+    scan("https://itemized.local/go/l/2");
+    await waitFor(() =>
+      expect(screen.getByText(/Scan one or more items to transfer first/i)).toBeInTheDocument()
+    );
+    expect(bulkCalls.length).toBe(0);
+
+    // 2. Scanning an already-consumed item shows notice with product name and does not stage it
+    scan("https://itemized.local/go/i/199");
+    await waitFor(() =>
+      expect(screen.getByText(/Old Soup was already consumed/i)).toBeInTheDocument()
+    );
+    expect(screen.queryByTestId("transfer-staged-list")).not.toBeInTheDocument();
+
+    // 3. Scanning an in-stock item QR stages it directly
+    scan("https://itemized.local/go/i/101");
+    await waitFor(() => expect(screen.getByTestId("transfer-staged-list")).toBeInTheDocument());
+    expect(screen.getByText("Items to Transfer (1)")).toBeInTheDocument();
+
+    // 4. Scanning a product QR lists all in-stock items of that product for multi-select staging
+    scan("https://itemized.local/go/p/20");
+    await waitFor(() => expect(screen.getByText("Select items of Pasta Sauce")).toBeInTheDocument());
+    expect(screen.getByText("(Marinara 24oz)")).toBeInTheDocument();
+    expect(screen.getByText("(Alfredo 15oz)")).toBeInTheDocument();
+    // Select the second item too so both are added
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(screen.getByRole("button", { name: /Add to Transfer List \(2\)/i }));
+    await waitFor(() => expect(screen.getByText("Items to Transfer (3)")).toBeInTheDocument());
+
+    // 5. Remove one staged item (#202)
+    fireEvent.click(screen.getByRole("button", { name: "Remove Pasta Sauce #202" }));
+    expect(screen.getByText("Items to Transfer (2)")).toBeInTheDocument();
+
+    // 6. Scanning destination location QR completes transfer of remaining staged items (#101, #201)
+    scan("https://itemized.local/go/l/2");
+    await waitFor(() =>
+      expect(screen.getByText(/Transferred 2 item\(s\) to Freezer/i)).toBeInTheDocument()
+    );
+    expect(bulkCalls[0]).toEqual({
+      action: "transfer",
+      item_ids: [101, 201],
+      location_id: 2,
+    });
+    expect(screen.getByText("Items to Transfer (0)")).toBeInTheDocument();
+
+    // 7. Scanning a UPC lists ONLY items matching that variant (12 oz Can, not 2 Liter Bottle)
+    scan("012345678905");
+    await waitFor(() => expect(screen.getByText("Select items of Soda (12 oz Can)")).toBeInTheDocument());
+    expect(screen.getByText("(12 oz Can)")).toBeInTheDocument();
+    expect(screen.queryByText("(2 Liter Bottle)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Add to Transfer List \(1\)/i }));
+    await waitFor(() => expect(screen.getByText("Items to Transfer (1)")).toBeInTheDocument());
+
+    // 8. Complete transfer by selecting destination in HierarchySelect and clicking Complete Transfer
+    fireEvent.click(screen.getByRole("button", { name: "Destination location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Freezer" }));
+    fireEvent.click(screen.getByRole("button", { name: /Complete Transfer \(1\)/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Transferred 1 item\(s\) to Freezer/i)).toBeInTheDocument()
+    );
+    expect(bulkCalls[1]).toEqual({
+      action: "transfer",
+      item_ids: [301],
+      location_id: 2,
+    });
   });
 });

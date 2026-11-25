@@ -383,6 +383,14 @@ func (s *Server) handleConsumeItem(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, "consume item load", err)
 		return
 	}
+	if prev.ConsumedOnDate != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"item":             prev,
+			"previous":         prev,
+			"already_consumed": true,
+		})
+		return
+	}
 	today := todayUTC().Format(domain.DateLayout)
 	now := db.NowUTC()
 	if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET consumed_on_date = ?, updated_at = ? WHERE id = ?`, today, now, id); err != nil {
@@ -390,7 +398,7 @@ func (s *Server) handleConsumeItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, _ := s.getItemByID(r.Context(), id)
-	writeJSON(w, http.StatusOK, map[string]any{"item": updated, "previous": prev})
+	writeJSON(w, http.StatusOK, map[string]any{"item": updated, "previous": prev, "already_consumed": false})
 }
 
 func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {

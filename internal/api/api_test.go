@@ -229,10 +229,36 @@ func TestFullAPILifecycle(t *testing.T) {
 		t.Fatalf("expected 302 -> /products/1, got %d -> %s", rec.Code, rec.Header().Get("Location"))
 	}
 
-	// 9. Consume item 1 + Undo via PATCH
+	// 9. Consume item 1 + Already-consumed idempotency + Undo via PATCH
 	rec = doReq(t, h, http.MethodPost, "/api/items/1/consume", nil, memberTok)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("consume failed: %d", rec.Code)
+	}
+	var firstConsume struct {
+		AlreadyConsumed bool `json:"already_consumed"`
+		Item            Item `json:"item"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &firstConsume)
+	if firstConsume.AlreadyConsumed || firstConsume.Item.ConsumedOnDate == nil {
+		t.Fatalf("expected initial consume already_consumed=false with date set, got %+v", firstConsume)
+	}
+	// Backdate consumed_on_date, then re-consume and verify original date is preserved with already_consumed=true
+	rec = doReq(t, h, http.MethodPatch, "/api/items/1", map[string]any{"consumed_on_date": "2026-10-01"}, memberTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backdate consume failed: %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/items/1/consume", nil, memberTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("re-consume failed: %d", rec.Code)
+	}
+	var repeatConsume struct {
+		AlreadyConsumed bool `json:"already_consumed"`
+		Item            Item `json:"item"`
+		Previous        Item `json:"previous"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &repeatConsume)
+	if !repeatConsume.AlreadyConsumed || repeatConsume.Item.ConsumedOnDate == nil || *repeatConsume.Item.ConsumedOnDate != "2026-10-01" {
+		t.Fatalf("expected already_consumed=true preserving 2026-10-01, got %+v", repeatConsume)
 	}
 	// Consumed QR redirect includes notice
 	rec = doReq(t, h, http.MethodGet, "/go/i/1", nil, memberTok)
