@@ -7,6 +7,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { ProductFormPage } from "./pages/ProductFormPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
+import { SearchPage } from "./pages/SearchPage";
 import { CategoriesPage, LocationDetailPage, LocationsPage } from "./pages/TaxonomyPages";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -45,6 +46,7 @@ const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Inventory"><ProductsPage /></Layout>} />
+      <Route path="/search" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Search"><SearchPage /></Layout>} />
       <Route path="/products/new" element={<Layout user={authStatus.user} onLogout={handleLogout} title="New Product"><ProductFormPage /></Layout>} />
       <Route path="/products/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Product"><ProductDetailPage /></Layout>} />
       <Route path="/products/:id/edit" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Edit Product"><ProductFormPage /></Layout>} />

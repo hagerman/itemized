@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Pencil, Plus, Printer, ScanBarcode, ShoppingCart, Trash2, X } from "lucide-react";
 import { apiFetch, Item, Location, Product, Variant } from "../api";
@@ -22,8 +22,11 @@ const LABEL_MODE_LABELS: Record<string, string> = {
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const backTo = (location.state as { from?: string } | null)?.from || "/";
+  const backLabel = backTo.startsWith("/search") ? "Back to search results" : "Back to inventory";
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkLocationId, setBulkLocationId] = useState<number>(0);
@@ -218,7 +221,7 @@ export const ProductDetailPage: React.FC = () => {
       {/* Responsive Header: icon-only on narrow mobile so all 4 actions stay on one row */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <Link to="/" aria-label="Back to inventory" className="shrink-0 rounded-lg border border-slate-800 p-2 text-slate-300 hover:bg-slate-800">
+          <Link to={backTo} aria-label={backLabel} className="shrink-0 rounded-lg border border-slate-800 p-2 text-slate-300 hover:bg-slate-800">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div className="min-w-0">

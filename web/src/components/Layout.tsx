@@ -306,7 +306,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/70 px-4 pt-[env(safe-area-inset-top)] backdrop-blur">
+        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4 pt-[env(safe-area-inset-top)]">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -331,7 +331,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
         aria-label="Mobile navigation"
         className="fixed inset-x-0 bottom-0 z-40 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-3 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       >
-        <Link to="/" className="flex flex-col items-center justify-center gap-0.5 text-xs text-slate-300">
+        <Link
+          to="/"
+          aria-current={loc.pathname === "/" ? "page" : undefined}
+          className={`flex flex-col items-center justify-center gap-0.5 text-xs transition ${
+            loc.pathname === "/" ? "font-semibold text-indigo-400" : "text-slate-400"
+          }`}
+        >
           <Box className="h-5 w-5" />
           <span>Inventory</span>
         </Link>
@@ -343,14 +349,16 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
           <ScanBarcode className="h-5 w-5" />
           <span>Scan / Action</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className="flex flex-col items-center justify-center gap-0.5 text-xs text-slate-300"
+        <Link
+          to="/search"
+          aria-current={loc.pathname === "/search" ? "page" : undefined}
+          className={`flex flex-col items-center justify-center gap-0.5 text-xs transition ${
+            loc.pathname === "/search" ? "font-semibold text-indigo-400" : "text-slate-400"
+          }`}
         >
           <Search className="h-5 w-5" />
           <span>Search</span>
-        </button>
+        </Link>
       </nav>
 
       {/* Unified Scanner Drawer */}

@@ -67,9 +67,12 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     fireEvent.click(fridgeLink);
     expect(screen.getByTestId("current-url").textContent).toBe("/?status=in_stock");
 
-    // Verify shell uses dynamic viewport height and top safe-area inset for standalone iOS mode
+    // Verify shell uses dynamic viewport height, top safe-area inset, and solid non-blurred header for iOS
     const header = screen.getByRole("banner");
     expect(header.className).toContain("pt-[env(safe-area-inset-top)]");
+    expect(header.className).toContain("bg-slate-900");
+    expect(header.className).not.toContain("backdrop-blur");
+    expect(header.className).not.toContain("bg-slate-900/70");
     expect(header.closest("div.h-dvh")).not.toBeNull();
 
     // Verify mobile bottom dock expands height for bottom safe-area inset instead of squishing inside fixed h-16
@@ -139,5 +142,92 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     fireEvent.mouseDown(helpDialog);
     fireEvent.click(helpDialog);
     expect(screen.queryByRole("dialog", { name: "Keyboard Shortcuts" })).not.toBeInTheDocument();
+  });
+
+  it("highlights active Inventory and Search tabs in mobile bottom dock and links Search to /search", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ status_counts: {} }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+          >
+            <LocationEcho />
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const mobileNav = screen.getByRole("navigation", { name: "Mobile navigation" });
+    const inventoryLink = mobileNav.querySelector('a[href="/"]') as HTMLAnchorElement;
+    const searchLink = mobileNav.querySelector('a[href="/search"]') as HTMLAnchorElement;
+
+    expect(inventoryLink).not.toBeNull();
+    expect(searchLink).not.toBeNull();
+
+    // On "/": Inventory is active via foreground color (no background fill), Search is inactive
+    expect(inventoryLink).toHaveAttribute("aria-current", "page");
+    expect(inventoryLink.className).toContain("text-indigo-400");
+    expect(inventoryLink.className).toContain("font-semibold");
+    expect(inventoryLink.className).not.toContain("bg-indigo-600/20");
+    expect(searchLink).not.toHaveAttribute("aria-current");
+    expect(searchLink.className).toContain("text-slate-400");
+    expect(searchLink.className).not.toContain("text-indigo-400");
+    expect(searchLink.className).not.toContain("bg-indigo-600/20");
+
+    // Clicking Search navigates to /search without opening a modal and highlights Search via foreground color
+    fireEvent.click(searchLink);
+    expect(screen.getByTestId("current-url").textContent).toBe("/search");
+    expect(screen.queryByRole("dialog", { name: "Quick Search" })).not.toBeInTheDocument();
+    expect(searchLink).toHaveAttribute("aria-current", "page");
+    expect(searchLink.className).toContain("text-indigo-400");
+    expect(searchLink.className).toContain("font-semibold");
+    expect(searchLink.className).not.toContain("bg-indigo-600/20");
+    expect(inventoryLink).not.toHaveAttribute("aria-current");
+    expect(inventoryLink.className).toContain("text-slate-400");
+    expect(inventoryLink.className).not.toContain("text-indigo-400");
+    expect(inventoryLink.className).not.toContain("bg-indigo-600/20");
+
+    unmount();
+
+    // On "/settings": neither Inventory nor Search is active
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/settings"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Settings"
+          >
+            <LocationEcho />
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const settingsNav = screen.getByRole("navigation", { name: "Mobile navigation" });
+    const settingsInventory = settingsNav.querySelector('a[href="/"]') as HTMLAnchorElement;
+    const settingsSearch = settingsNav.querySelector('a[href="/search"]') as HTMLAnchorElement;
+    expect(settingsInventory).not.toHaveAttribute("aria-current");
+    expect(settingsInventory.className).not.toContain("text-indigo-400");
+    expect(settingsInventory.className).not.toContain("bg-indigo-600/20");
+    expect(settingsSearch).not.toHaveAttribute("aria-current");
+    expect(settingsSearch.className).not.toContain("text-indigo-400");
+    expect(settingsSearch.className).not.toContain("bg-indigo-600/20");
   });
 });

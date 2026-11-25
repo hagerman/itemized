@@ -252,4 +252,45 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     fireEvent.click(dialog);
     expect(screen.queryByRole("dialog", { name: "Scan Variant Barcode" })).not.toBeInTheDocument();
   });
+
+  it("links the back button to location.state.from when navigated from search, defaulting to /", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[{ pathname: "/products/1", state: { from: "/search?q=cola" } }]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const searchBack = await waitFor(() => screen.getByRole("link", { name: "Back to search results" }));
+    expect(searchBack).toHaveAttribute("href", "/search?q=cola");
+
+    unmount();
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const defaultBack = await waitFor(() => screen.getByRole("link", { name: "Back to inventory" }));
+    expect(defaultBack).toHaveAttribute("href", "/");
+  });
 });
