@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>itemized</Name>
-  <Repository>ghcr.io/hagerman/itemized:latest</Repository>
-  <Registry>https://ghcr.io/hagerman/itemized</Registry>
+  <Repository>ghcr.io/itemizedapp/itemized:latest</Repository>
+  <Registry>https://ghcr.io/itemizedapp/itemized</Registry>
   <Network>bridge</Network>
   <Privileged>false</Privileged>
   <Overview>Self-hosted household inventory management with barcode/QR scanning, direct LAN Zebra ZPL label printing (IPP &amp; Raw TCP 9100), OpenFoodFacts UPC lookup, optional LLM classification, and OIDC authentication.</Overview>
   <Category>HomeAutomation: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
-  <Icon>https://raw.githubusercontent.com/hagerman/itemized/main/web/public/icon-512.png</Icon>
+  <Icon>https://raw.githubusercontent.com/itemizedapp/itemized/main/web/public/icon-512.png</Icon>
   <Config Name="Web UI Port" Target="8080" Default="8080" Mode="tcp" Description="HTTP port for Itemized Web UI and API" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Data Directory" Target="/data" Default="/mnt/user/appdata/itemized" Mode="rw" Description="Persistent storage for SQLite database (itemized.db)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/itemized</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID for running Itemized and owning /data files (99 = nobody on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
