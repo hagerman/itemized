@@ -57,7 +57,7 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes, bulk deletion, and bulk product merging (when at least two products are selected), and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back without exposing product merge controls.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes, bulk deletion, bulk product merging (when at least two products are selected), and bulk LLM name reclassification (when at least one product is selected and an LLM provider is configured), and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back without exposing product merge or reclassification controls.
 
 #### Scenario: Desktop viewports display inventory list pages as a compact table
 - **WHEN** a user views an inventory list page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a desktop viewport (`>= 768px`)
@@ -80,9 +80,19 @@ The Products view SHALL display matching products with stock counts, next-due it
 - **WHEN** a user on a desktop viewport selects two or more products, clicks `Merge` in the floating bulk actions bar, selects which product to keep as the destination in the Merge Products modal, and confirms the merge
 - **THEN** the application sends `POST /api/products/merge` with the selected `target_product_id` and remaining `source_product_ids`, closes the modal, clears the selection, and refreshes the product list and sidebar counts (while canceling or dismissing the modal leaves products unchanged, and API errors are displayed inside the modal without losing the user's selection)
 
+#### Scenario: Reclassify bulk action appears on desktop when LLM is configured
+- **WHEN** a user on a desktop viewport selects one or more products in the inventory list table while an LLM provider is configured
+- **THEN** a `Reclassify` action appears in the floating bulk actions bar alongside `Delete` (and `Merge` when 2+ products are selected)
+- **AND** when no LLM provider is configured, the `Reclassify` action is hidden
+
+#### Scenario: Reviewing, tweaking, excluding, and applying bulk reclassification with live merge preview
+- **WHEN** a user clicks `Reclassify` on selected products
+- **THEN** the Reclassify Products modal opens, fetches suggested standardized names from `POST /api/products/reclassify/suggest` (showing progress), and displays an editable table with per-row include/exclude checkboxes (defaulting unchanged names to unchecked), editable target-name inputs, and live action badges showing whether each included row will be renamed, merged into an unselected existing product, or merged with another included row sharing the same target name
+- **AND** confirming sends only the included rows to `POST /api/products/reclassify/apply`, closes the modal, clears the selection, and refreshes the product list and sidebar counts
+
 #### Scenario: Search views do not expose product merge controls
 - **WHEN** a user uses desktop Quick Search or the mobile `/search` page
-- **THEN** no selection checkboxes or product merge actions are displayed
+- **THEN** no selection checkboxes, product merge actions, or bulk reclassification actions are displayed
 
 #### Scenario: Sorting inventory list via desktop table column headers
 - **WHEN** a user views an inventory list page on a desktop viewport and clicks the `Product`, `Stock`, or `Next Due` column header button
@@ -236,10 +246,10 @@ The web application SHALL provide dedicated views for first-run Admin setup, Log
 - **THEN** the login view does not render the local email/password form, automatically redirects the browser to `/api/auth/oidc/login`, and displays a redirecting message with a manual "Sign in with OIDC" fallback link
 
 ### Requirement: Modal dialog backdrop dismissal
-Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, Keyboard Shortcuts help dialog, and Merge Products dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
+Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, Keyboard Shortcuts help dialog, Merge Products dialog, and Reclassify Products dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
 
 #### Scenario: Clicking outside a modal dialog closes it
-- **WHEN** a modal dialog (Scanner, Barcode Scan, Quick Search, Keyboard Shortcuts, or Merge Products) is open and the user clicks or taps the darkened backdrop outside the dialog panel
+- **WHEN** a modal dialog (Scanner, Barcode Scan, Quick Search, Keyboard Shortcuts, Merge Products, or Reclassify Products) is open and the user clicks or taps the darkened backdrop outside the dialog panel
 - **THEN** the modal dialog closes (triggering the same close behavior as its close button)
 
 #### Scenario: Clicking inside a modal dialog does not close it
@@ -264,3 +274,14 @@ Form controls in multi-column responsive grids—including native `<input type="
 #### Scenario: Native form chrome respects dark theme contrast
 - **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop
 - **THEN** the root document declares `color-scheme: dark` so native select chevrons, calendar icons, and picker sheets render with dark-theme contrast
+
+### Requirement: Duplicate prevention and similar-product guidance on product form
+On `/products/new` and `/products/:id/edit`, the Product Name field SHALL display a concise naming convention hint (e.g., `Item, Variety, Detail`) and, as the user types, SHALL query and display a live debounced list of similar existing products (excluding the product currently being edited) with links to view them, clearly highlighting any exact case-insensitive duplicate name and surfacing API `409 Conflict` duplicate errors inline.
+
+#### Scenario: Typing a product name shows similar existing products on the Product form
+- **WHEN** a user opens `/products/new` and types `"Apples, Fuji"` while `"Apples, Gala"` and `"Apples, Red"` exist
+- **THEN** the form displays a `"Similar existing products"` list containing links to `"Apples, Gala"` and `"Apples, Red"`
+
+#### Scenario: Exact duplicate name conflict is surfaced inline on Product form
+- **WHEN** a user submits `/products/new` with a name that already exists case-insensitively and the API responds with HTTP 409 Conflict
+- **THEN** the form displays an inline error message naming the existing product (with a link to it) without losing the entered form state

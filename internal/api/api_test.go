@@ -2001,3 +2001,359 @@ func TestScanResolveRetailBarcodeEquivalence(t *testing.T) {
 		t.Fatalf("unrecognized barcode expected kind=unknown, got %+v", got)
 	}
 }
+
+type apiRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f apiRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func setupCatalogTestServer(t *testing.T) (*Server, http.Handler, string, int64, int64) {
+	t.Helper()
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Groceries"}, loginResp.Token)
+	var catResp struct {
+		Category Category `json:"category"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Pantry"}, loginResp.Token)
+	var locResp struct {
+		Location Location `json:"location"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+
+	return srv, h, loginResp.Token, catResp.Category.ID, locResp.Location.ID
+}
+
+func TestCatalogAwareUPCClassifyAndAuthStatusLLMEnabled(t *testing.T) {
+	srv, h, tok, catID, locID := setupCatalogTestServer(t)
+
+	// Initially llm_enabled is false in /api/auth/status
+	rec := doReq(t, h, http.MethodGet, "/api/auth/status", nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/auth/status expected 200, got %d", rec.Code)
+	}
+	var statusResp struct {
+		LLMEnabled bool `json:"llm_enabled"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &statusResp)
+	if statusResp.LLMEnabled {
+		t.Fatalf("expected llm_enabled=false by default")
+	}
+
+	// Create existing catalog products
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "Mustard, Dijon", "category_id": catID, "default_location_id": locID,
+	}, tok)
+	var mustResp struct {
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &mustResp)
+
+	// Configure LLM
+	rec = doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"llm_provider": "openai-compatible",
+		"llm_model":    "llama3.2",
+		"llm_base_url": "http://llm.test/v1",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/settings expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Now llm_enabled is true in /api/auth/status
+	rec = doReq(t, h, http.MethodGet, "/api/auth/status", nil, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &statusResp)
+	if !statusResp.LLMEnabled {
+		t.Fatalf("expected llm_enabled=true after configuring LLM")
+	}
+
+	var capturedPrompt string
+	srv.LLM.HTTPClient = &http.Client{
+		Transport: apiRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			b, _ := io.ReadAll(r.Body)
+			capturedPrompt = string(b)
+			content := fmt.Sprintf(`{"matched_product_id":%d,"product_name":"Mustard, Dijon","product_value":12,"product_unit_type":"weight","product_unit":"oz","category_id":%d}`, mustResp.Product.ID, catID)
+			body := fmt.Sprintf(`{"choices":[{"message":{"content":%q}}]}`, content)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/upc/classify", map[string]any{
+		"title":       "Burman's Organic Dijon Mustard",
+		"description": "Tangy stone-ground dijon mustard",
+		"quantity":    "12 oz",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/upc/classify expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(capturedPrompt, "Mustard, Dijon") || !strings.Contains(capturedPrompt, "Tangy stone-ground dijon mustard") {
+		t.Fatalf("expected LLM prompt to contain candidate product and description, got: %s", capturedPrompt)
+	}
+
+	var clsResp struct {
+		Enabled        bool `json:"enabled"`
+		Classification struct {
+			ProductName      string `json:"product_name"`
+			MatchedProductID *int64 `json:"matched_product_id"`
+		} `json:"classification"`
+		MatchedProduct *Product `json:"matched_product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &clsResp)
+	if !clsResp.Enabled || clsResp.Classification.MatchedProductID == nil || *clsResp.Classification.MatchedProductID != mustResp.Product.ID {
+		t.Fatalf("expected matched_product_id=%d, got %+v", mustResp.Product.ID, clsResp)
+	}
+	if clsResp.MatchedProduct == nil || clsResp.MatchedProduct.ID != mustResp.Product.ID {
+		t.Fatalf("expected matched_product summary in response, got %+v", clsResp.MatchedProduct)
+	}
+}
+
+func TestDuplicateProductNameGuard(t *testing.T) {
+	srv, h, tok, catID, locID := setupCatalogTestServer(t)
+
+	rec := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "Mustard, Dijon", "category_id": catID, "default_location_id": locID,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create product 1 expected 201, got %d", rec.Code)
+	}
+	var p1 struct {
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &p1)
+
+	// Exact case-insensitive duplicate on POST /api/products -> 409 with existing_product
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "  mustard, dijon  ", "category_id": catID, "default_location_id": locID,
+	}, tok)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate create expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var conflictResp struct {
+		Error           string `json:"error"`
+		ExistingProduct struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		} `json:"existing_product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &conflictResp)
+	if conflictResp.ExistingProduct.ID != p1.Product.ID || conflictResp.ExistingProduct.Name != "Mustard, Dijon" {
+		t.Fatalf("unexpected conflict payload: %+v", conflictResp)
+	}
+
+	// Duplicate on POST /api/workflows/purchase (new_product) -> 409
+	rec = doReq(t, h, http.MethodPost, "/api/workflows/purchase", map[string]any{
+		"new_product": map[string]any{
+			"name": "MUSTARD, DIJON", "category_id": catID, "default_location_id": locID,
+		},
+		"quantity": 1,
+	}, tok)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate purchase new_product expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Create second distinct product, then attempt renaming it to existing name -> 409
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name": "Mustard, Yellow", "category_id": catID, "default_location_id": locID,
+	}, tok)
+	var p2 struct {
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &p2)
+
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/products/%d", p2.Product.ID), map[string]any{
+		"name": "mustard, dijon", "category_id": catID, "default_location_id": locID,
+	}, tok)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate rename expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Simulate pre-existing legacy duplicate directly in SQLite; editing non-name metadata without changing name still succeeds
+	now := db.NowUTC()
+	res, err := srv.DB.Exec(`
+		INSERT INTO products (name, category_id, default_location_id, use_average_for_due_date, label_print_mode, manually_added_to_shopping_list, created_at, updated_at)
+		VALUES ('Mustard, Dijon', ?, ?, 0, 'per_item', 0, ?, ?)
+	`, catID, locID, now, now)
+	if err != nil {
+		t.Fatalf("insert legacy dup: %v", err)
+	}
+	legacyDupID, _ := res.LastInsertId()
+
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/products/%d", legacyDupID), map[string]any{
+		"name": "Mustard, Dijon", "category_id": catID, "default_location_id": locID, "minimum_value": 2,
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metadata edit on legacy duplicate expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestBulkReclassifySuggestAndApply(t *testing.T) {
+	srv, h, tok, catID, locID := setupCatalogTestServer(t)
+
+	createProd := func(name string) Product {
+		rec := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+			"name": name, "category_id": catID, "default_location_id": locID,
+		}, tok)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %q expected 201, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Product Product `json:"product"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return out.Product
+	}
+
+	existingChicken := createProd("Chicken, Breast")
+	meatChicken := createProd("Meat, Chicken, Breast")
+	appleA := createProd("Apple, Gala")
+	appleB := createProd("Produce, Apples, Gala")
+	beans := createProd("Canned Black Beans")
+
+	// Give appleB more in-stock items than appleA so appleB must win as deterministic survivor
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{"product_id": appleA.ID, "quantity": 1}, tok)
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{"product_id": appleB.ID, "quantity": 3}, tok)
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{"product_id": meatChicken.ID, "quantity": 2}, tok)
+
+	// Suggest fails with 400 when LLM is disabled
+	rec := doReq(t, h, http.MethodPost, "/api/products/reclassify/suggest", map[string]any{
+		"product_ids": []int64{meatChicken.ID, appleA.ID},
+	}, tok)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("suggest without LLM expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Configure LLM and test suggest
+	doReq(t, h, http.MethodPatch, "/api/settings", map[string]any{
+		"llm_provider": "openai-compatible",
+		"llm_model":    "llama3.2",
+		"llm_base_url": "http://llm.test/v1",
+	}, tok)
+
+	srv.LLM.HTTPClient = &http.Client{
+		Transport: apiRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			content := fmt.Sprintf(`{"items":[{"product_id":%d,"suggested_name":"Chicken, Breast"},{"product_id":%d,"suggested_name":"Apples, Gala"}]}`, meatChicken.ID, appleA.ID)
+			body := fmt.Sprintf(`{"choices":[{"message":{"content":%q}}]}`, content)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/products/reclassify/suggest", map[string]any{
+		"product_ids": []int64{meatChicken.ID, appleA.ID},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("suggest with LLM expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var suggestResp struct {
+		Suggestions []struct {
+			ProductID     int64  `json:"product_id"`
+			CurrentName   string `json:"current_name"`
+			SuggestedName string `json:"suggested_name"`
+		} `json:"suggestions"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &suggestResp)
+	if len(suggestResp.Suggestions) != 2 || suggestResp.Suggestions[0].SuggestedName != "Chicken, Breast" || suggestResp.Suggestions[1].SuggestedName != "Apples, Gala" {
+		t.Fatalf("unexpected suggest response: %+v", suggestResp)
+	}
+
+	// Invalid apply rolls back atomically
+	rec = doReq(t, h, http.MethodPost, "/api/products/reclassify/apply", map[string]any{
+		"items": []map[string]any{
+			{"product_id": beans.ID, "new_name": "Beans, Black"},
+			{"product_id": 999999, "new_name": "Ghost"},
+		},
+	}, tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("apply with missing product expected 404, got %d", rec.Code)
+	}
+	// Verify beans was NOT renamed (atomic rollback)
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d", beans.ID), nil, tok)
+	var beansCheck struct {
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &beansCheck)
+	if beansCheck.Product.Name != "Canned Black Beans" {
+		t.Fatalf("expected rollback to preserve %q, got %q", "Canned Black Beans", beansCheck.Product.Name)
+	}
+
+	// Apply rename + batch collision merge + merge into unselected existing product
+	rec = doReq(t, h, http.MethodPost, "/api/products/reclassify/apply", map[string]any{
+		"items": []map[string]any{
+			{"product_id": meatChicken.ID, "new_name": "Chicken, Breast"}, // merges into unselected existingChicken
+			{"product_id": appleA.ID, "new_name": "Apples, Gala"},         // merges into appleB (3 items > 1 item)
+			{"product_id": appleB.ID, "new_name": "Apples, Gala"},         // survives & renamed
+			{"product_id": beans.ID, "new_name": "Beans, Black"},          // renamed
+		},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var applyResp struct {
+		Renamed int `json:"renamed"`
+		Merged  int `json:"merged"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &applyResp)
+	if applyResp.Renamed != 2 || applyResp.Merged != 2 {
+		t.Fatalf("expected renamed=2 merged=2, got %+v", applyResp)
+	}
+
+	// Verify unselected existingChicken received meatChicken's 2 items & merge alias works
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d", existingChicken.ID), nil, tok)
+	var chickDetail struct {
+		Product Product `json:"product"`
+		Items   []Item  `json:"items"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &chickDetail)
+	if len(chickDetail.Items) != 2 {
+		t.Fatalf("expected existingChicken to have 2 merged items, got %d", len(chickDetail.Items))
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{
+		"input": fmt.Sprintf("https://itemized.local/go/p/%d", meatChicken.ID),
+	}, tok)
+	var resolveAlias struct {
+		Kind    string  `json:"kind"`
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &resolveAlias)
+	if resolveAlias.Kind != "product" || resolveAlias.Product.ID != existingChicken.ID {
+		t.Fatalf("expected merged alias for meatChicken to resolve to existingChicken, got %+v", resolveAlias)
+	}
+
+	// Verify appleB survived, was renamed to "Apples, Gala", and now has 4 items (3 + 1 from appleA)
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d", appleB.ID), nil, tok)
+	var appleDetail struct {
+		Product Product `json:"product"`
+		Items   []Item  `json:"items"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &appleDetail)
+	if appleDetail.Product.Name != "Apples, Gala" || len(appleDetail.Items) != 4 {
+		t.Fatalf("expected appleB to survive as 'Apples, Gala' with 4 items, got name=%q items=%d", appleDetail.Product.Name, len(appleDetail.Items))
+	}
+}

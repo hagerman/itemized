@@ -1,9 +1,30 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
-import { apiFetch, Product } from "../api";
+import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, Loader2, Plus, Search, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
+import { apiFetch, AuthStatus, Product } from "../api";
 import { ModalBackdrop } from "../components/ModalBackdrop";
+
+interface ReclassifyRow {
+  productId: number;
+  currentName: string;
+  suggestedName: string;
+  newName: string;
+  included: boolean;
+  inStockCount: number;
+  error?: string;
+}
+
+type ReclassifyPreviewAction =
+  | { kind: "excluded" }
+  | { kind: "invalid" }
+  | { kind: "no_change" }
+  | { kind: "rename" }
+  | { kind: "merge_existing"; targetId: number; targetName: string }
+  | { kind: "merge_survivor"; mergeCount: number; renamed: boolean }
+  | { kind: "merge_batch"; targetId: number; targetName: string };
+
+const RECLASSIFY_CHUNK_SIZE = 10;
 
 const SORT_OPTIONS = [
   { value: "name", label: "Name", selectLabel: "Sort: Name" },
@@ -28,6 +49,14 @@ export const ProductsPage: React.FC = () => {
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [reclassifyModalOpen, setReclassifyModalOpen] = useState(false);
+  const [reclassifyLoading, setReclassifyLoading] = useState(false);
+  const [reclassifyProgress, setReclassifyProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const [reclassifyRows, setReclassifyRows] = useState<ReclassifyRow[]>([]);
+  const [reclassifyCatalog, setReclassifyCatalog] = useState<Product[]>([]);
+  const [reclassifyApplying, setReclassifyApplying] = useState(false);
+  const [reclassifyError, setReclassifyError] = useState<string | null>(null);
+  const reclassifySeqRef = useRef(0);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +95,11 @@ export const ProductsPage: React.FC = () => {
     setMergeModalOpen(false);
     setMergeTargetId(null);
     setMergeError(null);
+    reclassifySeqRef.current += 1;
+    setReclassifyModalOpen(false);
+    setReclassifyLoading(false);
+    setReclassifyRows([]);
+    setReclassifyError(null);
   }, [queryStr]);
 
   useEffect(() => {
@@ -80,6 +114,27 @@ export const ProductsPage: React.FC = () => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [mergeModalOpen, merging]);
+
+  useEffect(() => {
+    if (!reclassifyModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !reclassifyApplying) {
+        e.stopPropagation();
+        reclassifySeqRef.current += 1;
+        setReclassifyModalOpen(false);
+        setReclassifyLoading(false);
+        setReclassifyError(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [reclassifyModalOpen, reclassifyApplying]);
+
+  const { data: authStatus } = useQuery({
+    queryKey: ["auth-status"],
+    queryFn: () => apiFetch<AuthStatus>("/api/auth/status"),
+  });
+  const llmEnabled = Boolean(authStatus?.llm_enabled);
 
   const { data, isLoading } = useQuery({
     queryKey: ["products", queryStr],
@@ -185,6 +240,192 @@ export const ProductsPage: React.FC = () => {
       setMergeError(err instanceof Error ? err.message : "Failed to merge products.");
     } finally {
       setMerging(false);
+    }
+  };
+
+  const closeReclassifyModal = () => {
+    if (reclassifyApplying) return;
+    reclassifySeqRef.current += 1;
+    setReclassifyModalOpen(false);
+    setReclassifyLoading(false);
+    setReclassifyError(null);
+  };
+
+  const openReclassifyModal = async () => {
+    if (activeSelectedProducts.length === 0 || !llmEnabled) return;
+    const seq = ++reclassifySeqRef.current;
+    const targetProducts = [...activeSelectedProducts];
+    const byID = new Map(targetProducts.map((p) => [p.id, p]));
+
+    setReclassifyModalOpen(true);
+    setReclassifyLoading(true);
+    setReclassifyError(null);
+    setReclassifyRows([]);
+    setReclassifyCatalog(products);
+    setReclassifyProgress({ done: 0, total: targetProducts.length });
+
+    // Load full catalog in parallel so merge previews detect unselected existing products outside current filter
+    void apiFetch<{ products: Product[] }>("/api/products?status=all")
+      .then((res) => {
+        if (reclassifySeqRef.current === seq && res.products) {
+          setReclassifyCatalog(res.products);
+        }
+      })
+      .catch(() => {
+        // Fallback to currently visible products
+      });
+
+    try {
+      const collected: ReclassifyRow[] = [];
+      for (let i = 0; i < targetProducts.length; i += RECLASSIFY_CHUNK_SIZE) {
+        if (reclassifySeqRef.current !== seq) return;
+        const chunk = targetProducts.slice(i, i + RECLASSIFY_CHUNK_SIZE);
+        const res = await apiFetch<{
+          suggestions: Array<{
+            product_id: number;
+            current_name: string;
+            suggested_name: string;
+            error?: string;
+          }>;
+        }>("/api/products/reclassify/suggest", {
+          method: "POST",
+          body: JSON.stringify({ product_ids: chunk.map((p) => p.id) }),
+        });
+        if (reclassifySeqRef.current !== seq) return;
+
+        for (const s of res.suggestions || []) {
+          const prod = byID.get(s.product_id);
+          const suggested = (s.suggested_name || s.current_name || "").trim();
+          const current = (s.current_name || prod?.name || "").trim();
+          const changed = suggested.toLowerCase() !== current.toLowerCase();
+          collected.push({
+            productId: s.product_id,
+            currentName: current,
+            suggestedName: suggested,
+            newName: suggested,
+            included: changed && !s.error,
+            inStockCount: prod?.in_stock_count ?? 0,
+            error: s.error,
+          });
+        }
+        setReclassifyRows([...collected]);
+        setReclassifyProgress({ done: Math.min(i + chunk.length, targetProducts.length), total: targetProducts.length });
+      }
+    } catch (err) {
+      if (reclassifySeqRef.current === seq) {
+        setReclassifyError(err instanceof Error ? err.message : "Failed to generate name suggestions.");
+      }
+    } finally {
+      if (reclassifySeqRef.current === seq) {
+        setReclassifyLoading(false);
+      }
+    }
+  };
+
+  const reclassifyPreview = useMemo(() => {
+    const actions = new Map<number, ReclassifyPreviewAction>();
+    const includedRows = reclassifyRows.filter((r) => r.included);
+    const includedIdSet = new Set(includedRows.map((r) => r.productId));
+    const catalog = reclassifyCatalog.length > 0 ? reclassifyCatalog : products;
+
+    const groups = new Map<string, ReclassifyRow[]>();
+    for (const row of reclassifyRows) {
+      if (!row.included) {
+        actions.set(row.productId, { kind: "excluded" });
+        continue;
+      }
+      const trimmed = row.newName.trim();
+      if (!trimmed) {
+        actions.set(row.productId, { kind: "invalid" });
+        continue;
+      }
+      const key = trimmed.toLowerCase();
+      const list = groups.get(key) || [];
+      list.push(row);
+      groups.set(key, list);
+    }
+
+    let renameCount = 0;
+    let mergeCount = 0;
+    let invalidCount = 0;
+
+    for (const [normKey, group] of groups.entries()) {
+      const unselectedMatch = catalog.find(
+        (p) => !includedIdSet.has(p.id) && p.name.trim().toLowerCase() === normKey
+      );
+      if (unselectedMatch) {
+        for (const row of group) {
+          actions.set(row.productId, {
+            kind: "merge_existing",
+            targetId: unselectedMatch.id,
+            targetName: unselectedMatch.name,
+          });
+          mergeCount++;
+        }
+        continue;
+      }
+
+      if (group.length > 1) {
+        const sorted = [...group].sort((a, b) => {
+          if (a.inStockCount !== b.inStockCount) return b.inStockCount - a.inStockCount;
+          return a.productId - b.productId;
+        });
+        const survivor = sorted[0];
+        const survivorRenamed = survivor.newName.trim() !== survivor.currentName.trim();
+        if (survivorRenamed) renameCount++;
+        actions.set(survivor.productId, {
+          kind: "merge_survivor",
+          mergeCount: sorted.length - 1,
+          renamed: survivorRenamed,
+        });
+        for (const other of sorted.slice(1)) {
+          actions.set(other.productId, {
+            kind: "merge_batch",
+            targetId: survivor.productId,
+            targetName: survivor.newName.trim(),
+          });
+          mergeCount++;
+        }
+        continue;
+      }
+
+      const single = group[0];
+      if (single.newName.trim() !== single.currentName.trim()) {
+        actions.set(single.productId, { kind: "rename" });
+        renameCount++;
+      } else {
+        actions.set(single.productId, { kind: "no_change" });
+      }
+    }
+
+    for (const act of actions.values()) {
+      if (act.kind === "invalid") invalidCount++;
+    }
+
+    return { actions, renameCount, mergeCount, invalidCount, includedCount: includedRows.length };
+  }, [reclassifyRows, reclassifyCatalog, products]);
+
+  const handleConfirmReclassify = async () => {
+    const toApply = reclassifyRows
+      .filter((r) => r.included)
+      .map((r) => ({ product_id: r.productId, new_name: r.newName.trim() }))
+      .filter((r) => r.new_name !== "");
+    if (toApply.length === 0) return;
+    setReclassifyApplying(true);
+    setReclassifyError(null);
+    try {
+      await apiFetch("/api/products/reclassify/apply", {
+        method: "POST",
+        body: JSON.stringify({ items: toApply }),
+      });
+      setReclassifyModalOpen(false);
+      setReclassifyRows([]);
+      setSelectedIds([]);
+      void qc.invalidateQueries({ queryKey: ["products"] });
+    } catch (err) {
+      setReclassifyError(err instanceof Error ? err.message : "Failed to apply reclassification.");
+    } finally {
+      setReclassifyApplying(false);
     }
   };
 
@@ -510,10 +751,21 @@ export const ProductsPage: React.FC = () => {
               className="sticky bottom-4 z-20 mx-auto hidden w-fit items-center gap-3 rounded-xl border border-indigo-500/40 bg-slate-900/95 px-4 py-2.5 text-xs shadow-2xl backdrop-blur md:flex"
             >
               <span className="font-semibold text-indigo-200">{activeSelectedIds.length} selected:</span>
+              {llmEnabled && (
+                <button
+                  type="button"
+                  disabled={bulkDeleting || merging || reclassifyApplying}
+                  onClick={() => void openReclassifyModal()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-amber-600 px-2.5 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Reclassify
+                </button>
+              )}
               {activeSelectedIds.length >= 2 && (
                 <button
                   type="button"
-                  disabled={bulkDeleting || merging}
+                  disabled={bulkDeleting || merging || reclassifyApplying}
                   onClick={openMergeModal}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
                 >
@@ -523,7 +775,7 @@ export const ProductsPage: React.FC = () => {
               )}
               <button
                 type="button"
-                disabled={bulkDeleting || merging}
+                disabled={bulkDeleting || merging || reclassifyApplying}
                 onClick={() => void handleBulkDelete()}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 font-medium text-white hover:bg-rose-500 disabled:opacity-50"
               >
@@ -626,6 +878,188 @@ export const ProductsPage: React.FC = () => {
                     <GitMerge className="h-4 w-4" />
                     {merging ? "Merging..." : "Confirm Merge"}
                   </button>
+                </div>
+              </div>
+            </ModalBackdrop>
+          )}
+
+          {reclassifyModalOpen && (
+            <ModalBackdrop
+              onClose={closeReclassifyModal}
+              ariaLabel="Reclassify Products"
+              className="flex items-center justify-center p-4"
+            >
+              <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-amber-400" />
+                    <h2 className="text-base font-semibold text-white">Reclassify Products</h2>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close reclassify dialog"
+                    disabled={reclassifyApplying}
+                    onClick={closeReclassifyModal}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                  <p className="text-sm text-slate-300">
+                    Review standardized names below. Tweak any name or uncheck rows to exclude them. Products resolving to the same name (or matching an existing product) will be merged automatically.
+                  </p>
+
+                  {reclassifyLoading && (
+                    <div
+                      role="status"
+                      className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-200"
+                    >
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                      <span>
+                        Classifying {reclassifyProgress.done} / {reclassifyProgress.total} products...
+                      </span>
+                    </div>
+                  )}
+
+                  {reclassifyError && (
+                    <div
+                      role="alert"
+                      className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-200"
+                    >
+                      {reclassifyError}
+                    </div>
+                  )}
+
+                  {reclassifyRows.length > 0 && (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-slate-800 bg-slate-950/60 text-xs font-semibold uppercase text-slate-400">
+                          <tr>
+                            <th className="w-10 py-2.5 pl-3 pr-2">Use</th>
+                            <th className="py-2.5 pr-3">Current Name</th>
+                            <th className="py-2.5 pr-3">New Name</th>
+                            <th className="py-2.5 pr-3">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/70">
+                          {reclassifyRows.map((row) => {
+                            const action = reclassifyPreview.actions.get(row.productId) || { kind: "excluded" };
+                            return (
+                              <tr key={row.productId} className={row.included ? "" : "opacity-60"}>
+                                <td className="py-2.5 pl-3 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={row.included}
+                                    disabled={reclassifyApplying}
+                                    aria-label={`Include ${row.currentName}`}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setReclassifyRows((prev) =>
+                                        prev.map((r) =>
+                                          r.productId === row.productId ? { ...r, included: checked } : r
+                                        )
+                                      );
+                                    }}
+                                    className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-3 text-slate-300">
+                                  <div>{row.currentName}</div>
+                                  {row.error && (
+                                    <div className="text-xs text-amber-300">{row.error}</div>
+                                  )}
+                                </td>
+                                <td className="py-2.5 pr-3">
+                                  <input
+                                    type="text"
+                                    value={row.newName}
+                                    disabled={reclassifyApplying}
+                                    aria-label={`New name for ${row.currentName}`}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setReclassifyRows((prev) =>
+                                        prev.map((r) =>
+                                          r.productId === row.productId
+                                            ? { ...r, newName: val, included: true }
+                                            : r
+                                        )
+                                      );
+                                    }}
+                                    className="w-full min-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                                  />
+                                </td>
+                                <td className="whitespace-nowrap py-2.5 pr-3 text-xs">
+                                  {action.kind === "rename" && (
+                                    <span className="inline-flex rounded-md bg-indigo-500/15 px-2 py-0.5 font-medium text-indigo-300">
+                                      Rename
+                                    </span>
+                                  )}
+                                  {action.kind === "merge_existing" && (
+                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                      Merge into existing: {action.targetName}
+                                    </span>
+                                  )}
+                                  {action.kind === "merge_survivor" && (
+                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                      {action.renamed ? "Rename" : "Keep"} &amp; merge (+{action.mergeCount})
+                                    </span>
+                                  )}
+                                  {action.kind === "merge_batch" && (
+                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                      Merge into {action.targetName}
+                                    </span>
+                                  )}
+                                  {action.kind === "no_change" && (
+                                    <span className="text-slate-400">No change</span>
+                                  )}
+                                  {action.kind === "excluded" && (
+                                    <span className="text-slate-500">Excluded</span>
+                                  )}
+                                  {action.kind === "invalid" && (
+                                    <span className="text-rose-300">Name required</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-5 py-3.5">
+                  <div className="text-xs text-slate-400">
+                    {reclassifyPreview.renameCount} rename{reclassifyPreview.renameCount === 1 ? "" : "s"},{" "}
+                    {reclassifyPreview.mergeCount} merge{reclassifyPreview.mergeCount === 1 ? "" : "s"}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={reclassifyApplying}
+                      onClick={closeReclassifyModal}
+                      className="rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        reclassifyLoading ||
+                        reclassifyApplying ||
+                        reclassifyPreview.includedCount === 0 ||
+                        reclassifyPreview.invalidCount > 0 ||
+                        (reclassifyPreview.renameCount === 0 && reclassifyPreview.mergeCount === 0)
+                      }
+                      onClick={() => void handleConfirmReclassify()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {reclassifyApplying ? "Applying..." : "Apply Changes"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </ModalBackdrop>

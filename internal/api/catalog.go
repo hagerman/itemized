@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"itemized/internal/db"
 	"itemized/internal/domain"
+	"itemized/internal/llm"
 	"itemized/internal/printer"
 )
 
@@ -1040,6 +1042,28 @@ func (s *Server) handleGetProduct(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) findProductByNormalizedName(ctx context.Context, exec sqlExecer, name string, excludeID int64) (int64, string, bool, error) {
+	norm := strings.ToLower(strings.TrimSpace(name))
+	if norm == "" {
+		return 0, "", false, nil
+	}
+	var id int64
+	var existingName string
+	err := exec.QueryRowContext(ctx, `
+		SELECT id, name FROM products
+		WHERE LOWER(TRIM(name)) = ? AND id != ?
+		ORDER BY id ASC
+		LIMIT 1
+	`, norm, excludeID).Scan(&id, &existingName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", false, nil
+	}
+	if err != nil {
+		return 0, "", false, err
+	}
+	return id, existingName, true, nil
+}
+
 func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 	var req productInput
 	if !decodeJSON(w, r, &req) {
@@ -1047,6 +1071,19 @@ func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := req.validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if existingID, existingName, found, err := s.findProductByNormalizedName(r.Context(), s.DB, req.Name, 0); err != nil {
+		writeInternalError(w, "create product duplicate check", err)
+		return
+	} else if found {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": fmt.Sprintf("A product named %q already exists.", existingName),
+			"existing_product": map[string]any{
+				"id":   existingID,
+				"name": existingName,
+			},
+		})
 		return
 	}
 	id, err := s.insertProduct(r.Context(), s.DB, req)
@@ -1119,6 +1156,89 @@ func (s *Server) resolveProductIDByToken(ctx context.Context, token string) (int
 	return id, nil
 }
 
+var (
+	errMergeTargetNotFound = errors.New("target product not found")
+	errMergeSourceNotFound = errors.New("one or more source products not found")
+)
+
+func (s *Server) mergeProductsTx(ctx context.Context, tx *sql.Tx, targetProductID int64, sourceIDs []int64, now string) (int, error) {
+	if len(sourceIDs) == 0 {
+		return 0, nil
+	}
+	var targetCheck int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM products WHERE id = ?`, targetProductID).Scan(&targetCheck); errors.Is(err, sql.ErrNoRows) {
+		return 0, errMergeTargetNotFound
+	} else if err != nil {
+		return 0, fmt.Errorf("check target: %w", err)
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(sourceIDs)), ",")
+	sourceArgs := make([]any, len(sourceIDs))
+	for i, id := range sourceIDs {
+		sourceArgs[i] = id
+	}
+
+	type sourceRecord struct {
+		id         int64
+		legacyUUID *string
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id, legacy_uuid FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...)
+	if err != nil {
+		return 0, fmt.Errorf("load sources: %w", err)
+	}
+	var sources []sourceRecord
+	for rows.Next() {
+		var sr sourceRecord
+		var lu sql.NullString
+		if err := rows.Scan(&sr.id, &lu); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan source: %w", err)
+		}
+		if lu.Valid && strings.TrimSpace(lu.String) != "" {
+			v := strings.ToLower(strings.TrimSpace(lu.String))
+			sr.legacyUUID = &v
+		}
+		sources = append(sources, sr)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("iterate sources: %w", err)
+	}
+	rows.Close()
+
+	if len(sources) != len(sourceIDs) {
+		return 0, errMergeSourceNotFound
+	}
+
+	updateArgs := append([]any{targetProductID, now}, sourceArgs...)
+	if _, err := tx.ExecContext(ctx, `UPDATE variants SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
+		return 0, fmt.Errorf("move variants: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE items SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
+		return 0, fmt.Errorf("move items: %w", err)
+	}
+
+	repointArgs := append([]any{targetProductID}, sourceArgs...)
+	if _, err := tx.ExecContext(ctx, `UPDATE product_merges SET target_product_id = ? WHERE target_product_id IN (`+placeholders+`)`, repointArgs...); err != nil {
+		return 0, fmt.Errorf("repoint aliases: %w", err)
+	}
+
+	for _, sr := range sources {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO product_merges (source_product_id, source_legacy_uuid, target_product_id, merged_at)
+			VALUES (?, ?, ?, ?)
+		`, sr.id, sr.legacyUUID, targetProductID, now); err != nil {
+			return 0, fmt.Errorf("insert alias: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...); err != nil {
+		return 0, fmt.Errorf("delete sources: %w", err)
+	}
+
+	return len(sources), nil
+}
+
 func (s *Server) handleMergeProducts(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TargetProductID  int64   `json:"target_product_id"`
@@ -1161,87 +1281,17 @@ func (s *Server) handleMergeProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	var targetCheck int64
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM products WHERE id = ?`, req.TargetProductID).Scan(&targetCheck); errors.Is(err, sql.ErrNoRows) {
+	mergedCount, err := s.mergeProductsTx(ctx, tx, req.TargetProductID, sourceIDs, db.NowUTC())
+	if errors.Is(err, errMergeTargetNotFound) {
 		writeError(w, http.StatusNotFound, "target product not found")
 		return
-	} else if err != nil {
-		writeInternalError(w, "merge products check target", err)
-		return
 	}
-
-	placeholders := strings.TrimRight(strings.Repeat("?,", len(sourceIDs)), ",")
-	sourceArgs := make([]any, len(sourceIDs))
-	for i, id := range sourceIDs {
-		sourceArgs[i] = id
-	}
-
-	type sourceRecord struct {
-		id         int64
-		legacyUUID *string
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT id, legacy_uuid FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...)
-	if err != nil {
-		writeInternalError(w, "merge products load sources", err)
-		return
-	}
-	var sources []sourceRecord
-	for rows.Next() {
-		var sr sourceRecord
-		var lu sql.NullString
-		if err := rows.Scan(&sr.id, &lu); err != nil {
-			rows.Close()
-			writeInternalError(w, "merge products scan source", err)
-			return
-		}
-		if lu.Valid && strings.TrimSpace(lu.String) != "" {
-			v := strings.ToLower(strings.TrimSpace(lu.String))
-			sr.legacyUUID = &v
-		}
-		sources = append(sources, sr)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		writeInternalError(w, "merge products iterate sources", err)
-		return
-	}
-	rows.Close()
-
-	if len(sources) != len(sourceIDs) {
+	if errors.Is(err, errMergeSourceNotFound) {
 		writeError(w, http.StatusNotFound, "one or more source products not found")
 		return
 	}
-
-	now := db.NowUTC()
-	updateArgs := append([]any{req.TargetProductID, now}, sourceArgs...)
-
-	if _, err := tx.ExecContext(ctx, `UPDATE variants SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
-		writeInternalError(w, "merge products move variants", err)
-		return
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE items SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
-		writeInternalError(w, "merge products move items", err)
-		return
-	}
-
-	repointArgs := append([]any{req.TargetProductID}, sourceArgs...)
-	if _, err := tx.ExecContext(ctx, `UPDATE product_merges SET target_product_id = ? WHERE target_product_id IN (`+placeholders+`)`, repointArgs...); err != nil {
-		writeInternalError(w, "merge products repoint aliases", err)
-		return
-	}
-
-	for _, sr := range sources {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO product_merges (source_product_id, source_legacy_uuid, target_product_id, merged_at)
-			VALUES (?, ?, ?, ?)
-		`, sr.id, sr.legacyUUID, req.TargetProductID, now); err != nil {
-			writeInternalError(w, "merge products insert alias", err)
-			return
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...); err != nil {
-		writeInternalError(w, "merge products delete sources", err)
+	if err != nil {
+		writeInternalError(w, "merge products tx", err)
 		return
 	}
 
@@ -1257,7 +1307,491 @@ func (s *Server) handleMergeProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"product":      p,
-		"merged_count": len(sources),
+		"merged_count": mergedCount,
+	})
+}
+
+var broadTaxonomyPrefixes = map[string]bool{
+	"meat":           true,
+	"produce":        true,
+	"bakery":         true,
+	"baked goods":    true,
+	"beverage":       true,
+	"beverages":      true,
+	"snack":          true,
+	"snacks":         true,
+	"prepared foods": true,
+	"prepared meals": true,
+	"groceries":      true,
+	"household":      true,
+	"miscellaneous":  true,
+	"frozen foods":   true,
+	"canned goods":   true,
+	"dairy":          true,
+	"condiments":     true,
+}
+
+func (s *Server) loadCatalogNamingContext(ctx context.Context, queries []string, excludeIDs map[int64]bool) ([]llm.ProductCandidate, []string, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name FROM products ORDER BY id ASC`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var all []llm.ProductCandidate
+	prefixCounts := make(map[string]int)
+	prefixDisplay := make(map[string]string)
+
+	for rows.Next() {
+		var p llm.ProductCandidate
+		if err := rows.Scan(&p.ID, &p.Name); err != nil {
+			return nil, nil, err
+		}
+		all = append(all, p)
+		if idx := strings.Index(p.Name, ","); idx > 0 {
+			rawPrefix := strings.TrimSpace(p.Name[:idx])
+			lowerPrefix := strings.ToLower(rawPrefix)
+			if rawPrefix != "" && !broadTaxonomyPrefixes[lowerPrefix] {
+				prefixCounts[lowerPrefix]++
+				if _, exists := prefixDisplay[lowerPrefix]; !exists {
+					prefixDisplay[lowerPrefix] = rawPrefix
+				}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	type prefixEntry struct {
+		display string
+		count   int
+	}
+	var pEntries []prefixEntry
+	for k, cnt := range prefixCounts {
+		pEntries = append(pEntries, prefixEntry{display: prefixDisplay[k], count: cnt})
+	}
+	sort.Slice(pEntries, func(i, j int) bool {
+		if pEntries[i].count != pEntries[j].count {
+			return pEntries[i].count > pEntries[j].count
+		}
+		return pEntries[i].display < pEntries[j].display
+	})
+	maxPrefixes := 30
+	if len(pEntries) < maxPrefixes {
+		maxPrefixes = len(pEntries)
+	}
+	prefixes := make([]string, 0, maxPrefixes)
+	for i := 0; i < maxPrefixes; i++ {
+		prefixes = append(prefixes, pEntries[i].display)
+	}
+
+	// Prepare normalized query sets
+	type parsedQuery struct {
+		clean    string
+		keywords []string
+		wordSet  map[string]bool
+	}
+	var pQueries []parsedQuery
+	for _, q := range queries {
+		clean := domain.NormalizeSearchQuery(q)
+		kws := domain.SearchKeywords(clean)
+		if len(kws) == 0 {
+			continue
+		}
+		ws := make(map[string]bool, len(kws))
+		for _, w := range kws {
+			ws[w] = true
+		}
+		pQueries = append(pQueries, parsedQuery{clean: clean, keywords: kws, wordSet: ws})
+	}
+
+	if len(pQueries) == 0 {
+		return nil, prefixes, nil
+	}
+
+	type scoredCandidate struct {
+		cand  llm.ProductCandidate
+		score float64
+	}
+	var scored []scoredCandidate
+	for _, prod := range all {
+		if excludeIDs != nil && excludeIDs[prod.ID] {
+			continue
+		}
+		bestScore := 0.0
+		prodClean := domain.NormalizeSearchQuery(prod.Name)
+		prodWords := domain.SearchKeywords(prodClean)
+		for _, pq := range pQueries {
+			if m := domain.MatchProductSearch(prod.Name, pq.clean, pq.keywords); m.Matched {
+				s := float64(m.Tier)*10.0 + m.Similarity
+				if s > bestScore {
+					bestScore = s
+				}
+			}
+			// Token containment: handles brand-heavy UPC titles like "Burman's Dijon Mustard"
+			// matching generic "Mustard, Dijon" where all product words appear in the title.
+			if len(prodWords) > 0 {
+				hits := 0
+				for _, pw := range prodWords {
+					if len([]rune(pw)) < 3 {
+						continue
+					}
+					if pq.wordSet[pw] {
+						hits++
+						continue
+					}
+					// Also match simple plural/singular suffix or substring
+					for qw := range pq.wordSet {
+						if len([]rune(qw)) >= 3 && (strings.HasPrefix(qw, pw) || strings.HasPrefix(pw, qw)) {
+							hits++
+							break
+						}
+					}
+				}
+				if hits > 0 {
+					coverage := float64(hits) / float64(len(prodWords))
+					tokenScore := coverage*25.0 + float64(hits)*2.0
+					if tokenScore > bestScore {
+						bestScore = tokenScore
+					}
+				}
+			}
+		}
+		if bestScore > 0 {
+			scored = append(scored, scoredCandidate{cand: prod, score: bestScore})
+		}
+	}
+
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].cand.Name < scored[j].cand.Name
+	})
+	maxCandidates := 20
+	if len(scored) < maxCandidates {
+		maxCandidates = len(scored)
+	}
+	candidates := make([]llm.ProductCandidate, 0, maxCandidates)
+	for i := 0; i < maxCandidates; i++ {
+		candidates = append(candidates, scored[i].cand)
+	}
+	return candidates, prefixes, nil
+}
+
+func (s *Server) handleReclassifySuggest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProductIDs []int64 `json:"product_ids"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	cfg := s.llmConfig(r.Context())
+	if !cfg.Enabled() {
+		writeError(w, http.StatusBadRequest, "llm classification is not configured")
+		return
+	}
+
+	seen := make(map[int64]bool, len(req.ProductIDs))
+	ids := make([]int64, 0, len(req.ProductIDs))
+	for _, id := range req.ProductIDs {
+		if id <= 0 {
+			writeError(w, http.StatusUnprocessableEntity, "product_ids must contain positive integers")
+			return
+		}
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		writeError(w, http.StatusUnprocessableEntity, "at least one product_id is required")
+		return
+	}
+	if len(ids) > 100 {
+		writeError(w, http.StatusUnprocessableEntity, "at most 100 products may be reclassified per request")
+		return
+	}
+
+	ctx := r.Context()
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, name FROM products WHERE id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		writeInternalError(w, "reclassify suggest load products", err)
+		return
+	}
+	nameByID := make(map[int64]string, len(ids))
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			writeInternalError(w, "reclassify suggest scan product", err)
+			return
+		}
+		nameByID[id] = name
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		writeInternalError(w, "reclassify suggest iterate products", err)
+		return
+	}
+	rows.Close()
+
+	if len(nameByID) != len(ids) {
+		writeError(w, http.StatusNotFound, "one or more products not found")
+		return
+	}
+
+	vRows, err := s.DB.QueryContext(ctx, `SELECT product_id, name FROM variants WHERE product_id IN (`+placeholders+`) ORDER BY id ASC`, args...)
+	if err != nil {
+		writeInternalError(w, "reclassify suggest load variants", err)
+		return
+	}
+	variantsByProd := make(map[int64][]string)
+	for vRows.Next() {
+		var pid int64
+		var vName string
+		if err := vRows.Scan(&pid, &vName); err != nil {
+			vRows.Close()
+			writeInternalError(w, "reclassify suggest scan variant", err)
+			return
+		}
+		vName = strings.TrimSpace(vName)
+		if vName != "" && !strings.EqualFold(vName, "default") && !strings.EqualFold(vName, "default variant") {
+			variantsByProd[pid] = append(variantsByProd[pid], vName)
+		}
+	}
+	if err := vRows.Err(); err != nil {
+		vRows.Close()
+		writeInternalError(w, "reclassify suggest iterate variants", err)
+		return
+	}
+	vRows.Close()
+
+	inputs := make([]llm.ReclassifyInput, 0, len(ids))
+	queries := make([]string, 0, len(ids)*2)
+	for _, id := range ids {
+		name := nameByID[id]
+		vNames := variantsByProd[id]
+		inputs = append(inputs, llm.ReclassifyInput{
+			ProductID:    id,
+			CurrentName:  name,
+			VariantNames: vNames,
+		})
+		queries = append(queries, name)
+		queries = append(queries, vNames...)
+	}
+
+	candidates, prefixes, err := s.loadCatalogNamingContext(ctx, queries, seen)
+	if err != nil {
+		writeInternalError(w, "reclassify suggest catalog context", err)
+		return
+	}
+
+	suggestions, err := s.LLM.ReclassifyNames(ctx, cfg, inputs, candidates, prefixes)
+	if err != nil {
+		log.Printf("reclassify suggest warning (provider=%s model=%s): %v", cfg.Provider, cfg.Model, err)
+		writeError(w, http.StatusBadGateway, "classification unavailable")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"suggestions": suggestions,
+	})
+}
+
+func (s *Server) handleReclassifyApply(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Items []struct {
+			ProductID int64  `json:"product_id"`
+			NewName   string `json:"new_name"`
+		} `json:"items"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusUnprocessableEntity, "at least one item is required")
+		return
+	}
+
+	type applyItem struct {
+		productID int64
+		newName   string
+		normName  string
+	}
+	seenIDs := make(map[int64]bool, len(req.Items))
+	items := make([]applyItem, 0, len(req.Items))
+	for _, it := range req.Items {
+		if it.ProductID <= 0 {
+			writeError(w, http.StatusUnprocessableEntity, "product_id must be a positive integer")
+			return
+		}
+		if seenIDs[it.ProductID] {
+			writeError(w, http.StatusUnprocessableEntity, "duplicate product_id in items")
+			return
+		}
+		trimmed := strings.TrimSpace(it.NewName)
+		if trimmed == "" {
+			writeError(w, http.StatusUnprocessableEntity, "new_name is required for every item")
+			return
+		}
+		seenIDs[it.ProductID] = true
+		items = append(items, applyItem{
+			productID: it.ProductID,
+			newName:   trimmed,
+			normName:  strings.ToLower(trimmed),
+		})
+	}
+
+	ctx := r.Context()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		writeInternalError(w, "reclassify apply begin tx", err)
+		return
+	}
+	defer tx.Rollback()
+
+	// Load stats for all submitted products to validate existence and pick deterministic survivors.
+	type prodStats struct {
+		id           int64
+		currentName  string
+		inStockCount int
+		variantCount int
+	}
+	statsByID := make(map[int64]prodStats, len(items))
+	for _, it := range items {
+		var st prodStats
+		err := tx.QueryRowContext(ctx, `
+			SELECT p.id, p.name,
+				(SELECT COUNT(*) FROM items i WHERE i.product_id = p.id AND i.consumed_on_date IS NULL),
+				(SELECT COUNT(*) FROM variants v WHERE v.product_id = p.id)
+			FROM products p
+			WHERE p.id = ?
+		`, it.productID).Scan(&st.id, &st.currentName, &st.inStockCount, &st.variantCount)
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "one or more products not found")
+			return
+		}
+		if err != nil {
+			writeInternalError(w, "reclassify apply load product stats", err)
+			return
+		}
+		statsByID[it.productID] = st
+	}
+
+	// Group submitted items by normalized target name (preserving stable group order).
+	var groupOrder []string
+	groups := make(map[string][]applyItem)
+	for _, it := range items {
+		if _, exists := groups[it.normName]; !exists {
+			groupOrder = append(groupOrder, it.normName)
+		}
+		groups[it.normName] = append(groups[it.normName], it)
+	}
+
+	now := db.NowUTC()
+	renamedCount := 0
+	mergedCount := 0
+
+	for _, normKey := range groupOrder {
+		group := groups[normKey]
+
+		// Check if an unselected existing product already has this normalized name.
+		var unselectedID int64
+		foundUnselected := false
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM products WHERE LOWER(TRIM(name)) = ? ORDER BY id ASC`, normKey)
+		if err != nil {
+			writeInternalError(w, "reclassify apply lookup existing", err)
+			return
+		}
+		for rows.Next() {
+			var existingID int64
+			if err := rows.Scan(&existingID); err != nil {
+				rows.Close()
+				writeInternalError(w, "reclassify apply scan existing", err)
+				return
+			}
+			if !seenIDs[existingID] {
+				unselectedID = existingID
+				foundUnselected = true
+				break
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			writeInternalError(w, "reclassify apply iterate existing", err)
+			return
+		}
+		rows.Close()
+
+		if foundUnselected {
+			sourceIDs := make([]int64, 0, len(group))
+			for _, it := range group {
+				sourceIDs = append(sourceIDs, it.productID)
+			}
+			n, err := s.mergeProductsTx(ctx, tx, unselectedID, sourceIDs, now)
+			if err != nil {
+				writeInternalError(w, "reclassify apply merge into existing", err)
+				return
+			}
+			mergedCount += n
+			continue
+		}
+
+		// Pick deterministic survivor among the submitted group:
+		// highest inStockCount, then highest variantCount, then lowest id.
+		sort.Slice(group, func(i, j int) bool {
+			si := statsByID[group[i].productID]
+			sj := statsByID[group[j].productID]
+			if si.inStockCount != sj.inStockCount {
+				return si.inStockCount > sj.inStockCount
+			}
+			if si.variantCount != sj.variantCount {
+				return si.variantCount > sj.variantCount
+			}
+			return si.id < sj.id
+		})
+
+		survivor := group[0]
+		survivorStats := statsByID[survivor.productID]
+		if survivorStats.currentName != survivor.newName {
+			if _, err := tx.ExecContext(ctx, `UPDATE products SET name = ?, updated_at = ? WHERE id = ?`, survivor.newName, now, survivor.productID); err != nil {
+				writeInternalError(w, "reclassify apply rename survivor", err)
+				return
+			}
+			renamedCount++
+		}
+
+		if len(group) > 1 {
+			sourceIDs := make([]int64, 0, len(group)-1)
+			for _, it := range group[1:] {
+				sourceIDs = append(sourceIDs, it.productID)
+			}
+			n, err := s.mergeProductsTx(ctx, tx, survivor.productID, sourceIDs, now)
+			if err != nil {
+				writeInternalError(w, "reclassify apply merge group", err)
+				return
+			}
+			mergedCount += n
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeInternalError(w, "reclassify apply commit", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"renamed": renamedCount,
+		"merged":  mergedCount,
 	})
 }
 
@@ -1274,6 +1808,29 @@ func (s *Server) handleUpdateProduct(w http.ResponseWriter, r *http.Request) {
 	if err := req.validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
+	}
+	var currentName string
+	if err := s.DB.QueryRowContext(r.Context(), `SELECT name FROM products WHERE id = ?`, id).Scan(&currentName); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "product not found")
+		return
+	} else if err != nil {
+		writeInternalError(w, "update product load current", err)
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(req.Name), strings.TrimSpace(currentName)) {
+		if existingID, existingName, found, err := s.findProductByNormalizedName(r.Context(), s.DB, req.Name, id); err != nil {
+			writeInternalError(w, "update product duplicate check", err)
+			return
+		} else if found {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error": fmt.Sprintf("A product named %q already exists.", existingName),
+				"existing_product": map[string]any{
+					"id":   existingID,
+					"name": existingName,
+				},
+			})
+			return
+		}
 	}
 	now := db.NowUTC()
 	res, err := s.DB.ExecContext(r.Context(), `

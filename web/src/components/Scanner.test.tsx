@@ -1633,4 +1633,152 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     expect(onScan).toHaveBeenCalledTimes(2);
     expect(onScan).toHaveBeenLastCalledWith("048121277080");
   });
+
+  it("auto-selects LLM-matched existing product on unknown barcode and supports Create new instead", async () => {
+    const matchedProd = {
+      id: 42,
+      name: "Mustard, Dijon",
+      category_id: 1,
+      category_name: "Condiments",
+      default_location_id: 1,
+      default_location_name: "Fridge",
+      default_due_days: 90,
+      use_average_for_due_date: false,
+      label_print_mode: "per_item",
+      in_stock_count: 1,
+    };
+
+    let classifyBody: Record<string, unknown> | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "011122233344" }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(
+            JSON.stringify({
+              found: true,
+              result: {
+                barcode: "011122233344",
+                title: "Burman's Dijon Mustard",
+                description: "Organic Dijon Mustard",
+                measurement: "12 oz",
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/upc/classify") {
+          classifyBody = JSON.parse(String(init?.body || "{}"));
+          return new Response(
+            JSON.stringify({
+              enabled: true,
+              classification: {
+                product_name: "Mustard, Dijon",
+                matched_product_id: 42,
+                product_value: 12,
+                product_unit_type: "weight",
+                product_unit: "oz",
+                category_id: 1,
+              },
+              matched_product: matchedProd,
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Condiments", parent_id: null, hierarchy_name: "Condiments" }]}
+          locations={[{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "011122233344" } });
+    fireEvent.submit(input.closest("form")!);
+
+    // Should auto-select the matched existing product and show the banner
+    await waitFor(() => expect(screen.getByTestId("llm-matched-product-banner")).toBeInTheDocument());
+    expect(screen.getByText("Confirm & Add: Mustard, Dijon")).toBeInTheDocument();
+    expect(classifyBody).toMatchObject({
+      title: "Burman's Dijon Mustard",
+      description: "Organic Dijon Mustard",
+      quantity: "12 oz",
+    });
+
+    // Clicking "Create new product instead" switches to Create New with LLM suggestion pre-filled
+    fireEvent.click(screen.getByRole("button", { name: "Create new product instead" }));
+    expect(screen.getByText("Create Product & Add Items")).toBeInTheDocument();
+    expect((screen.getByPlaceholderText("Product name") as HTMLInputElement).value).toBe("Mustard, Dijon");
+    expect((screen.getByLabelText("Variant name") as HTMLInputElement).value).toBe("Burman's Dijon Mustard");
+  });
+
+  it("shows live similar existing products when typing a new product name in Purchase mode", async () => {
+    const existingApple = {
+      id: 77,
+      name: "Apples, Gala",
+      category_id: 1,
+      category_name: "Produce",
+      default_location_id: 1,
+      default_location_name: "Fridge",
+      default_due_days: 14,
+      use_average_for_due_date: false,
+      label_print_mode: "per_item",
+      in_stock_count: 2,
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "055566677788" }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(JSON.stringify({ found: false }), { status: 200 });
+        }
+        if (url.startsWith("/api/products?status=all&q=")) {
+          return new Response(JSON.stringify({ products: [existingApple] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Produce", parent_id: null, hierarchy_name: "Produce" }]}
+          locations={[{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "055566677788" } });
+    fireEvent.submit(input.closest("form")!);
+
+    const nameInput = await screen.findByPlaceholderText("Product name");
+    fireEvent.change(nameInput, { target: { value: "Apples, Ga" } });
+
+    const similarBox = await screen.findByTestId("scanner-similar-products");
+    expect(similarBox).toHaveTextContent("Apples, Gala");
+
+    // Clicking the similar product switches directly to Confirm & Add
+    fireEvent.click(screen.getByRole("button", { name: /Apples, Gala/i }));
+    expect(screen.getByText("Confirm & Add: Apples, Gala")).toBeInTheDocument();
+  });
 });

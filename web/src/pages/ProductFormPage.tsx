@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, Category, Location, Product } from "../api";
+import { ApiError, apiFetch, Category, Location, Product } from "../api";
 import { HierarchySelect } from "../components/HierarchySelect";
 import {
   EMPTY_MEASUREMENT,
@@ -43,6 +43,36 @@ export const ProductFormPage: React.FC = () => {
   const [printMode, setPrintMode] = useState<"per_item" | "single" | "none">("per_item");
   const [measurement, setMeasurement] = useState<MeasurementDraft>(EMPTY_MEASUREMENT);
   const [error, setError] = useState<string | null>(null);
+  const [conflictProduct, setConflictProduct] = useState<{ id: number; name: string } | null>(null);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      setSimilarProducts([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch<{ products: Product[] }>(
+          `/api/products?status=all&q=${encodeURIComponent(trimmed)}`
+        );
+        if (!cancelled) {
+          const editId = id ? Number(id) : null;
+          setSimilarProducts(
+            (res.products || []).filter((p) => p.id !== editId).slice(0, 5)
+          );
+        }
+      } catch {
+        if (!cancelled) setSimilarProducts([]);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [name, id]);
 
   useEffect(() => {
     if (existing?.product) {
@@ -71,6 +101,7 @@ export const ProductFormPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setConflictProduct(null);
     const body = {
       name,
       category_id: categoryId,
@@ -92,6 +123,12 @@ export const ProductFormPage: React.FC = () => {
       void qc.invalidateQueries({ queryKey: ["products"] });
       navigate(`/products/${res.product.id}`);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.data?.existing_product) {
+        const ep = err.data.existing_product as { id?: number; name?: string };
+        if (typeof ep.id === "number" && typeof ep.name === "string") {
+          setConflictProduct({ id: ep.id, name: ep.name });
+        }
+      }
       setError(err instanceof Error ? err.message : "Save failed");
     }
   };
@@ -99,12 +136,63 @@ export const ProductFormPage: React.FC = () => {
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
       <h2 className="text-lg font-semibold text-white">{isEdit ? "Edit Product" : "New Product"}</h2>
-      {error && <div className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</div>}
+      {error && (
+        <div role="alert" className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">
+          <span>{error}</span>
+          {conflictProduct && (
+            <>
+              {" "}
+              <Link to={`/products/${conflictProduct.id}`} className="font-semibold underline hover:text-white">
+                View {conflictProduct.name}
+              </Link>
+            </>
+          )}
+        </div>
+      )}
 
-      <label className="block text-xs text-slate-400">
-        Product Name
-        <input required value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-      </label>
+      <div className="space-y-1.5">
+        <label className="block text-xs text-slate-400">
+          Product Name
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Apples, Gala or Mustard, Dijon"
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+          />
+        </label>
+        <p className="text-xs text-slate-500">
+          Use comma-inverted format: <span className="text-slate-400">Item, Variety, Detail</span> (omit brands and category prefixes like Meat or Produce).
+        </p>
+        {similarProducts.length > 0 && (
+          <div
+            data-testid="product-form-similar-products"
+            className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+          >
+            <div className="text-xs font-medium text-amber-200">Similar existing products</div>
+            <ul className="space-y-1">
+              {similarProducts.map((p) => {
+                const isExact = p.name.trim().toLowerCase() === name.trim().toLowerCase();
+                return (
+                  <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                    <Link to={`/products/${p.id}`} className="font-medium text-slate-100 hover:text-indigo-300 hover:underline">
+                      {p.name}
+                    </Link>
+                    <span className="flex items-center gap-2">
+                      {isExact && (
+                        <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-rose-200">
+                          Exact match
+                        </span>
+                      )}
+                      <span className="text-slate-400">{p.category_name}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="block text-xs text-slate-400">

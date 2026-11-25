@@ -109,6 +109,8 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("GET /api/products", s.handleListProducts)
 	authed.HandleFunc("POST /api/products", s.handleCreateProduct)
 	authed.HandleFunc("POST /api/products/merge", s.handleMergeProducts)
+	authed.HandleFunc("POST /api/products/reclassify/suggest", s.handleReclassifySuggest)
+	authed.HandleFunc("POST /api/products/reclassify/apply", s.handleReclassifyApply)
 	authed.HandleFunc("GET /api/products/{id}", s.handleGetProduct)
 	authed.HandleFunc("PATCH /api/products/{id}", s.handleUpdateProduct)
 	authed.HandleFunc("DELETE /api/products/{id}", s.handleDeleteProduct)
@@ -312,6 +314,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		"initialized":  count > 0,
 		"oidc_enabled": oidcCfg.Enabled(),
 		"oidc_force":   oidcCfg.ForceActive(),
+		"llm_enabled":  s.llmConfig(r.Context()).Enabled(),
 		"user":         currentUser,
 	})
 }

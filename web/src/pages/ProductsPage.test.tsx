@@ -428,4 +428,159 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
       expect(listCallsAfter).toBeGreaterThan(listCallsBefore);
     });
   });
+
+  it("supports bulk Reclassify when LLM is enabled with editable review, exclusions, live merge preview, and apply", async () => {
+    const sampleProducts = [
+      {
+        id: 1,
+        name: "Meat, Chicken, Breast",
+        category_id: 1,
+        category_name: "Meat & Seafood",
+        default_location_id: 1,
+        default_location_name: "Fridge",
+        in_stock_count: 1,
+        next_due_on_date: null,
+        next_location_name: "Fridge",
+        on_shopping_list: false,
+        low_stock: false,
+        low_stock_amount: null,
+        due_soon: false,
+        overdue: false,
+      },
+      {
+        id: 2,
+        name: "Chicken, Breast",
+        category_id: 1,
+        category_name: "Meat & Seafood",
+        default_location_id: 1,
+        default_location_name: "Fridge",
+        in_stock_count: 3,
+        next_due_on_date: null,
+        next_location_name: "Fridge",
+        on_shopping_list: false,
+        low_stock: false,
+        low_stock_amount: null,
+        due_soon: false,
+        overdue: false,
+      },
+      {
+        id: 3,
+        name: "Apple, Gala",
+        category_id: 2,
+        category_name: "Produce",
+        default_location_id: 1,
+        default_location_name: "Fridge",
+        in_stock_count: 2,
+        next_due_on_date: null,
+        next_location_name: "Fridge",
+        on_shopping_list: false,
+        low_stock: false,
+        low_stock_amount: null,
+        due_soon: false,
+        overdue: false,
+      },
+      {
+        id: 4,
+        name: "Rice, Basmati",
+        category_id: 3,
+        category_name: "Pantry",
+        default_location_id: 2,
+        default_location_name: "Pantry",
+        in_stock_count: 1,
+        next_due_on_date: null,
+        next_location_name: "Pantry",
+        on_shopping_list: false,
+        low_stock: false,
+        low_stock_amount: null,
+        due_soon: false,
+        overdue: false,
+      },
+    ];
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/status") {
+        return new Response(
+          JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, llm_enabled: true, user: { id: 1, email: "a@b.c", role: "admin" } }),
+          { status: 200 }
+        );
+      }
+      if (url.startsWith("/api/products?")) {
+        return new Response(JSON.stringify({ products: sampleProducts }), { status: 200 });
+      }
+      if (url === "/api/products/reclassify/suggest" && init?.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            suggestions: [
+              { product_id: 1, current_name: "Meat, Chicken, Breast", suggested_name: "Chicken, Breast" },
+              { product_id: 3, current_name: "Apple, Gala", suggested_name: "Apples, Gala" },
+              { product_id: 4, current_name: "Rice, Basmati", suggested_name: "Rice, Basmati" },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/reclassify/apply" && init?.method === "POST") {
+        return new Response(JSON.stringify({ renamed: 1, merged: 1 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route path="/" element={<ProductsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const tableContainer = await screen.findByTestId("products-table");
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Meat, Chicken, Breast" }));
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Apple, Gala" }));
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Rice, Basmati" }));
+
+    const bulkBar = screen.getByTestId("products-bulk-bar");
+    const reclassifyBtn = await within(bulkBar).findByRole("button", { name: "Reclassify" });
+    fireEvent.click(reclassifyBtn);
+
+    const dialog = screen.getByRole("dialog", { name: "Reclassify Products" });
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("New name for Meat, Chicken, Breast")).toHaveValue("Chicken, Breast")
+    );
+
+    // Unchanged row ("Rice, Basmati") defaults to unchecked
+    expect(within(dialog).getByRole("checkbox", { name: "Include Rice, Basmati" })).not.toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Include Meat, Chicken, Breast" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Include Apple, Gala" })).toBeChecked();
+
+    // Live preview shows merge into unselected existing "Chicken, Breast" and rename for "Apple, Gala"
+    expect(within(dialog).getByText("Merge into existing: Chicken, Breast")).toBeInTheDocument();
+    expect(within(dialog).getByText("Rename")).toBeInTheDocument();
+
+    // Tweak "Apple, Gala" name
+    fireEvent.change(within(dialog).getByLabelText("New name for Apple, Gala"), {
+      target: { value: "Apples, Gala, Organic" },
+    });
+
+    // Apply sends only included rows with tweaked names
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply Changes" }));
+    await waitFor(() => {
+      const applyCalls = fetchMock.mock.calls.filter(
+        ([u, init]) => String(u) === "/api/products/reclassify/apply" && init?.method === "POST"
+      );
+      expect(applyCalls).toHaveLength(1);
+      expect(JSON.parse(String(applyCalls[0][1]?.body))).toEqual({
+        items: [
+          { product_id: 1, new_name: "Chicken, Breast" },
+          { product_id: 3, new_name: "Apples, Gala, Organic" },
+        ],
+      });
+    });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Reclassify Products" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
+  });
 });

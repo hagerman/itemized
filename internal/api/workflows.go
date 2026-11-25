@@ -287,6 +287,19 @@ func (s *Server) handlePurchaseWorkflow(w http.ResponseWriter, r *http.Request) 
 	if req.ProductID != nil && *req.ProductID > 0 {
 		productID = *req.ProductID
 	} else {
+		if existingID, existingName, found, err := s.findProductByNormalizedName(r.Context(), tx, req.NewProduct.Name, 0); err != nil {
+			writeInternalError(w, "purchase duplicate product check", err)
+			return
+		} else if found {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error": fmt.Sprintf("A product named %q already exists.", existingName),
+				"existing_product": map[string]any{
+					"id":   existingID,
+					"name": existingName,
+				},
+			})
+			return
+		}
 		productID, err = s.insertProduct(r.Context(), tx, *req.NewProduct)
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "unable to create product")
@@ -737,8 +750,9 @@ func (s *Server) handleUPCLookup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUPCClassify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Title    string `json:"title"`
-		Quantity string `json:"quantity"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Quantity    string `json:"quantity"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -757,13 +771,34 @@ func (s *Server) handleUPCClassify(w http.ResponseWriter, r *http.Request) {
 	for _, c := range cats {
 		opts = append(opts, llm.CategoryOption{ID: c.ID, Name: c.HierarchyName})
 	}
-	out, err := s.LLM.Classify(r.Context(), cfg, req.Title, req.Quantity, opts)
+	candidates, prefixes, err := s.loadCatalogNamingContext(r.Context(), []string{req.Title, req.Description}, nil)
+	if err != nil {
+		writeInternalError(w, "upc classify catalog context", err)
+		return
+	}
+	out, err := s.LLM.ClassifyWithContext(r.Context(), cfg, req.Title, req.Quantity, opts, llm.ClassifyContext{
+		Description:      strings.TrimSpace(req.Description),
+		ExistingProducts: candidates,
+		CommonPrefixes:   prefixes,
+	})
 	if err != nil {
 		log.Printf("upc classify warning (provider=%s model=%s): %v", cfg.Provider, cfg.Model, err)
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "classification": nil, "warning": "classification unavailable"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "classification": out})
+	var matchedProduct *Product
+	if out != nil && out.MatchedProductID != nil {
+		if p, pErr := s.getProductByID(r.Context(), *out.MatchedProductID); pErr == nil {
+			matchedProduct = p
+		} else {
+			out.MatchedProductID = nil
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled":         true,
+		"classification":  out,
+		"matched_product": matchedProduct,
+	})
 }
 
 // --- Printers & Label Templates ---

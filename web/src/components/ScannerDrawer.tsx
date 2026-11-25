@@ -167,6 +167,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const [purchaseDueDate, setPurchaseDueDate] = useState("");
   const [purchasePrintMode, setPurchasePrintMode] = useState("per_item");
   const [purchaseSearchHits, setPurchaseSearchHits] = useState<Product[]>([]);
+  const [purchaseExistingQuery, setPurchaseExistingQuery] = useState("");
+  const [llmMatchedProduct, setLlmMatchedProduct] = useState<Product | null>(null);
+  const [liveSimilarProducts, setLiveSimilarProducts] = useState<Product[]>([]);
   const [upcHint, setUpcHint] = useState<string | null>(null);
   const [classifyWarning, setClassifyWarning] = useState<string | null>(null);
   const [lookupPhase, setLookupPhase] = useState<"idle" | "upc" | "classify">("idle");
@@ -212,6 +215,60 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Live debounced similar-product lookup while typing a new product name in Purchase mode.
+  useEffect(() => {
+    if (mode !== "purchase" || !creatingNew || !userEditedNameRef.current) {
+      setLiveSimilarProducts([]);
+      return;
+    }
+    const trimmed = newProdName.trim();
+    if (trimmed.length < 2) {
+      setLiveSimilarProducts([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const search = await apiFetch<{ products: Product[] }>(
+          `/api/products?status=all&q=${encodeURIComponent(trimmed)}`
+        );
+        if (!cancelled) {
+          setLiveSimilarProducts((search.products || []).slice(0, 5));
+        }
+      } catch {
+        if (!cancelled) setLiveSimilarProducts([]);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [mode, creatingNew, newProdName]);
+
+  // Inline search for existing products when an unknown barcode has no auto-match.
+  useEffect(() => {
+    if (mode !== "purchase" || !creatingNew) return;
+    const trimmed = purchaseExistingQuery.trim();
+    if (trimmed.length < 2) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const search = await apiFetch<{ products: Product[] }>(
+          `/api/products?status=all&q=${encodeURIComponent(trimmed)}`
+        );
+        if (!cancelled) {
+          setPurchaseSearchHits((search.products || []).slice(0, 5));
+        }
+      } catch {
+        // ignore transient search errors
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [mode, creatingNew, purchaseExistingQuery]);
+
   const resetSubState = () => {
     lookupSeqRef.current += 1;
     userEditedNameRef.current = false;
@@ -222,6 +279,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     setPurchaseProduct(null);
     setCreatingNew(false);
     setPurchaseSearchHits([]);
+    setPurchaseExistingQuery("");
+    setLlmMatchedProduct(null);
+    setLiveSimilarProducts([]);
     setUpcHint(null);
     setClassifyWarning(null);
     setLookupPhase("idle");
@@ -308,6 +368,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setUpcHint(null);
       setClassifyWarning(null);
       setPurchaseSearchHits([]);
+      setPurchaseExistingQuery("");
+      setLlmMatchedProduct(null);
+      setLiveSimilarProducts([]);
       setPurchaseProduct(res.product);
       setCreatingNew(false);
       setVariantId(res.variant_id);
@@ -330,6 +393,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setUpcHint(null);
       setClassifyWarning(null);
       setPurchaseSearchHits([]);
+      setPurchaseExistingQuery("");
+      setLlmMatchedProduct(null);
+      setLiveSimilarProducts([]);
       const p = res.product;
       setPurchaseProduct(p);
       setCreatingNew(false);
@@ -357,6 +423,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
       setPurchaseProduct(null);
       setPurchaseSearchHits([]);
+      setPurchaseExistingQuery("");
+      setLlmMatchedProduct(null);
+      setLiveSimilarProducts([]);
       setUpcHint(null);
       setClassifyWarning(null);
       setNewProdName("");
@@ -375,15 +444,17 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setLookupPhase("upc");
 
       try {
-        const upcRes = await apiFetch<{ found: boolean; result?: { title: string; measurement?: string } }>("/api/upc/lookup", {
+        const upcRes = await apiFetch<{ found: boolean; result?: { title: string; description?: string; measurement?: string } }>("/api/upc/lookup", {
           method: "POST",
           body: JSON.stringify({ barcode: raw.trim() }),
         });
         if (lookupSeqRef.current !== seq) return;
 
         let suggestedName = "";
+        let matchedExisting = false;
         if (upcRes.found && upcRes.result) {
           const title = upcRes.result.title || "";
+          const description = upcRes.result.description || "";
           suggestedName = title;
           setUpcHint(`OpenFoodFacts: ${title}${upcRes.result.measurement ? ` (${upcRes.result.measurement})` : ""}`);
           if (title) {
@@ -401,14 +472,20 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               warning?: string;
               classification?: {
                 product_name?: string;
+                matched_product_id?: number | null;
                 product_value?: number | null;
                 product_unit_type?: string | null;
                 product_unit?: string | null;
                 category_id?: number | null;
               } | null;
+              matched_product?: Product | null;
             }>("/api/upc/classify", {
               method: "POST",
-              body: JSON.stringify({ title, quantity: upcRes.result.measurement || "" }),
+              body: JSON.stringify({
+                title,
+                description,
+                quantity: upcRes.result.measurement || "",
+              }),
             });
             if (lookupSeqRef.current !== seq) return;
 
@@ -431,6 +508,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               if (!userEditedProdMeasRef.current) setNewProdMeasurement(llmMeas);
               if (!userEditedVarMeasRef.current) setVariantMeasurement(llmMeas);
             }
+            if (clsRes.matched_product && clsRes.classification?.matched_product_id) {
+              matchedExisting = true;
+              const mp = clsRes.matched_product;
+              setLlmMatchedProduct(mp);
+              setPurchaseProduct(mp);
+              setCreatingNew(false);
+              setPurchaseLocId(mp.default_location_id);
+              setPurchaseDueDate(computeDefaultDueDateStr(mp));
+              setPurchasePrintMode(mp.label_print_mode);
+            }
           } catch (err) {
             if (lookupSeqRef.current === seq) {
               setClassifyWarning(err instanceof Error ? err.message : "Classification failed");
@@ -444,7 +531,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         if (lookupSeqRef.current !== seq) return;
         setLookupPhase("idle");
 
-        if (suggestedName) {
+        if (suggestedName && !matchedExisting) {
           const search = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(suggestedName)}`);
           if (lookupSeqRef.current !== seq) return;
           setPurchaseSearchHits(search.products.slice(0, 5));
@@ -941,6 +1028,40 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                 </div>
               )}
 
+              {llmMatchedProduct && purchaseProduct && !creatingNew && (
+                <div
+                  data-testid="llm-matched-product-banner"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"
+                >
+                  <span>
+                    Matched existing product: <strong className="font-semibold text-white">{llmMatchedProduct.name}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPurchaseProduct(null);
+                      setLlmMatchedProduct(null);
+                      setCreatingNew(true);
+                    }}
+                    className="rounded-md border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
+                  >
+                    Create new product instead
+                  </button>
+                </div>
+              )}
+
+              {creatingNew && purchaseBarcode && (
+                <div className="space-y-1.5">
+                  <input
+                    value={purchaseExistingQuery}
+                    onChange={(e) => setPurchaseExistingQuery(e.target.value)}
+                    placeholder="Search existing products to attach this barcode..."
+                    aria-label="Search existing products"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-white placeholder-slate-500"
+                  />
+                </div>
+              )}
+
               {purchaseSearchHits.length > 0 && !purchaseProduct && (
                 <div className="space-y-1.5">
                   <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Matching Products</div>
@@ -951,6 +1072,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                       onClick={() => {
                         setPurchaseProduct(p);
                         setCreatingNew(false);
+                        setLlmMatchedProduct(null);
                         setPurchaseLocId(p.default_location_id);
                         setPurchaseDueDate(computeDefaultDueDateStr(p));
                         setPurchasePrintMode(p.label_print_mode);
@@ -977,16 +1099,45 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
                   {creatingNew && (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <input
-                        required
-                        value={newProdName}
-                        onChange={(e) => {
-                          userEditedNameRef.current = true;
-                          setNewProdName(e.target.value);
-                        }}
-                        placeholder="Product name"
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-                      />
+                      <div className="space-y-1">
+                        <input
+                          required
+                          value={newProdName}
+                          onChange={(e) => {
+                            userEditedNameRef.current = true;
+                            setNewProdName(e.target.value);
+                          }}
+                          placeholder="Product name"
+                          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        />
+                        {liveSimilarProducts.length > 0 && (
+                          <div
+                            data-testid="scanner-similar-products"
+                            className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2"
+                          >
+                            <div className="text-[11px] font-medium text-amber-200">Similar existing products</div>
+                            {liveSimilarProducts.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setPurchaseProduct(p);
+                                  setCreatingNew(false);
+                                  setLlmMatchedProduct(null);
+                                  setLiveSimilarProducts([]);
+                                  setPurchaseLocId(p.default_location_id);
+                                  setPurchaseDueDate(computeDefaultDueDateStr(p));
+                                  setPurchasePrintMode(p.label_print_mode);
+                                }}
+                                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-amber-500/20"
+                              >
+                                <span className="font-medium">{p.name}</span>
+                                <span className="text-[11px] text-amber-200">Use existing</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <HierarchySelect
                         items={categories}
                         value={newProdCatId || null}

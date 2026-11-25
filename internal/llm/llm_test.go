@@ -174,3 +174,127 @@ func TestClassifierGeminiUsesHeaderAuth(t *testing.T) {
 		t.Fatalf("expected x-goog-api-key header, got %q", capturedHeader)
 	}
 }
+
+func TestClassifierCatalogContextAndMatchedProductValidation(t *testing.T) {
+	ctx := ClassifyContext{
+		Description: "Organic dijon mustard condiment",
+		ExistingProducts: []ProductCandidate{
+			{ID: 10, Name: "Mustard, Dijon"},
+			{ID: 11, Name: "Mustard, Yellow"},
+		},
+		CommonPrefixes: []string{"Apples", "Mustard", "Cheese"},
+	}
+	prompt := buildPromptWithContext("Burman's Dijon Mustard", "12 oz", []CategoryOption{{ID: 1, Name: "Condiments"}}, ctx)
+	for _, want := range []string{
+		"Item, Variety, Detail",
+		"NEVER a broad catalog category prefix",
+		"Organic dijon mustard condiment",
+		"Mustard, Dijon",
+		`"Apples"`,
+		`"matched_product_id"`,
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected prompt to contain %q", want)
+		}
+	}
+
+	responses := []string{
+		`{"choices":[{"message":{"content":"{\"matched_product_id\":10,\"product_name\":\"Mustard, Dijon\",\"product_value\":12,\"product_unit_type\":\"weight\",\"product_unit\":\"oz\",\"category_id\":1}"}}]}`,
+		`{"choices":[{"message":{"content":"{\"matched_product_id\":999,\"product_name\":\"Mustard, Spicy Brown\",\"product_value\":null,\"product_unit_type\":null,\"product_unit\":null,\"category_id\":null}"}}]}`,
+	}
+	idx := 0
+	c := NewClassifier()
+	c.HTTPClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			body := responses[idx]
+			idx++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	cfg := Config{Provider: "openai-compatible", Model: "llama3.2", BaseURL: "http://ollama.test/v1"}
+
+	got1, err := c.ClassifyWithContext(context.Background(), cfg, "Burman's Dijon Mustard", "12 oz", []CategoryOption{{ID: 1, Name: "Condiments"}}, ctx)
+	if err != nil {
+		t.Fatalf("ClassifyWithContext 1 failed: %v", err)
+	}
+	if got1.MatchedProductID == nil || *got1.MatchedProductID != 10 {
+		t.Fatalf("expected matched_product_id=10, got %+v", got1)
+	}
+
+	got2, err := c.ClassifyWithContext(context.Background(), cfg, "Gulden's Spicy Brown Mustard", "12 oz", nil, ctx)
+	if err != nil {
+		t.Fatalf("ClassifyWithContext 2 failed: %v", err)
+	}
+	if got2.MatchedProductID != nil {
+		t.Fatalf("expected invalid matched_product_id to be nil, got %v", *got2.MatchedProductID)
+	}
+	if got2.ProductName != "Mustard, Spicy Brown" {
+		t.Fatalf("unexpected product name: %q", got2.ProductName)
+	}
+}
+
+func TestReclassifyNamesBatchAndFallback(t *testing.T) {
+	c := NewClassifier()
+	if _, err := c.ReclassifyNames(context.Background(), Config{}, []ReclassifyInput{{ProductID: 1, CurrentName: "Apple, Gala"}}, nil, nil); err == nil {
+		t.Fatalf("expected error when LLM is unconfigured")
+	}
+
+	cfg := Config{Provider: "openai-compatible", Model: "llama3.2", BaseURL: "http://ollama.test/v1"}
+	inputs := []ReclassifyInput{
+		{ProductID: 1, CurrentName: "Apple, Gala", VariantNames: []string{"Organic Gala Apples"}},
+		{ProductID: 2, CurrentName: "Meat, Chicken, Breast", VariantNames: []string{"Perdue Chicken Breasts"}},
+	}
+
+	// Batch JSON wrapper response
+	c.HTTPClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			body := `{"choices":[{"message":{"content":"{\"items\":[{\"product_id\":1,\"suggested_name\":\"Apples, Gala\"},{\"product_id\":\"2\",\"suggested_name\":\"Chicken, Breast\"}]}"}}]}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	got, err := c.ReclassifyNames(context.Background(), cfg, inputs, []ProductCandidate{{ID: 9, Name: "Chicken, Breast"}}, []string{"Apples", "Chicken"})
+	if err != nil {
+		t.Fatalf("ReclassifyNames batch failed: %v", err)
+	}
+	if len(got) != 2 || got[0].SuggestedName != "Apples, Gala" || got[1].SuggestedName != "Chicken, Breast" {
+		t.Fatalf("unexpected batch suggestions: %+v", got)
+	}
+
+	// Malformed batch response falls back to per-item calls
+	callCount := 0
+	c.HTTPClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			callCount++
+			var content string
+			switch callCount {
+			case 1:
+				content = "not valid json"
+			case 2:
+				content = `[{"product_id":1,"suggested_name":"Apples, Gala"}]`
+			default:
+				content = `{"items":[{"product_id":2,"suggested_name":"Chicken, Breast"}]}`
+			}
+			body := `{"choices":[{"message":{"content":` + strings.ReplaceAll(strings.ReplaceAll(`"`+strings.ReplaceAll(content, `"`, `\"`)+`"`, "\n", ""), "\r", "") + `}}]}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		}),
+	}
+	gotFallback, err := c.ReclassifyNames(context.Background(), cfg, inputs, nil, nil)
+	if err != nil {
+		t.Fatalf("ReclassifyNames fallback failed: %v", err)
+	}
+	if len(gotFallback) != 2 || gotFallback[0].SuggestedName != "Apples, Gala" || gotFallback[1].SuggestedName != "Chicken, Breast" {
+		t.Fatalf("unexpected fallback suggestions: %+v", gotFallback)
+	}
+}

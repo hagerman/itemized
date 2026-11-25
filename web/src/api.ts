@@ -12,6 +12,7 @@ export interface AuthStatus {
   initialized: boolean;
   oidc_enabled: boolean;
   oidc_force: boolean;
+  llm_enabled?: boolean;
   user: User | null;
 }
 
@@ -140,9 +141,11 @@ export type ScanResolution =
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  data?: Record<string, unknown>;
+  constructor(status: number, message: string, data?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -165,7 +168,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     }
   }
   if (!res.ok) {
-    throw new ApiError(res.status, (data.error as string) || res.statusText);
+    throw new ApiError(res.status, (data.error as string) || res.statusText, data);
   }
   return data as T;
 }
