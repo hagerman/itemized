@@ -134,7 +134,7 @@ The Purchase workflow SHALL resolve scanned barcodes or product searches, pre-fi
 - **THEN** the `Due Date` input is immediately pre-populated with `today + effectiveDueDays` while remaining editable before confirming
 
 ### Requirement: Consume and Open workflows with continuous scan and undo
-In `Consume` or `Open` mode, scanning an in-stock `Item` QR (`/go/i/:id`) SHALL immediately consume or open the item with continuous scanning, duplicate-scan debounce, and a temporary Undo toast. In `Consume` mode, each scan SHALL trigger a brief visual flash alongside the audio beep. Scanning an already-consumed `Item` QR or UUID SHALL NOT overwrite `consumed_on_date` and SHALL display an already-consumed notice naming the item. Scanning a `Product`, `Barcode`, or `Location` SHALL list unconsumed items ordered by soonest `due_on_date`.
+In `Consume` or `Open` mode, scanning an in-stock `Item` QR (`/go/i/:id`) SHALL immediately consume or open the item with continuous scanning, duplicate-scan debounce, and a temporary Undo toast. In `Consume` mode, each scan SHALL trigger a brief visual flash alongside the audio beep. Scanning an already-consumed `Item` QR or UUID SHALL NOT overwrite `consumed_on_date` and SHALL display an already-consumed notice naming the item. Scanning a `Product`, `Barcode`, or `Location` SHALL list unconsumed items ordered by soonest `due_on_date`. Typing a non-barcode product search query SHALL search in-stock products; if multiple in-stock products match, the UI SHALL display a clickable `Matching Products` list (showing each product's name and category) so selecting a product loads its unconsumed items into the item selection list; if exactly one in-stock product matches, the UI SHALL load its unconsumed items directly; if none match, the UI SHALL display a clear no-match status message.
 
 #### Scenario: Continuous item scan with undo
 - **WHEN** a user scans `/go/i/<uuid>` for an unconsumed item in Consume mode and taps Undo on the confirmation toast
@@ -152,8 +152,20 @@ In `Consume` or `Open` mode, scanning an in-stock `Item` QR (`/go/i/:id`) SHALL 
 - **WHEN** a user scans an unrecognized retail barcode in Consume mode
 - **THEN** the UI offers inline association of that barcode to an existing product without leaving the workflow
 
+#### Scenario: Searching by product name with multiple matching in-stock products
+- **WHEN** a user types a product name query (e.g., `"Bagel"`) in `Consume` or `Open` mode that matches multiple in-stock products
+- **THEN** the UI displays a clickable `Matching Products` list showing up to 8 matching products with their category names, and clicking a product clears the matching-products list and loads that product's unconsumed items into the item selection list (with the soonest-due item pre-selected)
+
+#### Scenario: Searching by product name with a single matching in-stock product
+- **WHEN** a user types a product name query in `Consume` or `Open` mode that matches exactly one in-stock product
+- **THEN** the UI directly loads that product's unconsumed items into the item selection list without requiring an extra product-picker click
+
+#### Scenario: Searching by product name with no matching in-stock products
+- **WHEN** a user types a product name query in `Consume` or `Open` mode that matches zero in-stock products
+- **THEN** the UI displays a status message indicating no matching in-stock products were found and does not show a product-creation form
+
 ### Requirement: Transfer workflow
-In `Transfer` mode, the user SHALL scan one or more `Item` QRs, `Product` QRs, or retail UPCs to stage in-stock items in a visible transfer list, then complete the transfer by scanning or keying in/selecting a destination `Location`. Scanning a `Product` QR SHALL list all in-stock items of that product for multi-select staging, and scanning a UPC SHALL list all in-stock items of that variant for multi-select staging. Completing the transfer SHALL move all staged items, apply freeze/thaw due-date rules, and clear the list.
+In `Transfer` mode, the user SHALL scan one or more `Item` QRs, `Product` QRs, or retail UPCs—or search for in-stock products by typing a product name—to stage in-stock items in a visible transfer list, then complete the transfer by scanning or keying in/selecting a destination `Location`. Scanning a `Product` QR SHALL list all in-stock items of that product for multi-select staging, and scanning a UPC SHALL list all in-stock items of that variant for multi-select staging. Typing a non-barcode product search query SHALL search in-stock products; if multiple in-stock products match, the UI SHALL display a clickable `Matching Products` list so selecting a product lists all of its in-stock items for multi-select staging; if exactly one in-stock product matches, the UI SHALL load its in-stock items directly for multi-select staging; if none match, the UI SHALL display a clear no-match status message. Completing the transfer SHALL move all staged items, apply freeze/thaw due-date rules, and clear the list.
 
 #### Scenario: Batch transfer into a freezer location
 - **WHEN** a user in Transfer mode scans two in-stock item QRs and then scans a destination location QR with `is_freezer=true`
@@ -182,6 +194,22 @@ In `Transfer` mode, the user SHALL scan one or more `Item` QRs, `Product` QRs, o
 #### Scenario: Scanning a location QR with an empty transfer list prompts to scan items first
 - **WHEN** a user in Transfer mode scans a destination location QR before any items are in the transfer list
 - **THEN** no transfer is executed and the UI prompts the user to scan one or more items first
+
+#### Scenario: Searching by product name with multiple matching in-stock products in Transfer mode
+- **WHEN** a user types a product name query in `Transfer` mode that matches multiple in-stock products
+- **THEN** the UI displays a clickable `Matching Products` list showing up to 8 matching products with their category names, and clicking a product clears the matching-products list and lists that product's in-stock items for multi-select staging into the transfer list (pre-selecting the first unstaged item)
+
+#### Scenario: Searching by product name with a single matching in-stock product in Transfer mode
+- **WHEN** a user types a product name query in `Transfer` mode that matches exactly one in-stock product
+- **THEN** the UI directly lists that product's in-stock items for multi-select staging into the transfer list (pre-selecting the first unstaged item)
+
+#### Scenario: Searching by product name with no matching in-stock products in Transfer mode
+- **WHEN** a user types a product name query in `Transfer` mode that matches zero in-stock products
+- **THEN** the UI displays a status message indicating no matching in-stock products were found
+
+#### Scenario: Scanning an unrecognized numeric barcode in Transfer mode
+- **WHEN** a user scans an unrecognized 6–14 digit retail barcode in `Transfer` mode
+- **THEN** the UI displays `"Unrecognized barcode or QR code."` instead of performing a product-name text search
 
 ### Requirement: Inventory Audit workflow
 In `Inventory` mode, the user SHALL select or scan a `Location`, scan all physically present items/products, review a reconciliation summary categorizing items to Consume, Transfer, Confirm, and Create, toggle checkboxes for any action, and apply all selected actions in one batch—applying freeze/thaw due-date rules on transfers and default/rolling-average due dates on created items with unset due dates.

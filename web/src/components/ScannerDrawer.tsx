@@ -179,6 +179,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const userEditedVarMeasRef = useRef(false);
 
   // Consume / Open / Transfer item selection state
+  const [actionSearchHits, setActionSearchHits] = useState<Product[]>([]);
   const [candidateItems, setCandidateItems] = useState<Item[]>([]);
   const [candidateHeading, setCandidateHeading] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
@@ -232,6 +233,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     setVariantName("");
     setPurchaseBarcode("");
     setSecondBarcode("");
+    setActionSearchHits([]);
     setCandidateItems([]);
     setCandidateHeading(null);
     setSelectedItemIds([]);
@@ -493,7 +495,53 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     }
   };
 
+  const loadProductCandidates = async (product: Product, targetMode: "consume" | "open" | "transfer") => {
+    setErrorMsg(null);
+    setStatusMsg(null);
+    setActionSearchHits([]);
+    try {
+      const detail = await apiFetch<{ items: Item[] }>(`/api/products/${product.id}`);
+      const items = detail.items || [];
+      if (items.length === 0) {
+        setCandidateItems([]);
+        setCandidateHeading(null);
+        setSelectedItemIds([]);
+        setStatusMsg(`No in-stock items found for ${product.name}.`);
+        return;
+      }
+      setCandidateHeading(`Select items of ${product.name}`);
+      setCandidateItems(items);
+      if (targetMode === "transfer") {
+        const firstUnstaged = items.find((it) => !transferItems.some((t) => t.id === it.id));
+        setSelectedItemIds(firstUnstaged ? [firstUnstaged.id] : []);
+      } else {
+        setSelectedItemIds([items[0].id]);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to load product items");
+    }
+  };
+
+  const searchInStockProducts = async (raw: string, targetMode: "consume" | "open" | "transfer") => {
+    const query = raw.trim();
+    setCandidateItems([]);
+    setCandidateHeading(null);
+    setSelectedItemIds([]);
+    setActionSearchHits([]);
+    const search = await apiFetch<{ products: Product[] }>(`/api/products?status=in_stock&q=${encodeURIComponent(query)}`);
+    if (search.products.length === 0) {
+      setStatusMsg(`No in-stock products matching "${query}".`);
+      return;
+    }
+    if (search.products.length === 1) {
+      await loadProductCandidates(search.products[0], targetMode);
+      return;
+    }
+    setActionSearchHits(search.products.slice(0, 8));
+  };
+
   const handleConsumeOpenScan = async (raw: string, res: ScanResolution, action: "consume" | "open") => {
+    setActionSearchHits([]);
     if (res.kind === "item") {
       if (res.item.consumed_on_date) {
         const itemName = res.item.product_name || res.product?.name || `Item #${res.item.id}`;
@@ -528,14 +576,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setStatusMsg(`Unrecognized barcode ${raw.trim()} — link it to a product below.`);
       return;
     }
-    const search = await apiFetch<{ products: Product[] }>(`/api/products?status=in_stock&q=${encodeURIComponent(raw)}`);
-    if (search.products.length === 1) {
-      const detail = await apiFetch<{ items: Item[] }>(`/api/products/${search.products[0].id}`);
-      setCandidateItems(detail.items);
-      setSelectedItemIds(detail.items.length > 0 ? [detail.items[0].id] : []);
-    } else {
-      setStatusMsg(`Found ${search.products.length} matching products; refine your search or scan a label.`);
-    }
+    await searchInStockProducts(raw, action);
   };
 
   const applyCandidateItems = async () => {
@@ -551,7 +592,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         }),
       });
       setStatusMsg(`Updated ${selectedItemIds.length} item(s).`);
+      setActionSearchHits([]);
       setCandidateItems([]);
+      setCandidateHeading(null);
       setSelectedItemIds([]);
       invalidateInventory();
     } catch (err) {
@@ -602,6 +645,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       const warn = res.print_warnings?.length ? ` (Print warning: ${res.print_warnings.join("; ")})` : "";
       setTransferItems([]);
       setTransferDest(null);
+      setActionSearchHits([]);
       setCandidateItems([]);
       setCandidateHeading(null);
       setSelectedItemIds([]);
@@ -633,12 +677,14 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     } else {
       setStatusMsg("Selected item(s) are already in the transfer list.");
     }
+    setActionSearchHits([]);
     setCandidateItems([]);
     setCandidateHeading(null);
     setSelectedItemIds([]);
   };
 
-  const handleTransferScan = async (_raw: string, res: ScanResolution) => {
+  const handleTransferScan = async (raw: string, res: ScanResolution) => {
+    setActionSearchHits([]);
     if (res.kind === "location") {
       if (transferItems.length === 0) {
         setErrorMsg("Scan one or more items to transfer first.");
@@ -691,7 +737,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setSelectedItemIds(firstUnstaged ? [firstUnstaged.id] : []);
       return;
     }
-    setErrorMsg("Unrecognized barcode or QR code.");
+    if (/^\d{6,14}$/.test(raw.trim())) {
+      setErrorMsg("Unrecognized barcode or QR code.");
+      return;
+    }
+    await searchInStockProducts(raw, "transfer");
   };
 
   const handleInventoryScan = async (_raw: string, res: ScanResolution) => {
@@ -1130,6 +1180,24 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   </button>
                 </form>
               )}
+            </div>
+          )}
+
+          {/* MATCHING PRODUCTS (Consume / Open / Transfer) */}
+          {actionSearchHits.length > 0 && (mode === "consume" || mode === "open" || mode === "transfer") && (
+            <div className="space-y-1.5">
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Matching Products</div>
+              {actionSearchHits.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => void loadProductCandidates(p, mode)}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
+                >
+                  <span className="font-medium text-slate-100">{p.name}</span>
+                  <span className="text-xs text-slate-400">{p.category_name}</span>
+                </button>
+              ))}
             </div>
           )}
 

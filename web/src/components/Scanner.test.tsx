@@ -1248,4 +1248,252 @@ describe("BarcodeScanner and ScannerDrawer", () => {
       location_id: 2,
     });
   });
+
+  it("supports product-name search with clickable Matching Products in Consume and Open modes", async () => {
+    const bulkCalls: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        const body = JSON.parse(String(init?.body || "{}"));
+        return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+      }
+      if (url === "/api/products?status=in_stock&q=Bagel") {
+        return new Response(
+          JSON.stringify({
+            products: [
+              { id: 1, name: "Bagel", category_name: "Groceries > Baked Goods" },
+              { id: 2, name: "Bagel, Pretzel", category_name: "Groceries > Baked Goods" },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/2") {
+        return new Response(
+          JSON.stringify({
+            product: { id: 2, name: "Bagel, Pretzel" },
+            variants: [],
+            items: [
+              {
+                id: 501,
+                product_id: 2,
+                product_name: "Bagel, Pretzel",
+                location_name: "Pantry",
+                due_on_date: "2026-12-01",
+                consumed_on_date: null,
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products?status=in_stock&q=Milk") {
+        return new Response(
+          JSON.stringify({
+            products: [{ id: 3, name: "Milk, Whole", category_name: "Groceries > Dairy" }],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/3") {
+        return new Response(
+          JSON.stringify({
+            product: { id: 3, name: "Milk, Whole" },
+            variants: [],
+            items: [
+              {
+                id: 601,
+                product_id: 3,
+                product_name: "Milk, Whole",
+                location_name: "Fridge",
+                due_on_date: "2026-12-05",
+                consumed_on_date: null,
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products?status=in_stock&q=NothingHere") {
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      }
+      if (url === "/api/items/bulk") {
+        bulkCalls.push(JSON.parse(String(init?.body || "{}")));
+        return new Response(JSON.stringify({ processed: 1 }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="consume"
+          onClose={() => {}}
+          categories={[]}
+          locations={[]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    const search = (val: string) => {
+      fireEvent.change(input, { target: { value: val } });
+      fireEvent.submit(input.closest("form")!);
+    };
+
+    // Multi-match in Consume shows clickable Matching Products list
+    search("Bagel");
+    await waitFor(() => expect(screen.getByText("Matching Products")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Bagel\s+Groceries > Baked Goods/i })).toBeInTheDocument();
+    const pretzelBtn = screen.getByRole("button", { name: /Bagel, Pretzel/i });
+    fireEvent.click(pretzelBtn);
+
+    // Selecting a product clears Matching Products and loads its in-stock items
+    await waitFor(() => expect(screen.getByText("Select items of Bagel, Pretzel")).toBeInTheDocument());
+    expect(screen.queryByText("Matching Products")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Apply consume \(1\)/i }));
+    await waitFor(() => expect(screen.getByText("Updated 1 item(s).")).toBeInTheDocument());
+    expect(bulkCalls[0]).toEqual({ action: "consume", item_ids: [501], location_id: undefined });
+
+    // Switch to Open mode: single match auto-loads items directly
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    search("Milk");
+    await waitFor(() => expect(screen.getByText("Select items of Milk, Whole")).toBeInTheDocument());
+    expect(screen.queryByText("Matching Products")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Apply open \(1\)/i })).toBeInTheDocument();
+
+    // Zero matches displays status message without product creation form
+    search("NothingHere");
+    await waitFor(() =>
+      expect(screen.getByText('No in-stock products matching "NothingHere".')).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/Create Product/i)).not.toBeInTheDocument();
+  });
+
+  it("supports product-name search in Transfer mode while keeping numeric unknown barcode errors", async () => {
+    const productSearchUrls: string[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        const body = JSON.parse(String(init?.body || "{}"));
+        return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+      }
+      if (url.startsWith("/api/products?")) {
+        productSearchUrls.push(url);
+      }
+      if (url === "/api/products?status=in_stock&q=Bagel") {
+        return new Response(
+          JSON.stringify({
+            products: [
+              { id: 1, name: "Bagel", category_name: "Groceries > Baked Goods" },
+              { id: 2, name: "Bagel, Pretzel", category_name: "Groceries > Baked Goods" },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/1") {
+        return new Response(
+          JSON.stringify({
+            product: { id: 1, name: "Bagel" },
+            variants: [],
+            items: [
+              {
+                id: 701,
+                product_id: 1,
+                product_name: "Bagel",
+                location_name: "Pantry",
+                due_on_date: "2026-12-02",
+                consumed_on_date: null,
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products?status=in_stock&q=Butter") {
+        return new Response(
+          JSON.stringify({
+            products: [{ id: 4, name: "Butter, Salted", category_name: "Groceries > Dairy" }],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/4") {
+        return new Response(
+          JSON.stringify({
+            product: { id: 4, name: "Butter, Salted" },
+            variants: [],
+            items: [
+              {
+                id: 801,
+                product_id: 4,
+                product_name: "Butter, Salted",
+                location_name: "Fridge",
+                due_on_date: "2026-12-10",
+                consumed_on_date: null,
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products?status=in_stock&q=NoMatch") {
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="transfer"
+          onClose={() => {}}
+          categories={[]}
+          locations={[
+            { id: 1, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Pantry" },
+            { id: 2, name: "Freezer", parent_id: null, is_freezer: true, hierarchy_name: "Freezer" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    const search = (val: string) => {
+      fireEvent.change(input, { target: { value: val } });
+      fireEvent.submit(input.closest("form")!);
+    };
+
+    // Multi-match search in Transfer shows clickable Matching Products list and stages chosen item
+    search("Bagel");
+    await waitFor(() => expect(screen.getByText("Matching Products")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /^Bagel\s+Groceries > Baked Goods$/i }));
+    await waitFor(() => expect(screen.getByText("Select items of Bagel")).toBeInTheDocument());
+    expect(screen.queryByText("Matching Products")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Add to Transfer List \(1\)/i }));
+    await waitFor(() => expect(screen.getByText("Items to Transfer (1)")).toBeInTheDocument());
+
+    // Single-match search in Transfer directly loads items for staging
+    search("Butter");
+    await waitFor(() => expect(screen.getByText("Select items of Butter, Salted")).toBeInTheDocument());
+    expect(screen.queryByText("Matching Products")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Add to Transfer List \(1\)/i }));
+    await waitFor(() => expect(screen.getByText("Items to Transfer (2)")).toBeInTheDocument());
+
+    // Zero-match search shows status message
+    search("NoMatch");
+    await waitFor(() =>
+      expect(screen.getByText('No in-stock products matching "NoMatch".')).toBeInTheDocument()
+    );
+
+    // Numeric unknown barcode keeps unrecognized barcode error without product text search
+    const searchCountBeforeBarcode = productSearchUrls.length;
+    search("999999999999");
+    await waitFor(() => expect(screen.getByText("Unrecognized barcode or QR code.")).toBeInTheDocument());
+    expect(productSearchUrls.length).toBe(searchCountBeforeBarcode);
+  });
 });
