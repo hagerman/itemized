@@ -48,17 +48,6 @@ When running behind a reverse proxy, set:
 
 All instance settings can also be edited in **Settings** after first-run setup.
 
-## Migrating Legacy PostgreSQL Data
-
-The companion `itemized-migrate` CLI reads a legacy Itemized PostgreSQL database directly, remaps foreign keys to compact integer IDs, preserves original UUIDs in `legacy_uuid` (so existing printed `/go/{i,p,l}/<uuid>` labels keep working), preserves bcrypt password hashes, rebuilds FTS5 indexes, and runs `PRAGMA foreign_key_check`:
-
-```bash
-itemized-migrate \
-  --pg-url "postgres://user:pass@host:5432/itemized" \
-  --sqlite "/data/itemized.db" \
-  [--collection-id "<legacy-collection-uuid>"]
-```
-
 ## Unraid Community Apps
 
 An Unraid template is provided at `unraid/itemized.xml`. Bridge networking reaches LAN printers directly on outbound connections (e.g. `http://192.168.1.50:631/ipp/print` for Zebra ZSB or `192.168.1.50:9100` for Raw TCP ZPL printers).

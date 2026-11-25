@@ -15,7 +15,6 @@
 
 # Go binaries, test, and coverage artifacts
 /itemized
-/itemized-migrate
 *.exe
 *.dll
 *.so

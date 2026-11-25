@@ -6,7 +6,7 @@ RUN npm ci || npm install
 COPY web/ ./
 RUN npm run build
 
-# Stage 2: Build pure-Go server & migration CLI (CGO_ENABLED=0 for easy multi-arch)
+# Stage 2: Build pure-Go server (CGO_ENABLED=0 for easy multi-arch)
 FROM golang:1.26-alpine AS go-builder
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -15,15 +15,13 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY web/embed.go ./web/embed.go
 COPY --from=web-builder /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/itemized ./cmd/itemized \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/itemized-migrate ./cmd/itemized-migrate
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/itemized ./cmd/itemized
 
 # Stage 3: Minimal runtime image
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata su-exec \
  && mkdir -p /data
 COPY --from=go-builder /out/itemized /usr/local/bin/itemized
-COPY --from=go-builder /out/itemized-migrate /usr/local/bin/itemized-migrate
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
