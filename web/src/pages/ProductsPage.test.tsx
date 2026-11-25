@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductsPage } from "./ProductsPage";
 
@@ -37,6 +37,62 @@ const MOCK_PRODUCTS = [
   },
 ];
 
+const RICH_MOCK_PRODUCTS = [
+  {
+    ...MOCK_PRODUCTS[0],
+    id: 1,
+    name: "Milk",
+    category_name: "Dairy",
+    next_location_name: "Fridge",
+    in_stock_count: 2,
+    next_due_on_date: "2026-11-20",
+    overdue: true,
+    due_soon: false,
+    on_shopping_list: true,
+    low_stock_amount: 3,
+  },
+  {
+    ...MOCK_PRODUCTS[0],
+    id: 2,
+    name: "Yogurt",
+    category_name: "Dairy",
+    next_location_name: "Fridge > Top Shelf",
+    in_stock_count: 4,
+    next_due_on_date: "2026-11-27",
+    overdue: false,
+    due_soon: true,
+    on_shopping_list: false,
+    low_stock_amount: null,
+  },
+  {
+    ...MOCK_PRODUCTS[0],
+    id: 3,
+    name: "Rice",
+    category_name: "Pantry Staples",
+    next_location_name: "",
+    in_stock_count: 0,
+    next_due_on_date: "2027-01-15",
+    overdue: false,
+    due_soon: false,
+    on_shopping_list: true,
+    low_stock_amount: null,
+  },
+];
+
+function renderProductsPage(initialEntry = "/?status=in_stock") {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/" element={<ProductsPage />} />
+          <Route path="/products/:id" element={<div data-testid="product-detail-route">Product Detail</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 describe("ProductsPage responsive index toolbar", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -46,16 +102,9 @@ describe("ProductsPage responsive index toolbar", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: MOCK_PRODUCTS }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={["/?status=in_stock"]}>
-          <ProductsPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderProductsPage("/?status=in_stock");
 
-    await waitFor(() => expect(screen.getByText("Test")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("products-table")).toBeInTheDocument());
 
     const toolbar = screen.getByTestId("products-toolbar");
     expect(toolbar).toHaveClass("@container");
@@ -114,16 +163,9 @@ describe("ProductsPage responsive index toolbar", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: MOCK_PRODUCTS }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={["/?status=in_stock&category_id=1"]}>
-          <ProductsPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    renderProductsPage("/?status=in_stock&category_id=1");
 
-    await waitFor(() => expect(screen.getByText("Test")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("products-table")).toBeInTheDocument());
 
     const toolbar = screen.getByTestId("products-toolbar");
     expect(toolbar).toHaveClass("@container");
@@ -139,5 +181,170 @@ describe("ProductsPage responsive index toolbar", () => {
 
     expect(row).not.toContainElement(wrappedClear);
     expect(wrappedClear.parentElement).toHaveClass("mt-2", "flex", "@[640px]:hidden");
+  });
+});
+
+describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders a desktop table (hidden md:block) with columns and badges and a checkbox-free mobile card list (md:hidden)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderProductsPage("/?status=all");
+
+    const tableContainer = await screen.findByTestId("products-table");
+    const cardContainer = screen.getByTestId("products-card-list");
+
+    expect(tableContainer).toHaveClass("hidden", "md:block");
+    expect(cardContainer).toHaveClass("md:hidden");
+    expect(within(cardContainer).queryAllByRole("checkbox")).toHaveLength(0);
+
+    const table = within(tableContainer).getByRole("table");
+    const rows = within(table).getAllByRole("row");
+    // 1 header row + 3 product rows
+    expect(rows).toHaveLength(4);
+
+    // Row 1: Milk (Overdue + Need 3)
+    const milkRow = rows[1];
+    expect(within(milkRow).getByRole("checkbox", { name: "Select Milk" })).toBeInTheDocument();
+    expect(within(milkRow).getByRole("link", { name: "Milk" })).toHaveAttribute("href", "/products/1");
+    expect(within(milkRow).getByText("Dairy")).toBeInTheDocument();
+    expect(within(milkRow).getByText("Fridge")).toBeInTheDocument();
+    expect(within(milkRow).getByText("2")).toBeInTheDocument();
+    expect(within(milkRow).getByText("Overdue (2026-11-20)")).toBeInTheDocument();
+    expect(within(milkRow).getByText("Need 3")).toBeInTheDocument();
+
+    // Row 2: Yogurt (Due Soon, not on shopping list)
+    const yogurtRow = rows[2];
+    expect(within(yogurtRow).getByText("Due 2026-11-27")).toBeInTheDocument();
+    expect(within(yogurtRow).getByText("—")).toBeInTheDocument();
+
+    // Row 3: Rice (No location -> —, plain due date, Shopping List)
+    const riceRow = rows[3];
+    expect(within(riceRow).getByText("—")).toBeInTheDocument();
+    expect(within(riceRow).getByText("2027-01-15")).toBeInTheDocument();
+    expect(within(riceRow).getByText("Shopping List")).toBeInTheDocument();
+  });
+
+  it("navigates to product detail when clicking a table row, but not when clicking a checkbox", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderProductsPage("/?status=in_stock");
+
+    const tableContainer = await screen.findByTestId("products-table");
+    const checkbox = within(tableContainer).getByRole("checkbox", { name: "Select Milk" });
+
+    // Clicking the checkbox toggles selection without navigating
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    expect(screen.queryByTestId("product-detail-route")).not.toBeInTheDocument();
+
+    // Clicking a non-interactive cell in the row navigates to /products/:id
+    fireEvent.click(within(tableContainer).getByText("Fridge"));
+    expect(await screen.findByTestId("product-detail-route")).toBeInTheDocument();
+  });
+
+  it("updates sort order and aria-sort when clicking desktop table column headers", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderProductsPage("/?status=in_stock");
+
+    const tableContainer = await screen.findByTestId("products-table");
+    const fullSelect = screen.getByRole("combobox", { name: "Sort products" }) as HTMLSelectElement;
+
+    const productBtn = within(tableContainer).getByRole("button", { name: "Product" });
+    const stockBtn = within(tableContainer).getByRole("button", { name: "Stock" });
+    const nextDueBtn = within(tableContainer).getByRole("button", { name: "Next Due" });
+
+    expect(productBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
+    expect(stockBtn.closest("th")).not.toHaveAttribute("aria-sort");
+
+    fireEvent.click(stockBtn);
+    expect(fullSelect.value).toBe("stock");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/products?status=in_stock&sort=stock", expect.anything())
+    );
+    const updatedTableAfterStock = await screen.findByTestId("products-table");
+    expect(within(updatedTableAfterStock).getByRole("button", { name: "Stock" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "ascending"
+    );
+    expect(within(updatedTableAfterStock).getByRole("button", { name: "Product" }).closest("th")).not.toHaveAttribute(
+      "aria-sort"
+    );
+
+    fireEvent.click(within(updatedTableAfterStock).getByRole("button", { name: "Next Due" }));
+    expect(fullSelect.value).toBe("due_date");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/products?status=in_stock&sort=due_date", expect.anything())
+    );
+    const updatedTableAfterDue = await screen.findByTestId("products-table");
+    expect(within(updatedTableAfterDue).getByRole("button", { name: "Next Due" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "ascending"
+    );
+  });
+
+  it("supports desktop bulk selection, confirmation cancellation, bulk deletion, and filter selection reset", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.startsWith("/api/products")) {
+        return new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const confirmSpy = vi.spyOn(window, "confirm");
+
+    renderProductsPage("/?status=in_stock");
+
+    const tableContainer = await screen.findByTestId("products-table");
+    expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument();
+
+    // Select all via header checkbox
+    const selectAll = within(tableContainer).getByRole("checkbox", { name: "Select all products" });
+    fireEvent.click(selectAll);
+
+    const bulkBar = screen.getByTestId("products-bulk-bar");
+    expect(bulkBar).toHaveClass("sticky", "bottom-4", "z-20", "hidden", "md:flex");
+    expect(within(bulkBar).getByText("3 selected:")).toBeInTheDocument();
+
+    // Canceling confirmation makes no DELETE requests
+    confirmSpy.mockReturnValueOnce(false);
+    fireEvent.click(within(bulkBar).getByRole("button", { name: "Delete" }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
+
+    // Uncheck one product, then confirm deletion of remaining 2
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Rice" }));
+    expect(within(bulkBar).getByText("2 selected:")).toBeInTheDocument();
+
+    confirmSpy.mockReturnValueOnce(true);
+    fireEvent.click(within(bulkBar).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      const deleteUrls = fetchMock.mock.calls
+        .filter(([, init]) => init?.method === "DELETE")
+        .map(([url]) => String(url))
+        .sort();
+      expect(deleteUrls).toEqual(["/api/products/1", "/api/products/2"]);
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
+
+    // Select a product again, then change the filter input -> selection clears
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Milk" }));
+    expect(screen.getByTestId("products-bulk-bar")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Filter products..."), { target: { value: "Yogurt" } });
+    await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
   });
 });

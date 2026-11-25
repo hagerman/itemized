@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, Clock, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowUpDown, Check, Clock, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { apiFetch, Product } from "../api";
 
 const SORT_OPTIONS = [
@@ -11,6 +11,8 @@ const SORT_OPTIONS = [
 ] as const;
 
 export const ProductsPage: React.FC = () => {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get("status") || "in_stock";
   const categoryId = searchParams.get("category_id") || "";
@@ -18,7 +20,11 @@ export const ProductsPage: React.FC = () => {
   const [q, setQ] = useState(searchParams.get("q") || "");
   const [sort, setSort] = useState(searchParams.get("sort") || "name");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -49,6 +55,11 @@ export const ProductsPage: React.FC = () => {
     ...(sort ? { sort } : {}),
   }).toString();
 
+  useEffect(() => {
+    setSelectedIds([]);
+    setBulkError(null);
+  }, [queryStr]);
+
   const { data, isLoading } = useQuery({
     queryKey: ["products", queryStr],
     queryFn: () => apiFetch<{ products: Product[] }>(`/api/products?${queryStr}`),
@@ -58,9 +69,70 @@ export const ProductsPage: React.FC = () => {
   const activeSortLabel = SORT_OPTIONS.find((opt) => opt.value === sort)?.label || "Name";
   const hasActiveFilters = Boolean(categoryId || locationId || q);
 
+  const visibleIdSet = new Set(products.map((p) => p.id));
+  const activeSelectedIds = selectedIds.filter((id) => visibleIdSet.has(id));
+  const allSelected = products.length > 0 && activeSelectedIds.length === products.length;
+  const someSelected = activeSelectedIds.length > 0 && !allSelected;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
   const clearFilters = () => {
     setSearchParams({ status });
     setQ("");
+  };
+
+  const toggleSelectProduct = (productId: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(products.map((p) => p.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const idsToDelete = [...activeSelectedIds];
+    const count = idsToDelete.length;
+    if (count === 0) return;
+    if (!window.confirm(`Delete ${count} selected product${count === 1 ? "" : "s"} and all ${count === 1 ? "its" : "their"} items?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    setBulkError(null);
+    try {
+      const results = await Promise.allSettled(
+        idsToDelete.map((id) => apiFetch(`/api/products/${id}`, { method: "DELETE" }))
+      );
+      const failedIds: number[] = [];
+      results.forEach((res, idx) => {
+        if (res.status === "rejected") {
+          failedIds.push(idsToDelete[idx]);
+        }
+      });
+      setSelectedIds(failedIds);
+      if (failedIds.length > 0) {
+        setBulkError(`Failed to delete ${failedIds.length} of ${idsToDelete.length} product(s).`);
+      }
+      void qc.invalidateQueries({ queryKey: ["products"] });
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>, productId: number) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("a, button, input, label")) return;
+    navigate(`/products/${productId}`);
   };
 
   return (
@@ -169,6 +241,15 @@ export const ProductsPage: React.FC = () => {
         )}
       </div>
 
+      {bulkError && (
+        <div
+          role="alert"
+          className="hidden rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-sm text-rose-200 md:block"
+        >
+          {bulkError}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="py-12 text-center text-sm text-slate-400">Loading inventory...</div>
       ) : products.length === 0 ? (
@@ -176,50 +257,211 @@ export const ProductsPage: React.FC = () => {
           No products match this view.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {products.map((p) => (
-            <Link
-              key={p.id}
-              to={`/products/${p.id}`}
-              className="group flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-indigo-500/60 hover:bg-slate-900"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <h2 className="font-semibold text-white group-hover:text-indigo-300">{p.name}</h2>
-                  <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-200">
-                    {p.in_stock_count} in stock
-                  </span>
+        <>
+          {/* Mobile single-column card list (no selection checkboxes) */}
+          <div data-testid="products-card-list" className="grid grid-cols-1 gap-3 md:hidden">
+            {products.map((p) => (
+              <Link
+                key={p.id}
+                to={`/products/${p.id}`}
+                className="group flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-indigo-500/60 hover:bg-slate-900"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <h2 className="font-semibold text-white group-hover:text-indigo-300">{p.name}</h2>
+                    <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-200">
+                      {p.in_stock_count} in stock
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {p.category_name}
+                    {p.next_location_name ? <> &bull; {p.next_location_name}</> : null}
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-slate-400">
-                  {p.category_name}
-                  {p.next_location_name ? <> &bull; {p.next_location_name}</> : null}
-                </div>
-              </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                {p.overdue && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
-                    <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
-                  </span>
-                )}
-                {!p.overdue && p.due_soon && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
-                    <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
-                  </span>
-                )}
-                {!p.overdue && !p.due_soon && p.next_due_on_date && (
-                  <span className="text-xs text-slate-500">Next due: {p.next_due_on_date}</span>
-                )}
-                {p.on_shopping_list && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-300">
-                    <ShoppingCart className="h-3 w-3" />
-                    {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
-        </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {p.overdue && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
+                      <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
+                    </span>
+                  )}
+                  {!p.overdue && p.due_soon && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
+                      <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
+                    </span>
+                  )}
+                  {!p.overdue && !p.due_soon && p.next_due_on_date && (
+                    <span className="text-xs text-slate-500">Next due: {p.next_due_on_date}</span>
+                  )}
+                  {p.on_shopping_list && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                      <ShoppingCart className="h-3 w-3" />
+                      {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop compact table view with selection checkboxes */}
+          <div
+            data-testid="products-table"
+            className="hidden overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 md:block"
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-800 text-xs font-semibold uppercase text-slate-400">
+                <tr>
+                  <th className="w-10 whitespace-nowrap py-2.5 pl-4 pr-2 font-semibold">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      aria-label="Select all products"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                    />
+                  </th>
+                  <th
+                    aria-sort={sort === "name" ? "ascending" : undefined}
+                    className="py-2.5 pr-3 font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("name")}
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "name" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Product</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
+                  <th className="py-2.5 pr-3 font-semibold">Category</th>
+                  <th className="py-2.5 pr-3 font-semibold">Location</th>
+                  <th
+                    aria-sort={sort === "stock" ? "ascending" : undefined}
+                    className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("stock")}
+                      className={`inline-flex items-center justify-end gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "stock" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Stock</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
+                  <th
+                    aria-sort={sort === "due_date" ? "ascending" : undefined}
+                    className="whitespace-nowrap py-2.5 pr-3 font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("due_date")}
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "due_date" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Next Due</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
+                  <th className="whitespace-nowrap py-2.5 pr-4 font-semibold">Shopping List</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/70">
+                {products.map((p) => {
+                  const checked = activeSelectedIds.includes(p.id);
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={(e) => handleRowClick(e, p.id)}
+                      className={`group cursor-pointer transition hover:bg-slate-800/50 ${
+                        checked ? "bg-indigo-500/10" : ""
+                      }`}
+                    >
+                      <td
+                        className="w-10 whitespace-nowrap py-2.5 pl-4 pr-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          aria-label={`Select ${p.name}`}
+                          onChange={() => toggleSelectProduct(p.id)}
+                          className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                        />
+                      </td>
+                      <td className="py-2.5 pr-3 font-medium text-white">
+                        <Link
+                          to={`/products/${p.id}`}
+                          className="text-white transition group-hover:text-indigo-300"
+                        >
+                          {p.name}
+                        </Link>
+                      </td>
+                      <td className="py-2.5 pr-3 text-slate-300">{p.category_name}</td>
+                      <td className="py-2.5 pr-3 text-slate-400">
+                        {p.next_location_name || <span className="text-slate-500">—</span>}
+                      </td>
+                      <td className="whitespace-nowrap py-2.5 pr-3 text-right">
+                        <span className="inline-block rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-200">
+                          {p.in_stock_count}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap py-2.5 pr-3">
+                        {p.overdue ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
+                            <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
+                          </span>
+                        ) : p.due_soon ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
+                            <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
+                          </span>
+                        ) : p.next_due_on_date ? (
+                          <span className="text-xs text-slate-400">{p.next_due_on_date}</span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap py-2.5 pr-4">
+                        {p.on_shopping_list ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                            <ShoppingCart className="h-3 w-3" />
+                            {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {activeSelectedIds.length > 0 && (
+            <div
+              data-testid="products-bulk-bar"
+              className="sticky bottom-4 z-20 mx-auto hidden w-fit items-center gap-3 rounded-xl border border-indigo-500/40 bg-slate-900/95 px-4 py-2.5 text-xs shadow-2xl backdrop-blur md:flex"
+            >
+              <span className="font-semibold text-indigo-200">{activeSelectedIds.length} selected:</span>
+              <button
+                type="button"
+                disabled={bulkDeleting}
+                onClick={() => void handleBulkDelete()}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {bulkDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

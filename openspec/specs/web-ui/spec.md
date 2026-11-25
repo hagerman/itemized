@@ -57,7 +57,23 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators; provide filter, sort, clear-filters, and create controls that collapse into a compact single-row icon sort dropdown button and `+` create button when full labels do not fit on one line, without shifting the product list downward when the inline `Clear Filters` control appears on wider viewports; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes and bulk deletion, and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
+
+#### Scenario: Desktop viewports display inventory list pages as a compact table
+- **WHEN** a user views an inventory list page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a desktop viewport (`>= 768px`)
+- **THEN** matching products are rendered in a semantic HTML table with a leading selection checkbox column (including a select-all header checkbox) followed by columns for Product, Category, Location, Stock, Next Due, and Shopping List (showing overdue, due-soon, and shopping-list badges where applicable) instead of a multi-column card grid, and activating a product link or non-checkbox portion of a row navigates to `/products/:id`
+
+#### Scenario: Mobile viewports retain the single-column card view
+- **WHEN** a user views an inventory list page on a mobile viewport (`< 768px`)
+- **THEN** the desktop table and bulk actions bar are hidden and matching products render in the single-column card layout without selection checkboxes, displaying product name, stock count, category, next-due item location, due-date status, and shopping-list indicator
+
+#### Scenario: Selecting products and bulk deleting from the desktop table
+- **WHEN** a user on a desktop viewport selects one or more products using row checkboxes or the header select-all checkbox
+- **THEN** toggling checkboxes updates the selection without navigating to `/products/:id`, a desktop-only floating bulk actions bar remains visible while scrolling showing the selected count and a `Delete` action, confirming deletion removes the selected products via `DELETE /api/products/{id}`, clears the selection, and refreshes the product list and sidebar counts (while canceling leaves products unchanged), and changing active filters, status, or search clears the current selection
+
+#### Scenario: Sorting inventory list via desktop table column headers
+- **WHEN** a user views an inventory list page on a desktop viewport and clicks the `Product`, `Stock`, or `Next Due` column header button
+- **THEN** the product list sort order updates to `name`, `stock`, or `due_date` respectively, stays synchronized with the toolbar sort selector, and indicates the active sort column
 
 #### Scenario: Compact single-row toolbar on narrow index viewports
 - **WHEN** a user views an inventory index page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a narrow viewport where the filter input, full `Sort: ...` select, and `+ New Product` button do not fit on one line
@@ -93,7 +109,7 @@ The Products view SHALL display matching products with stock counts, next-due it
 
 #### Scenario: Inventory list displays next-due item location
 - **WHEN** a user views the inventory list for a product whose next-due item is in `"Fridge"` while its default location is `"Pantry"`
-- **THEN** the product card displays `"Fridge"` alongside the category instead of `"Pantry"`
+- **THEN** the product entry (table row on desktop and card on mobile) displays `"Fridge"` instead of `"Pantry"`
 
 ### Requirement: Product detail view and bulk item management
 The Product detail view SHALL display product metadata (default measurement when set, next-due item location in the header, `~X` rolling-average due days, and human-readable `Label Mode`), variants, and barcodes, provide header actions, and list individual `Item` records showing Variant first then Location (omitting `#id`) with single-item and bulk actions including bulk variant updates, where all interactive controls in the bulk item actions bar render at a uniform height.

@@ -484,21 +484,21 @@ export const ProductDetailPage: React.FC = () => {
             {/* Desktop table */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-800 text-xs uppercase text-slate-400">
+                <thead className="border-b border-slate-800 text-xs font-semibold uppercase text-slate-400">
                   <tr>
-                    <th className="py-2 pr-2">
+                    <th className="py-2 pr-2 font-semibold">
                       <input
                         type="checkbox"
                         checked={items.length > 0 && selectedIds.length === items.length}
                         onChange={(e) => setSelectedIds(e.target.checked ? items.map((i) => i.id) : [])}
                       />
                     </th>
-                    <th className="py-2 pr-3">Variant</th>
-                    <th className="py-2 pr-3">Location</th>
-                    <th className="py-2 pr-3">Purchased</th>
-                    <th className="py-2 pr-3">Opened</th>
-                    <th className="py-2 pr-3">Due</th>
-                    <th className="py-2 text-right">Actions</th>
+                    <th className="py-2 pr-3 font-semibold">Variant</th>
+                    <th className="py-2 pr-3 font-semibold">Location</th>
+                    <th className="py-2 pr-3 font-semibold">Purchased</th>
+                    <th className="py-2 pr-3 font-semibold">Opened</th>
+                    <th className="py-2 pr-3 font-semibold">Due</th>
+                    <th className="py-2 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/70">
