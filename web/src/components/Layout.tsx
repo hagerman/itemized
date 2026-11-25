@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Box,
@@ -10,6 +10,7 @@ import {
   LogOut,
   MapPin,
   Menu,
+  RefreshCw,
   ScanBarcode,
   Search,
   Settings,
@@ -27,11 +28,41 @@ interface LayoutProps {
   user: User;
   onLogout: () => void;
   title: string;
+  demoMode?: boolean;
+  demoResetAt?: string;
   headerActions?: React.ReactNode;
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerActions, children }) => {
+function formatDemoCountdown(resetAtIso: string | undefined, nowMs: number): string {
+  if (!resetAtIso) {
+    return "Sample data resets every hour";
+  }
+  const targetMs = Date.parse(resetAtIso);
+  if (Number.isNaN(targetMs)) {
+    return "Sample data resets every hour";
+  }
+  const diffMs = targetMs - nowMs;
+  if (diffMs <= 0) {
+    return "Resetting sample data...";
+  }
+  const totalSec = Math.ceil(diffMs / 1000);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  const timeLabel = new Date(targetMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (mins >= 60) {
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `Sample data resets in ${hrs}h ${remMins}m (at ${timeLabel})`;
+  }
+  if (mins >= 1) {
+    return `Sample data resets in ${mins}m (at ${timeLabel})`;
+  }
+  return `Sample data resets in ${secs}s (at ${timeLabel})`;
+}
+
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode = false, demoResetAt, headerActions, children }) => {
+  const qc = useQueryClient();
   const navigate = useNavigate();
   const loc = useLocation();
   const [searchParams] = useSearchParams();
@@ -41,6 +72,27 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const refreshedBoundaryRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!demoMode || !demoResetAt) return;
+    const targetMs = Date.parse(demoResetAt);
+    if (Number.isNaN(targetMs)) return;
+
+    const tick = () => {
+      const current = Date.now();
+      setNowMs(current);
+      if (current >= targetMs && refreshedBoundaryRef.current !== demoResetAt) {
+        refreshedBoundaryRef.current = demoResetAt;
+        void qc.invalidateQueries();
+      }
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [demoMode, demoResetAt, qc]);
 
   const pendingPrefix = useRef<string | null>(null);
   const prefixTimer = useRef<number | null>(null);
@@ -282,9 +334,11 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
             <Settings className="h-4 w-4" />
             <span className="truncate">{user.email}</span>
           </Link>
-          <button type="button" onClick={onLogout} aria-label="Logout" className="rounded p-1.5 hover:bg-slate-800 hover:text-white">
-            <LogOut className="h-4 w-4" />
-          </button>
+          {!demoMode && (
+            <button type="button" onClick={onLogout} aria-label="Logout" className="rounded p-1.5 hover:bg-slate-800 hover:text-white">
+              <LogOut className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -319,6 +373,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
           </div>
           <div className="flex items-center gap-2">{headerActions}</div>
         </header>
+
+        {demoMode && (
+          <div
+            role="status"
+            data-testid="demo-banner"
+            className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-1.5 text-xs font-medium text-amber-200"
+          >
+            <RefreshCw className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <span>
+              <strong className="font-semibold text-amber-100">Demo Mode</strong> — {formatDemoCountdown(demoResetAt, nowMs)}
+            </span>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}

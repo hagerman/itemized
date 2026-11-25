@@ -37,6 +37,9 @@ const AppRoutes: React.FC = () => {
     );
   }
 
+  const demoMode = Boolean(authStatus.demo_mode);
+  const demoResetAt = authStatus.demo_reset_at;
+
   const handleLogout = async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
     qc.clear();
@@ -45,15 +48,15 @@ const AppRoutes: React.FC = () => {
 
   return (
     <Routes>
-      <Route path="/" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Inventory"><ProductsPage /></Layout>} />
-      <Route path="/search" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Search"><SearchPage /></Layout>} />
-      <Route path="/products/new" element={<Layout user={authStatus.user} onLogout={handleLogout} title="New Product"><ProductFormPage /></Layout>} />
-      <Route path="/products/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Product"><ProductDetailPage /></Layout>} />
-      <Route path="/products/:id/edit" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Edit Product"><ProductFormPage /></Layout>} />
-      <Route path="/categories" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Categories"><CategoriesPage /></Layout>} />
-      <Route path="/locations" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Locations"><LocationsPage /></Layout>} />
-      <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location"><LocationDetailPage /></Layout>} />
-      <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings"><SettingsPage user={authStatus.user} /></Layout>} />
+      <Route path="/" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Inventory" demoMode={demoMode} demoResetAt={demoResetAt}><ProductsPage /></Layout>} />
+      <Route path="/search" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Search" demoMode={demoMode} demoResetAt={demoResetAt}><SearchPage /></Layout>} />
+      <Route path="/products/new" element={<Layout user={authStatus.user} onLogout={handleLogout} title="New Product" demoMode={demoMode} demoResetAt={demoResetAt}><ProductFormPage /></Layout>} />
+      <Route path="/products/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Product" demoMode={demoMode} demoResetAt={demoResetAt}><ProductDetailPage /></Layout>} />
+      <Route path="/products/:id/edit" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Edit Product" demoMode={demoMode} demoResetAt={demoResetAt}><ProductFormPage /></Layout>} />
+      <Route path="/categories" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Categories" demoMode={demoMode} demoResetAt={demoResetAt}><CategoriesPage /></Layout>} />
+      <Route path="/locations" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Locations" demoMode={demoMode} demoResetAt={demoResetAt}><LocationsPage /></Layout>} />
+      <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location" demoMode={demoMode} demoResetAt={demoResetAt}><LocationDetailPage /></Layout>} />
+      <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt}><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

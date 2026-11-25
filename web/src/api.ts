@@ -13,6 +13,8 @@ export interface AuthStatus {
   oidc_enabled: boolean;
   oidc_force: boolean;
   llm_enabled?: boolean;
+  demo_mode?: boolean;
+  demo_reset_at?: string;
   user: User | null;
 }
 

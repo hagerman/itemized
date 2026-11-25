@@ -724,6 +724,12 @@ func (s *Server) handleInventoryApply(w http.ResponseWriter, r *http.Request) {
 // --- UPC & LLM Handlers ---
 
 func (s *Server) handleUPCLookup(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode && s.DemoUPCLimiter != nil {
+		if !s.DemoUPCLimiter.Allow("ip:" + clientIP(r, s.TrustProxy)) {
+			writeError(w, http.StatusTooManyRequests, "UPC lookup rate limit exceeded (5 per minute in demo mode)")
+			return
+		}
+	}
 	var req struct {
 		Barcode string `json:"barcode"`
 	}
@@ -855,6 +861,9 @@ func (s *Server) getTemplateOverride(ctx context.Context, entityType string) str
 }
 
 func (s *Server) printToActivePrinters(ctx context.Context, entityType string, payload printer.LabelPayload) []string {
+	if s.DemoMode {
+		return []string{"label printing is disabled in demo mode"}
+	}
 	printers, err := s.listPrinters(ctx, true)
 	if err != nil || len(printers) == 0 {
 		return nil
@@ -1029,6 +1038,10 @@ func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTestPrinter(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "printer testing is disabled in demo mode")
+		return
+	}
 	id, err := parseIDParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid printer id")

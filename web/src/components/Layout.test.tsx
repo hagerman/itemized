@@ -305,4 +305,43 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Scan \/ Action/i })[0]);
     expect(screen.getByRole("button", { name: "Consume" }).className).toContain("bg-indigo-600");
   });
+
+  it("renders demo banner with reset countdown and hides logout button when demoMode is active", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ status_counts: {} }), { status: 200 });
+      })
+    );
+
+    const futureReset = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "demo@itemizedapp.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+            demoMode={true}
+            demoResetAt={futureReset}
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const banner = screen.getByTestId("demo-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("Demo Mode");
+    expect(banner.textContent).toMatch(/resets in \d+m/i);
+    expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+  });
 });

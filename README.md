@@ -45,6 +45,8 @@ When running behind a reverse proxy, set:
 | `LLM_MODEL` | | LLM model name for optional UPC normalization |
 | `LLM_BASE_URL` | | Custom endpoint (e.g. `http://ollama:11434/v1`) |
 | `LLM_API_KEY` | | API key for the configured LLM provider |
+| `DEMO_MODE` | `false` | Set to `true` to run in public demo mode (bypasses login as demo admin, seeds sample household data, sandboxes outbound printer/OIDC/LLM calls, rate-limits UPC lookup to 5/min) |
+| `DEMO_RESET_INTERVAL` | `1h` | Reset interval for demo mode (Go duration, aligned to wall-clock boundaries) |
 
 All instance settings can also be edited in **Settings** after first-run setup.
 

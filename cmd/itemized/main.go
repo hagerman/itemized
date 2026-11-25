@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"itemized/internal/api"
 	"itemized/internal/db"
+	"itemized/internal/demo"
 	"itemized/web"
 )
 
@@ -36,6 +38,28 @@ func main() {
 	}
 
 	srv := api.NewServer(conn, staticFS)
+
+	demoCtx, demoCancel := context.WithCancel(context.Background())
+	defer demoCancel()
+
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("DEMO_MODE")), "true") {
+		interval := demo.DefaultResetInterval
+		if raw := strings.TrimSpace(os.Getenv("DEMO_RESET_INTERVAL")); raw != "" {
+			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+				interval = d
+			} else {
+				log.Printf("invalid DEMO_RESET_INTERVAL %q, falling back to %s", raw, demo.DefaultResetInterval)
+			}
+		}
+		demoMgr, err := demo.NewManager(conn, interval)
+		if err != nil {
+			log.Fatalf("failed to initialize demo mode: %v", err)
+		}
+		srv.EnableDemoMode(demoMgr)
+		demoMgr.Start(demoCtx)
+		log.Printf("Demo mode enabled (reset interval: %s, next reset: %s)", interval, demoMgr.NextResetAt().Format(time.RFC3339))
+	}
+
 	httpServer := &http.Server{
 		Addr:              ":" + port,
 		Handler:           srv.Handler(),
@@ -53,6 +77,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
+	demoCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)

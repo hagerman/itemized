@@ -245,6 +245,28 @@ func (s *Service) GetUser(ctx context.Context, id int64) (*User, error) {
 	return &u, nil
 }
 
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	var u User
+	var iss, sub sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, email, role, oidc_issuer, oidc_subject, created_at, updated_at
+		FROM users WHERE email = ?
+	`, normalizeEmail(email)).Scan(&u.ID, &u.Email, &u.Role, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if iss.Valid {
+		u.OIDCIssuer = &iss.String
+	}
+	if sub.Valid {
+		u.OIDCSubject = &sub.String
+	}
+	return &u, nil
+}
+
 func (s *Service) UpdateUserRole(ctx context.Context, id int64, role string) (*User, error) {
 	if role != RoleAdmin && role != RoleMember {
 		return nil, ErrInvalidRole

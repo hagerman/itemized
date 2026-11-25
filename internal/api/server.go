@@ -16,26 +16,32 @@ import (
 
 	"itemized/internal/auth"
 	"itemized/internal/db"
+	"itemized/internal/demo"
 	"itemized/internal/llm"
 	"itemized/internal/printer"
 	"itemized/internal/upc"
 )
 
 const (
-	maxJSONBodyBytes = 1 << 20 // 1 MiB
-	maxBatchQuantity = 500
+	maxJSONBodyBytes    = 1 << 20 // 1 MiB
+	maxBatchQuantity    = 500
+	demoUPCRateLimit    = 5
+	demoUPCRateWindow   = time.Minute
 )
 
 type Server struct {
-	DB           *sql.DB
-	Auth         *auth.Service
-	OIDC         *auth.OIDCManager
-	Printer      *printer.Service
-	UPC          *upc.Client
-	LLM          *llm.Classifier
-	StaticFS     fs.FS
-	LoginLimiter *loginRateLimiter
-	TrustProxy   bool
+	DB             *sql.DB
+	Auth           *auth.Service
+	OIDC           *auth.OIDCManager
+	Printer        *printer.Service
+	UPC            *upc.Client
+	LLM            *llm.Classifier
+	StaticFS       fs.FS
+	LoginLimiter   *loginRateLimiter
+	DemoUPCLimiter *loginRateLimiter
+	DemoMode       bool
+	DemoManager    *demo.Manager
+	TrustProxy     bool
 }
 
 func NewServer(conn *sql.DB, staticFS fs.FS) *Server {
@@ -50,6 +56,13 @@ func NewServer(conn *sql.DB, staticFS fs.FS) *Server {
 		LoginLimiter: newLoginRateLimiter(defaultLoginRateLimit, defaultLoginRateWindow),
 		TrustProxy:   strings.EqualFold(strings.TrimSpace(os.Getenv("TRUST_PROXY")), "true"),
 	}
+}
+
+// EnableDemoMode configures the server to run in public demo mode with the given reset manager.
+func (s *Server) EnableDemoMode(mgr *demo.Manager) {
+	s.DemoMode = true
+	s.DemoManager = mgr
+	s.DemoUPCLimiter = newLoginRateLimiter(demoUPCRateLimit, demoUPCRateWindow)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -152,14 +165,50 @@ func (s *Server) Handler() http.Handler {
 	authed.Handle("PUT /api/label-templates/{entityType}", adminOnly(s.handleUpsertLabelTemplate))
 	authed.Handle("DELETE /api/label-templates/{entityType}", adminOnly(s.handleResetLabelTemplate))
 
-	mux.Handle("/api/", auth.RequireAuth(s.Auth, authed))
+	mux.Handle("/api/", s.requireAuthMiddleware(authed))
 
 	// SPA static file fallback
 	if s.StaticFS != nil {
 		mux.Handle("/", s.spaHandler())
 	}
 
+	if s.DemoMode && s.DemoManager != nil {
+		return s.demoResetMiddleware(mux)
+	}
+
 	return mux
+}
+
+func (s *Server) demoResetMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/up" {
+			if err := s.DemoManager.EnsureFresh(r.Context()); err != nil {
+				writeInternalError(w, "demo reset", err)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) demoUser(ctx context.Context) (*auth.User, error) {
+	return s.Auth.GetUserByEmail(ctx, demo.DemoAdminEmail)
+}
+
+func (s *Server) requireAuthMiddleware(next http.Handler) http.Handler {
+	standard := auth.RequireAuth(s.Auth, next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.DemoMode {
+			u, err := s.demoUser(r.Context())
+			if err != nil {
+				writeInternalError(w, "demo auth user lookup", err)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(auth.WithAuth(r.Context(), u, nil)))
+			return
+		}
+		standard.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) spaHandler() http.Handler {
@@ -274,6 +323,9 @@ func (s *Server) dueDateAverageCount(ctx context.Context) int {
 }
 
 func (s *Server) oidcConfig(ctx context.Context, r *http.Request) auth.OIDCConfig {
+	if s.DemoMode {
+		return auth.OIDCConfig{}
+	}
 	autoProv := strings.EqualFold(s.getSetting(ctx, "oidc_auto_provision", "OIDC_AUTO_PROVISION", "false"), "true")
 	force := strings.EqualFold(s.getSetting(ctx, "oidc_force", "OIDC_FORCE", "false"), "true")
 	return auth.OIDCConfig{
@@ -287,6 +339,9 @@ func (s *Server) oidcConfig(ctx context.Context, r *http.Request) auth.OIDCConfi
 }
 
 func (s *Server) llmConfig(ctx context.Context) llm.Config {
+	if s.DemoMode {
+		return llm.Config{}
+	}
 	return llm.Config{
 		Provider: s.getSetting(ctx, "llm_provider", "LLM_PROVIDER", ""),
 		Model:    s.getSetting(ctx, "llm_model", "LLM_MODEL", ""),
@@ -298,6 +353,27 @@ func (s *Server) llmConfig(ctx context.Context) llm.Config {
 // --- Auth & User Handlers ---
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		u, err := s.demoUser(r.Context())
+		if err != nil {
+			writeInternalError(w, "demo auth status user", err)
+			return
+		}
+		resp := map[string]any{
+			"initialized":  true,
+			"oidc_enabled": false,
+			"oidc_force":   false,
+			"llm_enabled":  false,
+			"demo_mode":    true,
+			"user":         u,
+		}
+		if s.DemoManager != nil {
+			resp["demo_reset_at"] = s.DemoManager.NextResetAt().UTC().Format(time.RFC3339)
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
 	count, err := s.Auth.UserCount(r.Context())
 	if err != nil {
 		writeInternalError(w, "auth status user count", err)
@@ -315,11 +391,16 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		"oidc_enabled": oidcCfg.Enabled(),
 		"oidc_force":   oidcCfg.ForceActive(),
 		"llm_enabled":  s.llmConfig(r.Context()).Enabled(),
+		"demo_mode":    false,
 		"user":         currentUser,
 	})
 }
 
 func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -346,6 +427,10 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	if s.oidcConfig(r.Context(), r).ForceActive() {
 		writeError(w, http.StatusForbidden, "local password login is disabled; sign in with OIDC")
 		return
@@ -399,6 +484,10 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	if tok := auth.ExtractToken(r); tok != "" {
 		_ = s.Auth.RevokeToken(r.Context(), tok)
 	}
@@ -407,6 +496,10 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	cfg := s.oidcConfig(r.Context(), r)
 	if !cfg.Enabled() {
 		writeError(w, http.StatusNotFound, "oidc not configured")
@@ -426,6 +519,10 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	cfg := s.oidcConfig(r.Context(), r)
 	res, err := s.OIDC.CompleteAuth(r.Context(), cfg, r.URL.Query().Get("state"), r.URL.Query().Get("code"))
 	if err != nil {
@@ -456,6 +553,10 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
+	if s.DemoMode {
+		writeError(w, http.StatusForbidden, "disabled in demo mode")
+		return
+	}
 	var req struct {
 		Email           string `json:"email"`
 		CurrentPassword string `json:"current_password"`
@@ -515,10 +616,22 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": u})
 }
 
+func (s *Server) isProtectedDemoAdmin(ctx context.Context, userID int64) bool {
+	if !s.DemoMode {
+		return false
+	}
+	u, err := s.Auth.GetUser(ctx, userID)
+	return err == nil && strings.EqualFold(u.Email, demo.DemoAdminEmail)
+}
+
 func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if s.isProtectedDemoAdmin(r.Context(), id) {
+		writeError(w, http.StatusForbidden, "cannot modify the demo administrator account in demo mode")
 		return
 	}
 	if current := auth.UserFromContext(r.Context()); current != nil && current.ID == id {
@@ -553,6 +666,10 @@ func (s *Server) handleResetUserPassword(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid user id")
 		return
 	}
+	if s.isProtectedDemoAdmin(r.Context(), id) {
+		writeError(w, http.StatusForbidden, "cannot modify the demo administrator account in demo mode")
+		return
+	}
 	var req struct {
 		Password string `json:"password"`
 	}
@@ -575,6 +692,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if s.isProtectedDemoAdmin(r.Context(), id) {
+		writeError(w, http.StatusForbidden, "cannot modify the demo administrator account in demo mode")
 		return
 	}
 	if current := auth.UserFromContext(r.Context()); current != nil && current.ID == id {
@@ -620,46 +741,48 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	allowed := map[string]bool{
 		"base_url":               true,
 		"due_date_average_count": true,
-		"oidc_issuer":            true,
-		"oidc_client_id":         true,
-		"oidc_client_secret":     true,
-		"oidc_auto_provision":    true,
-		"oidc_force":             true,
-		"llm_provider":           true,
-		"llm_model":              true,
-		"llm_api_key":            true,
-		"llm_base_url":           true,
+		"oidc_issuer":            !s.DemoMode,
+		"oidc_client_id":         !s.DemoMode,
+		"oidc_client_secret":     !s.DemoMode,
+		"oidc_auto_provision":    !s.DemoMode,
+		"oidc_force":             !s.DemoMode,
+		"llm_provider":           !s.DemoMode,
+		"llm_model":              !s.DemoMode,
+		"llm_api_key":            !s.DemoMode,
+		"llm_base_url":           !s.DemoMode,
 	}
 
-	oidcCfg := s.oidcConfig(r.Context(), r)
-	nextIssuer := oidcCfg.Issuer
-	nextClientID := oidcCfg.ClientID
-	nextForce := oidcCfg.Force
-	explicitForce := false
+	if !s.DemoMode {
+		oidcCfg := s.oidcConfig(r.Context(), r)
+		nextIssuer := oidcCfg.Issuer
+		nextClientID := oidcCfg.ClientID
+		nextForce := oidcCfg.Force
+		explicitForce := false
 
-	if v, ok := req["oidc_issuer"]; ok && v != nil {
-		nextIssuer = strings.TrimSpace(fmt.Sprintf("%v", v))
-	}
-	if v, ok := req["oidc_client_id"]; ok && v != nil {
-		nextClientID = strings.TrimSpace(fmt.Sprintf("%v", v))
-	}
-	if v, ok := req["oidc_force"]; ok && v != nil {
-		nextForce = strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", v)), "true")
-		explicitForce = true
-	}
-
-	nextEnabled := nextIssuer != "" && nextClientID != ""
-	if nextForce && !nextEnabled {
-		if explicitForce {
-			writeError(w, http.StatusUnprocessableEntity, "configure OIDC issuer and client ID before forcing OIDC")
-			return
+		if v, ok := req["oidc_issuer"]; ok && v != nil {
+			nextIssuer = strings.TrimSpace(fmt.Sprintf("%v", v))
 		}
-		req["oidc_force"] = "false"
-	} else if explicitForce {
-		if nextForce {
-			req["oidc_force"] = "true"
-		} else {
+		if v, ok := req["oidc_client_id"]; ok && v != nil {
+			nextClientID = strings.TrimSpace(fmt.Sprintf("%v", v))
+		}
+		if v, ok := req["oidc_force"]; ok && v != nil {
+			nextForce = strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", v)), "true")
+			explicitForce = true
+		}
+
+		nextEnabled := nextIssuer != "" && nextClientID != ""
+		if nextForce && !nextEnabled {
+			if explicitForce {
+				writeError(w, http.StatusUnprocessableEntity, "configure OIDC issuer and client ID before forcing OIDC")
+				return
+			}
 			req["oidc_force"] = "false"
+		} else if explicitForce {
+			if nextForce {
+				req["oidc_force"] = "true"
+			} else {
+				req["oidc_force"] = "false"
+			}
 		}
 	}
 
@@ -678,6 +801,9 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 // --- QR Redirect Handlers (/go/i/:id, /go/p/:id, /go/l/:id) ---
 
 func (s *Server) requireBrowserAuth(w http.ResponseWriter, r *http.Request) bool {
+	if s.DemoMode {
+		return true
+	}
 	tok := auth.ExtractToken(r)
 	if _, _, err := s.Auth.ValidateToken(r.Context(), tok); err != nil {
 		http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)

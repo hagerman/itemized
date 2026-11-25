@@ -201,4 +201,52 @@ describe("SettingsPage role-based visibility", () => {
       expect(body.oidc_force).toBe("true");
     });
   });
+
+  it("disables Account, OIDC, and LLM controls and shows a demo notice when demoMode is active", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/settings") {
+        return new Response(
+          JSON.stringify({
+            base_url: "https://demo.itemizedapp.com",
+            due_date_average_count: 3,
+            oidc_issuer: "",
+            oidc_client_id: "",
+            oidc_has_secret: false,
+            oidc_auto_provision: false,
+            oidc_force: false,
+            llm_provider: "",
+            llm_model: "",
+            llm_base_url: "",
+            llm_has_api_key: false,
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/users") {
+        return new Response(JSON.stringify({ users: [ADMIN_USER] }), { status: 200 });
+      }
+      if (url === "/api/printers") {
+        return new Response(JSON.stringify({ printers: [] }), { status: 200 });
+      }
+      if (url === "/api/label-templates") {
+        return new Response(JSON.stringify({ templates: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <SettingsPage user={ADMIN_USER} demoMode={true} />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText(/Demo mode is active/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update Account" })).toBeDisabled();
+    expect(screen.getByPlaceholderText("Issuer URL")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Client ID")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Model name")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Base URL (optional)")).toBeDisabled();
+  });
 });

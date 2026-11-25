@@ -5,9 +5,10 @@ import { apiFetch, AppSettings, LabelTemplate, PrinterRecord, User } from "../ap
 
 interface SettingsPageProps {
   user: User;
+  demoMode?: boolean;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = false }) => {
   const qc = useQueryClient();
   const isAdmin = user.role === "admin";
   const [notice, setNotice] = useState<string | null>(null);
@@ -143,27 +144,35 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      {demoMode && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2.5 text-sm text-amber-200">
+          Demo mode is active: Account changes, OIDC, LLM configuration, and outbound printer connections are disabled.
+        </div>
+      )}
       {notice && <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm text-emerald-200">{notice}</div>}
       {error && <div className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-sm text-rose-200">{error}</div>}
 
       {/* Account (All Users) */}
       <form onSubmit={saveAccount} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h2 className="text-base font-semibold text-white">Account</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-white">Account</h2>
+          {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-xs text-slate-400">
             Email address
-            <input type="email" required value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input type="email" required disabled={demoMode} value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
           </label>
           <label className="block text-xs text-slate-400">
             Current password
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Required to change password" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input type="password" disabled={demoMode} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Required to change password" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
           </label>
           <label className="block text-xs text-slate-400">
             New password
-            <input type="password" minLength={newPassword ? 8 : undefined} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input type="password" disabled={demoMode} minLength={newPassword ? 8 : undefined} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Leave blank to keep current" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
           </label>
         </div>
-        <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Update Account</button>
+        <button type="submit" disabled={demoMode} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">Update Account</button>
       </form>
 
       {/* Instance Configuration (Admin Only) */}
@@ -182,26 +191,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
         </div>
 
         <div className="border-t border-slate-800 pt-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">OIDC (Optional)</h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <input value={oidcIssuer} onChange={(e) => setOidcIssuer(e.target.value)} placeholder="Issuer URL" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-            <input value={oidcClientId} onChange={(e) => setOidcClientId(e.target.value)} placeholder="Client ID" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-            <input type="password" value={oidcClientSecret} onChange={(e) => setOidcClientSecret(e.target.value)} placeholder={settings?.oidc_has_secret ? "Secret saved (leave blank)" : "Client Secret"} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">OIDC (Optional)</h3>
+            {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
           </div>
-          <label className={`mt-2 flex items-center gap-2 text-xs ${oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <input disabled={demoMode} value={oidcIssuer} onChange={(e) => setOidcIssuer(e.target.value)} placeholder="Issuer URL" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
+            <input disabled={demoMode} value={oidcClientId} onChange={(e) => setOidcClientId(e.target.value)} placeholder="Client ID" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
+            <input disabled={demoMode} type="password" value={oidcClientSecret} onChange={(e) => setOidcClientSecret(e.target.value)} placeholder={settings?.oidc_has_secret ? "Secret saved (leave blank)" : "Client Secret"} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
+          </div>
+          <label className={`mt-2 flex items-center gap-2 text-xs ${!demoMode && oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
             <input
               type="checkbox"
-              checked={oidcConfigured && oidcAutoProv}
-              disabled={!oidcConfigured}
+              checked={!demoMode && oidcConfigured && oidcAutoProv}
+              disabled={demoMode || !oidcConfigured}
               onChange={(e) => setOidcAutoProv(e.target.checked)}
             />
             Auto-provision new household members on OIDC login
           </label>
-          <label className={`mt-2 flex items-center gap-2 text-xs ${oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
+          <label className={`mt-2 flex items-center gap-2 text-xs ${!demoMode && oidcConfigured ? "text-slate-300" : "text-slate-500"}`}>
             <input
               type="checkbox"
-              checked={oidcConfigured && oidcForce}
-              disabled={!oidcConfigured}
+              checked={!demoMode && oidcConfigured && oidcForce}
+              disabled={demoMode || !oidcConfigured}
               onChange={(e) => setOidcForce(e.target.checked)}
             />
             Force OIDC login (disable local password sign-in)
@@ -209,18 +221,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user }) => {
         </div>
 
         <div className="border-t border-slate-800 pt-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">LLM Product Classification (Optional)</h3>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">LLM Product Classification (Optional)</h3>
+            {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-            <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+            <select disabled={demoMode} value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50">
               <option value="">Disabled</option>
               <option value="anthropic">Anthropic</option>
               <option value="openai">OpenAI</option>
               <option value="gemini">Gemini</option>
               <option value="openai-compatible">OpenAI-Compatible (Ollama)</option>
             </select>
-            <input value={llmModel} onChange={(e) => setLlmModel(e.target.value)} placeholder="Model name" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-            <input value={llmBaseUrl} onChange={(e) => setLlmBaseUrl(e.target.value)} placeholder="Base URL (optional)" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-            <input type="password" value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} placeholder={settings?.llm_has_api_key ? "API key saved" : "API Key"} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input disabled={demoMode} value={llmModel} onChange={(e) => setLlmModel(e.target.value)} placeholder="Model name" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
+            <input disabled={demoMode} value={llmBaseUrl} onChange={(e) => setLlmBaseUrl(e.target.value)} placeholder="Base URL (optional)" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
+            <input disabled={demoMode} type="password" value={llmApiKey} onChange={(e) => setLlmApiKey(e.target.value)} placeholder={settings?.llm_has_api_key ? "API key saved" : "API Key"} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
           </div>
         </div>
 
