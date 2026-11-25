@@ -57,7 +57,7 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators; provide filter, sort, and create controls that collapse into a compact single-row icon sort dropdown button and `+` create button when full labels do not fit on one line; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators; provide filter, sort, clear-filters, and create controls that collapse into a compact single-row icon sort dropdown button and `+` create button when full labels do not fit on one line, without shifting the product list downward when the inline `Clear Filters` control appears on wider viewports; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
 
 #### Scenario: Compact single-row toolbar on narrow index viewports
 - **WHEN** a user views an inventory index page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a narrow viewport where the filter input, full `Sort: ...` select, and `+ New Product` button do not fit on one line
@@ -70,6 +70,10 @@ The Products view SHALL display matching products with stock counts, next-due it
 #### Scenario: Full-label toolbar controls on wider viewports
 - **WHEN** a user views an inventory index page on a wider viewport where the filter input, full `Sort: ...` select, and `+ New Product` button fit on one line
 - **THEN** the toolbar displays the filter input, full `Sort: ...` dropdown, and `+ New Product` button with visible text labels on a single row
+
+#### Scenario: Applying a filter on wider viewports shows inline Clear Filters without vertical layout shift
+- **WHEN** a user applies an active filter (search text, category, or location) on an inventory index page at a wider viewport where the `Clear Filters` button fits inline in the primary toolbar row
+- **THEN** the inline `Clear Filters` button appears in the primary toolbar row without adding extra vertical spacing below the toolbar or pushing the product list downward, while narrower viewports continue to render the wrapped `Clear Filters` button in a spaced secondary row below the primary toolbar row
 
 #### Scenario: Quick fuzzy search navigates to product
 - **WHEN** a user opens Quick Search from the desktop sidebar, types a partial product name, and selects a result

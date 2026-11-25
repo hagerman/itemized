@@ -109,4 +109,35 @@ describe("ProductsPage responsive index toolbar", () => {
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("listbox", { name: "Sort options" })).not.toBeInTheDocument();
   });
+
+  it("renders Clear Filters without adding space-y layout shift on the toolbar container", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: MOCK_PRODUCTS }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/?status=in_stock&category_id=1"]}>
+          <ProductsPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText("Test")).toBeInTheDocument());
+
+    const toolbar = screen.getByTestId("products-toolbar");
+    expect(toolbar).toHaveClass("@container");
+    expect(toolbar).not.toHaveClass("space-y-2");
+
+    const row = screen.getByTestId("products-toolbar-row");
+    const clearButtons = screen.getAllByRole("button", { name: /Clear Filters/i });
+    expect(clearButtons).toHaveLength(2);
+
+    const [inlineClear, wrappedClear] = clearButtons;
+    expect(row).toContainElement(inlineClear);
+    expect(inlineClear).toHaveClass("hidden", "@[640px]:flex");
+
+    expect(row).not.toContainElement(wrappedClear);
+    expect(wrappedClear.parentElement).toHaveClass("mt-2", "flex", "@[640px]:hidden");
+  });
 });

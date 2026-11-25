@@ -65,7 +65,7 @@ export const ProductsPage: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div data-testid="products-toolbar" className="@container space-y-2">
+      <div data-testid="products-toolbar" className="@container">
         <div data-testid="products-toolbar-row" className="flex flex-nowrap items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -157,7 +157,7 @@ export const ProductsPage: React.FC = () => {
         </div>
 
         {hasActiveFilters && (
-          <div className="flex @[640px]:hidden">
+          <div className="mt-2 flex @[640px]:hidden">
             <button
               type="button"
               onClick={clearFilters}
