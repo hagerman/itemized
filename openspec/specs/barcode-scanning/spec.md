@@ -30,7 +30,7 @@ The system SHALL serve `GET /go/i/:id`, `GET /go/p/:id`, and `GET /go/l/:id` acc
 - **THEN** the system resolves the merge alias and redirects to `/products/4`
 
 ### Requirement: Unified scan resolution endpoint
-The system SHALL provide `POST /api/scan/resolve` accepting raw scanned input (QR URL on any hostname containing `/go/{i,l,p}/<id-or-uuid>`, bare UUID, or retail barcode string) and returning the resolved entity kind (`item`, `product`, `location`, `barcode`, or `unknown`) with associated unconsumed items. When a scanned product QR URL (`/go/p/<id-or-uuid>`) or bare legacy UUID refers to a product that was merged into another product, `POST /api/scan/resolve` SHALL follow the merge alias and return `{ "kind": "product", "product": <destination-product>, "items": <destination-unconsumed-items> }` so all scanner workflows act against the destination product.
+The system SHALL provide `POST /api/scan/resolve` accepting raw scanned input (QR URL on any hostname containing `/go/{i,l,p}/<id-or-uuid>`, bare UUID, or retail barcode string) and returning the resolved entity kind (`item`, `product`, `location`, `barcode`, or `unknown`) with associated unconsumed items. When a scanned product QR URL (`/go/p/<id-or-uuid>`) or bare legacy UUID refers to a product that was merged into another product, `POST /api/scan/resolve` SHALL follow the merge alias and return `{ "kind": "product", "product": <destination-product>, "items": <destination-unconsumed-items> }` so all scanner workflows act against the destination product. When resolving a retail barcode against `barcodes`, the system SHALL first attempt an exact match on the trimmed input; if no exact match exists and the input is a numeric retail barcode (6–14 digits), the system SHALL fall back to matching equivalent leading-zero UPC/EAN/GTIN forms (such as 12-digit UPC-A ↔ 13-digit EAN-13 with a leading `0` ↔ 14-digit GTIN-14 with leading `0`/`00`, and 11-digit UPC-A without a leading `0` ↔ 12-digit UPC-A) and return `{ "kind": "barcode", ... }` with the matched variant and product.
 
 #### Scenario: Resolving a legacy QR URL from an old hostname
 - **WHEN** a client sends `{ "input": "https://my.itemizedapp.com/go/i/<legacy-uuid>" }` to `POST /api/scan/resolve`
@@ -41,7 +41,7 @@ The system SHALL provide `POST /api/scan/resolve` accepting raw scanned input (Q
 - **THEN** the system extracts `42`, looks up the item by integer `id`, and returns `{ "kind": "item", ... }` with the item and product metadata
 
 #### Scenario: Resolving an unrecognized retail barcode
-- **WHEN** a client sends a retail UPC not present in `barcodes`
+- **WHEN** a client sends a retail UPC not present in `barcodes` (under either exact or equivalent leading-zero retail barcode forms)
 - **THEN** the system returns `{ "kind": "unknown", "barcode": "<upc>" }`
 
 #### Scenario: Resolving a merged product QR URL by integer ID
@@ -52,8 +52,20 @@ The system SHALL provide `POST /api/scan/resolve` accepting raw scanned input (Q
 - **WHEN** Product A (with `legacy_uuid`) was merged into Product B (ID `4`) and a client sends `{ "input": "https://my.itemizedapp.com/go/p/<product-a-legacy-uuid>" }` or `{ "input": "<product-a-legacy-uuid>" }` to `POST /api/scan/resolve`
 - **THEN** the system resolves the merge alias and returns `{ "kind": "product", "product": <Product B>, "items": <Product B unconsumed items> }`
 
+#### Scenario: Resolving a 13-digit EAN-13 scan against a stored 12-digit UPC-A barcode
+- **WHEN** a variant has stored barcode `"048121277079"` and a client sends `{ "input": "0048121277079" }` to `POST /api/scan/resolve`
+- **THEN** the system matches the existing variant barcode and returns `{ "kind": "barcode", ... }` with that variant and its mapped product
+
+#### Scenario: Resolving a 12-digit UPC-A scan against a stored 13-digit leading-zero EAN-13 barcode
+- **WHEN** a variant has stored barcode `"0810732022887"` and a client sends `{ "input": "810732022887" }` to `POST /api/scan/resolve`
+- **THEN** the system matches the existing variant barcode and returns `{ "kind": "barcode", ... }` with that variant and its mapped product
+
+#### Scenario: Exact barcode match takes precedence over leading-zero equivalents
+- **WHEN** `barcodes` contains an exact match for the scanned input alongside another leading-zero-equivalent barcode
+- **THEN** `POST /api/scan/resolve` returns the exact-matching barcode record
+
 ### Requirement: Shared live scanner with mode switching
-The web application SHALL provide a Scanner modal (bottom-aligned on mobile, middle-aligned on desktop) with a mode switcher (`Purchase`, `Consume`, `Open`, `Transfer`, `Inventory`) sharing one live camera stream, torch toggle, lens selector, audio feedback, and keyboard/HID input. The camera SHALL auto-start on mobile devices and stay hidden by default on desktop. The modal SHALL stay compact when collapsed—with idle modes that have no mode-specific controls (`Purchase`, `Consume`, `Open`) rendering at the same compact height without extra empty spacing, while modes with default mode-specific controls (`Transfer`, `Inventory`) expand to fit those controls—and expand vertically into available viewport height to avoid unnecessary scrolling. When the camera API is unavailable in an insecure HTTP context, the scanner SHALL display an actionable message explaining that live camera scanning requires HTTPS (such as via a reverse proxy). When starting the live camera in a secure context without an explicit lens selection, the scanner SHALL request the rear-facing camera by default and populate the lens selector after camera permission is granted. Closing the Scanner modal SHALL reset all transient workflow state (including partially entered form fields, search results, lookup banners and in-flight lookup requests, item selections, unknown-barcode association state, transfer destination, inventory audit progress, status/error messages, and undo toasts) so reopening starts clean, while persisting only the user's last selected scan mode in browser storage so subsequent opens on that browser (including after page reloads) default to the previously chosen mode (falling back to `Purchase` when no valid mode is stored).
+The web application SHALL provide a Scanner modal (bottom-aligned on mobile, middle-aligned on desktop) with a mode switcher (`Purchase`, `Consume`, `Open`, `Transfer`, `Inventory`) sharing one live camera stream, torch toggle, lens selector, audio feedback, and keyboard/HID input. The camera SHALL auto-start on mobile devices and stay hidden by default on desktop. The modal SHALL stay compact when collapsed—with idle modes that have no mode-specific controls (`Purchase`, `Consume`, `Open`) rendering at the same compact height without extra empty spacing, while modes with default mode-specific controls (`Transfer`, `Inventory`) expand to fit those controls—and expand vertically into available viewport height to avoid unnecessary scrolling. When the camera API is unavailable in an insecure HTTP context, the scanner SHALL display an actionable message explaining that live camera scanning requires HTTPS (such as via a reverse proxy). When starting the live camera in a secure context without an explicit lens selection, the scanner SHALL request the rear-facing camera by default and populate the lens selector after camera permission is granted. Duplicate-scan debouncing SHALL treat equivalent leading-zero numeric retail barcode representations (such as 12-digit UPC-A and its 13-digit leading-zero EAN-13 form) as the same physical barcode within the debounce window. Closing the Scanner modal SHALL reset all transient workflow state (including partially entered form fields, search results, lookup banners and in-flight lookup requests, item selections, unknown-barcode association state, transfer destination, inventory audit progress, status/error messages, and undo toasts) so reopening starts clean, while persisting only the user's last selected scan mode in browser storage so subsequent opens on that browser (including after page reloads) default to the previously chosen mode (falling back to `Purchase` when no valid mode is stored).
 
 #### Scenario: Switching scan modes preserves camera session
 - **WHEN** a user switches from `Purchase` to `Consume` in the Scanner view
@@ -86,6 +98,10 @@ The web application SHALL provide a Scanner modal (bottom-aligned on mobile, mid
 #### Scenario: Rear camera is preferred by default and lens selector populates after permission
 - **WHEN** a user starts the live camera in a secure context without having manually switched lenses
 - **THEN** the scanner requests `{ facingMode: "environment" }` and refreshes the list of available video input devices after the camera stream starts so the lens switcher can cycle between cameras on iOS and other mobile browsers
+
+#### Scenario: Equivalent UPC-A and EAN-13 decodes within debounce window emit only once
+- **WHEN** the scanner decodes `"048121277079"` and then `"0048121277079"` within the 1500ms duplicate-scan debounce window
+- **THEN** the second decode is ignored as a duplicate scan
 
 #### Scenario: Closing and reopening resets all transient workflow state
 - **WHEN** a user enters data or starts a workflow inside `Scan / Action` (such as scanning an unknown barcode and typing a new product name in `Purchase`, selecting candidate items in `Consume`, choosing a destination in `Transfer`, or scanning items in `Inventory`), closes the modal, and reopens it
@@ -123,11 +139,15 @@ The live camera scanner SHALL continuously decode both 1D retail barcodes (UPC-A
 - **THEN** the scanner displays a visible error message in the camera banner instead of failing silently
 
 ### Requirement: Streamlined Purchase workflow
-The Purchase workflow SHALL resolve scanned barcodes or product searches, pre-fill `Due Date` from `calculated_due_days` or `default_due_days`, show loading indicators during UPC lookup and LLM classification for unknown barcodes, pre-fill the variant name from the UPC title and collapsible measurements from LLM classification, allow selecting or creating a product with one or two barcodes, create items with calculated due dates, and trigger label printing per `label_print_mode`.
+The Purchase workflow SHALL resolve scanned barcodes or product searches, pre-fill `Due Date` from `calculated_due_days` or `default_due_days`, show loading indicators during UPC lookup and LLM classification for unknown barcodes, pre-fill the variant name from the UPC title and collapsible measurements from LLM classification, allow selecting or creating a product with one or two barcodes, create items with calculated due dates, and trigger label printing per `label_print_mode`. When a scanned barcode resolves to an existing variant (`kind: "barcode"`), the Purchase workflow SHALL immediately use that mapped product and variant in the Confirm & Add step without calling OpenFoodFacts lookup or LLM classification, and SHALL cancel any in-flight unknown-barcode lookup/classification and clear stale lookup banners, classifier warnings, and product search hits.
 
 #### Scenario: Purchasing a known barcode
 - **WHEN** a user scans a known retail barcode in Purchase mode for a product with `calculated_due_days = 34` (or `default_due_days = 34`)
-- **THEN** the UI proceeds directly to the Confirm & Add step pre-populated with the matched product, variant, default quantity, default location, and `Due Date` set to `today + 34 days`
+- **THEN** the UI proceeds directly to the Confirm & Add step pre-populated with the matched product, variant, default quantity, default location, and `Due Date` set to `today + 34 days`, without calling `/api/upc/lookup` or `/api/upc/classify`
+
+#### Scenario: Known barcode scan cancels in-flight lookup and clears stale classification UI
+- **WHEN** an unknown barcode lookup or LLM classification is in flight (or its banner/search hits are visible) in Purchase mode and the user scans a barcode that resolves to an existing variant
+- **THEN** the UI immediately clears lookup/classification loading indicators, banners, warnings, and search hits, displays Confirm & Add for the matched product and variant, and discards any late response from the earlier lookup or classification request
 
 #### Scenario: Purchasing an unknown barcode
 - **WHEN** a user scans an unknown retail barcode in Purchase mode

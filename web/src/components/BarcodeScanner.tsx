@@ -65,6 +65,13 @@ function computeCaptureSize(videoWidth: number, videoHeight: number): { width: n
   };
 }
 
+function normalizeScanDebounceKey(code: string): string {
+  if (/^\d{11,14}$/.test(code)) {
+    return code.replace(/^0+/, "") || code;
+  }
+  return code;
+}
+
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   onScan,
   placeholder = "Scan barcode, QR URL, or type to search...",
@@ -116,10 +123,11 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     const code = raw.trim();
     if (!code) return;
     const now = Date.now();
-    if (lastCodeRef.current.code === code && now - lastCodeRef.current.at < 1500) {
+    const debounceKey = normalizeScanDebounceKey(code);
+    if (lastCodeRef.current.code === debounceKey && now - lastCodeRef.current.at < 1500) {
       return;
     }
-    lastCodeRef.current = { code, at: now };
+    lastCodeRef.current = { code: debounceKey, at: now };
     playBeep();
     triggerScanFlash();
     onScanRef.current(code);

@@ -303,11 +303,19 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
   const handlePurchaseScan = async (raw: string, res: ScanResolution) => {
     if (res.kind === "barcode") {
+      lookupSeqRef.current += 1;
+      setLookupPhase("idle");
+      setUpcHint(null);
+      setClassifyWarning(null);
+      setPurchaseSearchHits([]);
       setPurchaseProduct(res.product);
       setCreatingNew(false);
       setVariantId(res.variant_id);
       setVariantName(res.variant_name);
       setPurchaseBarcode(res.barcode.barcode);
+      setPurchaseBarcodeQty(res.barcode.default_quantity || 1);
+      setSecondBarcode("");
+      setSecondBarcodeQty(1);
       setPurchaseQty(res.barcode.default_quantity || 1);
       setPurchaseLocId(res.product.default_location_id);
       setPurchaseDueDate(computeDefaultDueDateStr(res.product));
@@ -317,11 +325,20 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       return;
     }
     if (res.kind === "product" || res.kind === "item") {
+      lookupSeqRef.current += 1;
+      setLookupPhase("idle");
+      setUpcHint(null);
+      setClassifyWarning(null);
+      setPurchaseSearchHits([]);
       const p = res.product;
       setPurchaseProduct(p);
       setCreatingNew(false);
       setVariantId(null);
+      setVariantName("");
       setPurchaseBarcode("");
+      setPurchaseBarcodeQty(1);
+      setSecondBarcode("");
+      setSecondBarcodeQty(1);
       setPurchaseQty(1);
       setPurchaseLocId(p.default_location_id);
       setPurchaseDueDate(computeDefaultDueDateStr(p));

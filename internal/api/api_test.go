@@ -1873,3 +1873,131 @@ func TestMergeProductsAndAliasResolution(t *testing.T) {
 		t.Fatalf("expected product_not_found redirect after destination deleted, got %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+func TestScanResolveRetailBarcodeEquivalence(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// Create category + location
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Pantry"}, tok)
+	var catResp struct{ Category Category }
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Shelf"}, tok)
+	var locResp struct{ Location Location }
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+
+	createProductWithBarcode := func(prodName, varName, barcode string) (Product, Variant) {
+		rec := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+			"name":                prodName,
+			"category_id":         catResp.Category.ID,
+			"default_location_id": locResp.Location.ID,
+		}, tok)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create product %s failed: %d %s", prodName, rec.Code, rec.Body.String())
+		}
+		var pResp struct{ Product Product }
+		_ = json.Unmarshal(rec.Body.Bytes(), &pResp)
+
+		rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", pResp.Product.ID), map[string]any{
+			"name": varName,
+		}, tok)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create variant %s failed: %d %s", varName, rec.Code, rec.Body.String())
+		}
+		var vResp struct{ Variant Variant }
+		_ = json.Unmarshal(rec.Body.Bytes(), &vResp)
+
+		rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/variants/%d/barcodes", vResp.Variant.ID), map[string]any{
+			"barcode":          barcode,
+			"default_quantity": 2,
+		}, tok)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create barcode %s failed: %d %s", barcode, rec.Code, rec.Body.String())
+		}
+		return pResp.Product, vResp.Variant
+	}
+
+	// Stored 12-digit UPC-A
+	bagelProd, bagelVar := createProductWithBarcode("Bagel", "THOMAS' Plain Bagels", "048121277079")
+	// Stored 13-digit leading-zero EAN-13
+	pastaProd, pastaVar := createProductWithBarcode("Pasta", "Imported Rigatoni", "0810732022887")
+	// Exact-match precedence pair: both 12-digit and 13-digit stored on distinct products
+	exact12Prod, exact12Var := createProductWithBarcode("Exact 12", "12-digit variant", "012345678905")
+	exact13Prod, exact13Var := createProductWithBarcode("Exact 13", "13-digit variant", "0012345678905")
+
+	resolve := func(input string) struct {
+		Kind        string  `json:"kind"`
+		VariantID   int64   `json:"variant_id"`
+		VariantName string  `json:"variant_name"`
+		Product     Product `json:"product"`
+		Barcode     any     `json:"barcode"`
+	} {
+		rec := doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{"input": input}, tok)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /api/scan/resolve %q expected 200, got %d: %s", input, rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Kind        string  `json:"kind"`
+			VariantID   int64   `json:"variant_id"`
+			VariantName string  `json:"variant_name"`
+			Product     Product `json:"product"`
+			Barcode     any     `json:"barcode"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+
+	// 13-digit EAN-13 scan matches stored 12-digit UPC-A
+	if got := resolve("0048121277079"); got.Kind != "barcode" || got.Product.ID != bagelProd.ID || got.VariantID != bagelVar.ID {
+		t.Fatalf("13-digit EAN-13 scan expected Bagel variant %d, got %+v", bagelVar.ID, got)
+	}
+
+	// 14-digit GTIN-14 scan matches stored 12-digit UPC-A
+	if got := resolve("00048121277079"); got.Kind != "barcode" || got.Product.ID != bagelProd.ID || got.VariantID != bagelVar.ID {
+		t.Fatalf("14-digit GTIN-14 scan expected Bagel variant %d, got %+v", bagelVar.ID, got)
+	}
+
+	// 11-digit leading-zero-stripped scan matches stored 12-digit UPC-A
+	if got := resolve("48121277079"); got.Kind != "barcode" || got.Product.ID != bagelProd.ID || got.VariantID != bagelVar.ID {
+		t.Fatalf("11-digit scan expected Bagel variant %d, got %+v", bagelVar.ID, got)
+	}
+
+	// 12-digit UPC-A scan matches stored 13-digit leading-zero EAN-13
+	if got := resolve("810732022887"); got.Kind != "barcode" || got.Product.ID != pastaProd.ID || got.VariantID != pastaVar.ID {
+		t.Fatalf("12-digit UPC-A scan expected Pasta variant %d, got %+v", pastaVar.ID, got)
+	}
+
+	// Exact match takes precedence when both 12-digit and 13-digit forms exist
+	if got := resolve("012345678905"); got.Kind != "barcode" || got.Product.ID != exact12Prod.ID || got.VariantID != exact12Var.ID {
+		t.Fatalf("exact 12-digit scan expected variant %d, got %+v", exact12Var.ID, got)
+	}
+	if got := resolve("0012345678905"); got.Kind != "barcode" || got.Product.ID != exact13Prod.ID || got.VariantID != exact13Var.ID {
+		t.Fatalf("exact 13-digit scan expected variant %d, got %+v", exact13Var.ID, got)
+	}
+
+	// Unrecognized retail barcode still returns unknown
+	if got := resolve("0999999999999"); got.Kind != "unknown" {
+		t.Fatalf("unrecognized barcode expected kind=unknown, got %+v", got)
+	}
+}

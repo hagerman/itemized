@@ -103,34 +103,78 @@ func (s *Server) handleScanResolve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 3. Retail barcode lookup in barcodes table
-	var b Barcode
-	var productID int64
-	var variantName string
-	err := s.DB.QueryRowContext(ctx, `
-		SELECT b.id, b.variant_id, b.barcode, b.default_quantity, b.created_at, b.updated_at, v.product_id, v.name
-		FROM barcodes b
-		JOIN variants v ON v.id = b.variant_id
-		WHERE b.barcode = ?
-	`, raw).Scan(&b.ID, &b.VariantID, &b.Barcode, &b.DefaultQuantity, &b.CreatedAt, &b.UpdatedAt, &productID, &variantName)
-	if err == nil {
-		p, _ := s.getProductByID(ctx, productID)
-		items, _ := s.listItemsByProduct(ctx, productID, false)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"kind":         "barcode",
-			"barcode":      b,
-			"variant_id":   b.VariantID,
-			"variant_name": variantName,
-			"product":      p,
-			"items":        items,
-		})
-		return
+	// 3. Retail barcode lookup in barcodes table (exact match first, then equivalent GTIN/UPC/EAN forms)
+	for _, candidate := range retailBarcodeCandidates(raw) {
+		var b Barcode
+		var productID int64
+		var variantName string
+		err := s.DB.QueryRowContext(ctx, `
+			SELECT b.id, b.variant_id, b.barcode, b.default_quantity, b.created_at, b.updated_at, v.product_id, v.name
+			FROM barcodes b
+			JOIN variants v ON v.id = b.variant_id
+			WHERE b.barcode = ?
+		`, candidate).Scan(&b.ID, &b.VariantID, &b.Barcode, &b.DefaultQuantity, &b.CreatedAt, &b.UpdatedAt, &productID, &variantName)
+		if err == nil {
+			p, _ := s.getProductByID(ctx, productID)
+			items, _ := s.listItemsByProduct(ctx, productID, false)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"kind":         "barcode",
+				"barcode":      b,
+				"variant_id":   b.VariantID,
+				"variant_name": variantName,
+				"product":      p,
+				"items":        items,
+			})
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"kind":    "unknown",
 		"barcode": raw,
 	})
+}
+
+func isASCIIAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// retailBarcodeCandidates returns ordered candidate barcode strings to look up
+// in the barcodes table: exact trimmed input first, followed by leading-zero
+// equivalent GTIN/UPC/EAN forms for 11-14 digit numeric retail barcodes.
+func retailBarcodeCandidates(raw string) []string {
+	candidates := []string{raw}
+	if len(raw) < 11 || len(raw) > 14 || !isASCIIAllDigits(raw) {
+		return candidates
+	}
+	trimmed := strings.TrimLeft(raw, "0")
+	if trimmed == "" {
+		return candidates
+	}
+	seen := map[string]bool{raw: true}
+	add := func(s string) {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			candidates = append(candidates, s)
+		}
+	}
+	for _, targetLen := range []int{12, 13, 14} {
+		if len(trimmed) <= targetLen {
+			add(strings.Repeat("0", targetLen-len(trimmed)) + trimmed)
+		}
+	}
+	if len(trimmed) >= 6 {
+		add(trimmed)
+	}
+	return candidates
 }
 
 func (s *Server) resolveItemByToken(ctx context.Context, token string) (*Item, error) {

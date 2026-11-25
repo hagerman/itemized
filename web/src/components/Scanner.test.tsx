@@ -1496,4 +1496,141 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     await waitFor(() => expect(screen.getByText("Unrecognized barcode or QR code.")).toBeInTheDocument());
     expect(productSearchUrls.length).toBe(searchCountBeforeBarcode);
   });
+
+  it("uses matched product directly in Purchase mode without lookup/classification and cancels in-flight unknown lookup", async () => {
+    let resolveUpc!: (resp: Response) => void;
+    let resolveClassify!: (resp: Response) => void;
+    let lookupCalls = 0;
+    let classifyCalls = 0;
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        const body = JSON.parse(String(init?.body || "{}"));
+        if (body.input === "048121277079" || body.input === "0048121277079") {
+          return new Response(
+            JSON.stringify({
+              kind: "barcode",
+              barcode: { id: 1080, variant_id: 1090, barcode: "048121277079", default_quantity: 2 },
+              variant_id: 1090,
+              variant_name: "THOMAS' Plain Bagels",
+              product: {
+                id: 95,
+                name: "Bagel",
+                category_id: 1,
+                category_name: "Bakery",
+                default_location_id: 1,
+                default_location_name: "Pantry",
+                default_due_days: 10,
+                calculated_due_days: null,
+                use_average_for_due_date: false,
+                label_print_mode: "per_item",
+              },
+              items: [],
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+      }
+      if (url === "/api/upc/lookup") {
+        lookupCalls += 1;
+        return new Promise<Response>((resolve) => {
+          resolveUpc = resolve;
+        });
+      }
+      if (url === "/api/upc/classify") {
+        classifyCalls += 1;
+        return new Promise<Response>((resolve) => {
+          resolveClassify = resolve;
+        });
+      }
+      return new Response(JSON.stringify({ products: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Bakery", parent_id: null, hierarchy_name: "Bakery" }]}
+          locations={[{ id: 1, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Pantry" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    const submitCode = (code: string) => {
+      fireEvent.change(input, { target: { value: code } });
+      fireEvent.submit(input.closest("form")!);
+    };
+
+    // 1. Direct scan of a known barcode skips OpenFoodFacts lookup and LLM classification
+    submitCode("048121277079");
+    await waitFor(() => expect(screen.getByText("Confirm & Add: Bagel")).toBeInTheDocument());
+    expect(screen.getByText("Matched Bagel (THOMAS' Plain Bagels)")).toBeInTheDocument();
+    expect(lookupCalls).toBe(0);
+    expect(classifyCalls).toBe(0);
+    expect(screen.queryByText("Looking up barcode in OpenFoodFacts...")).not.toBeInTheDocument();
+    expect(screen.queryByText("Classifying product...")).not.toBeInTheDocument();
+
+    // 2. Start an unknown barcode lookup + classification, then scan a known barcode before it completes
+    submitCode("999888777666");
+    await waitFor(() =>
+      expect(screen.getByText("Looking up barcode in OpenFoodFacts...")).toBeInTheDocument()
+    );
+    resolveUpc(
+      new Response(
+        JSON.stringify({ found: true, result: { title: "Unknown Mystery Snack", measurement: "8 oz" } }),
+        { status: 200 }
+      )
+    );
+    await waitFor(() => expect(screen.getByText("Classifying product...")).toBeInTheDocument());
+
+    // Now scan the known barcode (using its 13-digit EAN-13 form) while classification is in flight
+    submitCode("0048121277079");
+    await waitFor(() => expect(screen.getByText("Confirm & Add: Bagel")).toBeInTheDocument());
+    expect(screen.queryByText("Classifying product...")).not.toBeInTheDocument();
+    expect(screen.queryByText(/OpenFoodFacts: Unknown Mystery Snack/)).not.toBeInTheDocument();
+
+    // Late classification response from the earlier scan is discarded and does not flip UI back
+    resolveClassify(
+      new Response(
+        JSON.stringify({
+          enabled: true,
+          classification: { product_name: "Mystery Snack", category_id: 1 },
+        }),
+        { status: 200 }
+      )
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Confirm & Add: Bagel")).toBeInTheDocument();
+    expect(screen.queryByText("Create Product & Add Items")).not.toBeInTheDocument();
+  });
+
+  it("debounces equivalent 12-digit UPC-A and 13-digit leading-zero EAN-13 scans within 1500ms", () => {
+    const onScan = vi.fn();
+    render(<BarcodeScanner onScan={onScan} />);
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "048121277079" } });
+    fireEvent.submit(input.closest("form")!);
+
+    // Equivalent 13-digit EAN-13 within debounce window is ignored
+    fireEvent.change(input, { target: { value: "0048121277079" } });
+    fireEvent.submit(input.closest("form")!);
+
+    expect(onScan).toHaveBeenCalledTimes(1);
+    expect(onScan).toHaveBeenCalledWith("048121277079");
+
+    // Different barcode is not debounced
+    fireEvent.change(input, { target: { value: "048121277080" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(onScan).toHaveBeenCalledTimes(2);
+    expect(onScan).toHaveBeenLastCalledWith("048121277080");
+  });
 });
