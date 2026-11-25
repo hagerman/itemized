@@ -12,6 +12,7 @@ const LocationEcho = () => {
 describe("Layout sidebar hierarchy & filter toggle", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   it("renders indented short names and toggles off an already-selected location filter", async () => {
@@ -229,5 +230,79 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     expect(settingsSearch).not.toHaveAttribute("aria-current");
     expect(settingsSearch.className).not.toContain("text-indigo-400");
     expect(settingsSearch.className).not.toContain("bg-indigo-600/20");
+  });
+
+  it("retains the chosen Scan / Action mode across closes and reloads while resetting transient state", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") {
+          return new Response(
+            JSON.stringify({
+              locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }],
+            }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        }
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "049000028904" }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ status_counts: {}, products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Open Scan / Action, switch to Consume, trigger unknown barcode association state
+    const scanButtons = screen.getAllByRole("button", { name: /Scan \/ Action/i });
+    fireEvent.click(scanButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Consume" }));
+
+    const scanInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(scanInput, { target: { value: "049000028904" } });
+    fireEvent.submit(scanInput.closest("form")!);
+    await waitFor(() => expect(screen.getByText(/Unrecognized barcode 049000028904/)).toBeInTheDocument());
+
+    // Close and reopen via Scan / Action -> stays in Consume mode, transient banner/association cleared
+    fireEvent.click(screen.getByRole("button", { name: "Close scanner" }));
+    fireEvent.click(scanButtons[0]);
+
+    expect(screen.getByRole("button", { name: "Consume" }).className).toContain("bg-indigo-600");
+    expect(screen.queryByText(/Unrecognized barcode 049000028904/)).not.toBeInTheDocument();
+
+    // Unmount and remount Layout (simulating browser reload) -> Scan / Action still opens in Consume mode
+    unmount();
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Scan \/ Action/i })[0]);
+    expect(screen.getByRole("button", { name: "Consume" }).className).toContain("bg-indigo-600");
   });
 });

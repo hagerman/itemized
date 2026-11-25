@@ -21,7 +21,7 @@ import { apiFetch, Category, Location, Product, User } from "../api";
 import { BrandLogo } from "./BrandLogo";
 import { buildHierarchyTree, flattenHierarchyTree } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
-import { ScannerDrawer, ScanMode } from "./ScannerDrawer";
+import { ScannerDrawer } from "./ScannerDrawer";
 
 interface LayoutProps {
   user: User;
@@ -38,7 +38,6 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [treeTab, setTreeTab] = useState<"locations" | "categories">("locations");
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerMode, setScannerMode] = useState<ScanMode>("purchase");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
@@ -187,7 +186,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
         <div className="hidden space-y-1 border-t border-slate-800 pt-3 lg:block">
           <button
             type="button"
-            onClick={() => { setScannerMode("purchase"); setScannerOpen(true); }}
+            onClick={() => setScannerOpen(true)}
             className="flex w-full items-center gap-2.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
           >
             <ScanBarcode className="h-4 w-4" /> Scan / Action
@@ -343,7 +342,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
         </Link>
         <button
           type="button"
-          onClick={() => { setScannerMode("purchase"); setScannerOpen(true); }}
+          onClick={() => setScannerOpen(true)}
           className="flex flex-col items-center justify-center gap-0.5 bg-indigo-600 text-xs font-semibold text-white"
         >
           <ScanBarcode className="h-5 w-5" />
@@ -364,7 +363,6 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, headerAct
       {/* Unified Scanner Drawer */}
       <ScannerDrawer
         open={scannerOpen}
-        initialMode={scannerMode}
         onClose={() => setScannerOpen(false)}
         categories={categories}
         locations={locations}

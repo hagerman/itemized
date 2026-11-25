@@ -218,9 +218,12 @@ export const ProductDetailPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Responsive Header: icon-only on narrow mobile so all 4 actions stay on one row */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Responsive Header: right-aligned actions stay on the same line when space permits, wrapping right-aligned when constrained */}
+      <div
+        data-testid="product-detail-header"
+        className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:flex-nowrap"
+      >
+        <div className="flex min-w-0 max-w-full items-center gap-3">
           <Link to={backTo} aria-label={backLabel} className="shrink-0 rounded-lg border border-slate-800 p-2 text-slate-300 hover:bg-slate-800">
             <ArrowLeft className="h-4 w-4" />
           </Link>
@@ -232,7 +235,10 @@ export const ProductDetailPage: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div
+          data-testid="product-detail-header-actions"
+          className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:gap-2"
+        >
           <button
             type="button"
             aria-label={product.manually_added_to_shopping_list ? "Remove from Shopping List" : "Add to Shopping List"}

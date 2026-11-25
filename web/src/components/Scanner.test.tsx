@@ -17,11 +17,12 @@ vi.mock("zxing-wasm/reader/zxing_reader.wasm?url", () => ({
 }));
 
 import { BarcodeScanner } from "./BarcodeScanner";
-import { ScannerDrawer } from "./ScannerDrawer";
+import { SCAN_MODE_STORAGE_KEY, ScannerDrawer } from "./ScannerDrawer";
 
 describe("BarcodeScanner and ScannerDrawer", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
     prepareZXingModuleMock.mockReset();
     prepareZXingModuleMock.mockResolvedValue({});
     readBarcodesMock.mockReset();
@@ -667,5 +668,245 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     for (const cell of Array.from(grid!.children)) {
       expect(cell).toHaveClass("min-w-0");
     }
+  });
+
+  it("resets transient workflow state when closed and reopened while retaining the selected mode", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(JSON.stringify({ kind: "unknown", barcode: "049000028904" }), { status: 200 });
+      }
+      if (url === "/api/upc/lookup") {
+        return new Response(JSON.stringify({ found: false }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ products: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    const categories = [{ id: 1, name: "Dairy", parent_id: null, hierarchy_name: "Dairy" }];
+    const locations = [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }];
+
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={categories} locations={locations} />
+      </QueryClientProvider>
+    );
+
+    // Enter Purchase state: scan unknown barcode and type a product name
+    const mainInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(mainInput, { target: { value: "049000028904" } });
+    fireEvent.submit(mainInput.closest("form")!);
+
+    const nameInput = (await screen.findByPlaceholderText("Product name")) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "Oat Milk" } });
+    expect(nameInput.value).toBe("Oat Milk");
+
+    // Close and reopen in Purchase mode -> Purchase form and UPC banner are completely cleared
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={false} onClose={() => {}} categories={categories} locations={locations} />
+      </QueryClientProvider>
+    );
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={categories} locations={locations} />
+      </QueryClientProvider>
+    );
+
+    expect(screen.queryByPlaceholderText("Product name")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Barcode not found in OpenFoodFacts/)).not.toBeInTheDocument();
+
+    // Switch to Transfer, pick a destination, close, and reopen -> mode stays Transfer, destination resets
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Destination location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fridge" }));
+    expect(screen.getByRole("button", { name: "Destination location" })).toHaveTextContent("Fridge");
+
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={false} onClose={() => {}} categories={categories} locations={locations} />
+      </QueryClientProvider>
+    );
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={categories} locations={locations} />
+      </QueryClientProvider>
+    );
+
+    // Still in Transfer mode, but destination is reset to empty placeholder
+    expect(screen.getByRole("button", { name: "Transfer" }).className).toContain("bg-indigo-600");
+    expect(screen.getByRole("button", { name: "Destination location" })).toHaveTextContent("-- Choose destination --");
+  });
+
+  it("discards in-flight UPC lookup responses when closed before completion and reopened", async () => {
+    let resolveUpc!: (resp: Response) => void;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(JSON.stringify({ kind: "unknown", barcode: "012000001291" }), { status: 200 });
+      }
+      if (url === "/api/upc/lookup") {
+        return new Promise<Response>((resolve) => {
+          resolveUpc = resolve;
+        });
+      }
+      return new Response(JSON.stringify({ products: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+
+    const mainInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(mainInput, { target: { value: "012000001291" } });
+    fireEvent.submit(mainInput.closest("form")!);
+
+    await waitFor(() =>
+      expect(screen.getByText("Looking up barcode in OpenFoodFacts...")).toBeInTheDocument()
+    );
+
+    // Close modal before lookup resolves, then reopen
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={false} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+
+    // Resolve the stale lookup from the closed session
+    resolveUpc(
+      new Response(
+        JSON.stringify({ found: true, result: { title: "Stale Soda", measurement: "12 fl oz" } }),
+        { status: 200 }
+      )
+    );
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.queryByText(/Stale Soda/)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Product name")).not.toBeInTheDocument();
+  });
+
+  it("persists chosen scan mode in localStorage across remounts and falls back to Purchase on invalid or unavailable storage", () => {
+    const qc = new QueryClient();
+
+    // Invalid stored value falls back to Purchase
+    window.localStorage.setItem(SCAN_MODE_STORAGE_KEY, "invalid-mode");
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByRole("button", { name: "Purchase" }).className).toContain("bg-indigo-600");
+
+    // Switch to Consume -> persisted to localStorage
+    fireEvent.click(screen.getByRole("button", { name: "Consume" }));
+    expect(window.localStorage.getItem(SCAN_MODE_STORAGE_KEY)).toBe("consume");
+    unmount();
+
+    // Fresh mount (simulating browser reload) opens directly in Consume
+    const remounted = render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByRole("button", { name: "Consume" }).className).toContain("bg-indigo-600");
+    remounted.unmount();
+
+    // Storage access throwing falls back safely to Purchase
+    vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByRole("button", { name: "Purchase" }).className).toContain("bg-indigo-600");
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(screen.getByRole("button", { name: "Open" }).className).toContain("bg-indigo-600");
+  });
+
+  it("keeps idle Purchase mode compact like Consume and Open while allowing Transfer and Inventory controls", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(JSON.stringify({ kind: "unknown", barcode: "milk" }), { status: 200 });
+      }
+      if (url.startsWith("/api/products")) {
+        return new Response(
+          JSON.stringify({
+            products: [
+              {
+                id: 1,
+                name: "Milk, Whole",
+                category_id: 1,
+                category_name: "Dairy",
+                default_location_id: 1,
+                label_print_mode: "per_item",
+                use_average_for_due_date: true,
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Dairy", parent_id: null, hierarchy_name: "Dairy" }]}
+          locations={[{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const body = screen.getByTestId("scanner-body");
+
+    // Idle Purchase renders only BarcodeScanner (no empty sibling wrapper adding space-y-4 margin)
+    expect(body.children.length).toBe(1);
+
+    // Idle Consume and Open match idle Purchase's compact single-child body
+    fireEvent.click(screen.getByRole("button", { name: "Consume" }));
+    expect(body.children.length).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(body.children.length).toBe(1);
+
+    // Transfer and Inventory render their default location picker controls
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(body.children.length).toBe(2);
+    expect(screen.getByText(/Destination Location/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Inventory" }));
+    expect(body.children.length).toBe(2);
+    expect(screen.getByText(/Location to Audit/i)).toBeInTheDocument();
+
+    // Switching back to Purchase stays compact until Purchase content becomes active
+    fireEvent.click(screen.getByRole("button", { name: "Purchase" }));
+    expect(body.children.length).toBe(1);
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "milk" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Matching Products")).toBeInTheDocument());
+    expect(body.children.length).toBe(2);
   });
 });

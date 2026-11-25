@@ -123,6 +123,13 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     expect(screen.getByText("One label per item")).toBeInTheDocument();
     expect(screen.queryByText("per_item")).not.toBeInTheDocument();
 
+    // Header wraps horizontally instead of forcing flex-col, and actions are right-aligned
+    const header = screen.getByTestId("product-detail-header");
+    expect(header).toHaveClass("flex-wrap");
+    expect(header).not.toHaveClass("flex-col");
+    const headerActions = screen.getByTestId("product-detail-header-actions");
+    expect(headerActions).toHaveClass("ml-auto", "justify-end");
+
     // Accessible header buttons
     expect(screen.getByRole("button", { name: "Add to Shopping List" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print Product Label" })).toBeInTheDocument();

@@ -44,6 +44,8 @@ interface InventorySummary {
   to_create: Array<{ product_id: number; product_name: string; quantity: number; due_on_date: string | null }>;
 }
 
+export const SCAN_MODE_STORAGE_KEY = "itemized.scanMode";
+
 const MODES: Array<{ id: ScanMode; label: string }> = [
   { id: "purchase", label: "Purchase" },
   { id: "consume", label: "Consume" },
@@ -51,6 +53,29 @@ const MODES: Array<{ id: ScanMode; label: string }> = [
   { id: "transfer", label: "Transfer" },
   { id: "inventory", label: "Inventory" },
 ];
+
+function isValidScanMode(value: string | null): value is ScanMode {
+  return value !== null && MODES.some((m) => m.id === value);
+}
+
+function readSavedScanMode(): ScanMode | null {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const saved = window.localStorage.getItem(SCAN_MODE_STORAGE_KEY);
+    return isValidScanMode(saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedScanMode(mode: ScanMode): void {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(SCAN_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Ignore storage errors (e.g., private browsing / quota exceeded)
+  }
+}
 
 function isMobileDevice(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -77,13 +102,47 @@ function computeDefaultDueDateStr(p: Product): string {
 
 export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
   open,
-  initialMode = "purchase",
+  initialMode,
+  onClose,
+  categories,
+  locations,
+}) => {
+  const [mode, setMode] = useState<ScanMode>(() => readSavedScanMode() ?? initialMode ?? "purchase");
+
+  const handleModeChange = (next: ScanMode) => {
+    setMode(next);
+    writeSavedScanMode(next);
+  };
+
+  if (!open) return null;
+
+  return (
+    <ScannerDrawerContent
+      mode={mode}
+      onModeChange={handleModeChange}
+      onClose={onClose}
+      categories={categories}
+      locations={locations}
+    />
+  );
+};
+
+interface ScannerDrawerContentProps {
+  mode: ScanMode;
+  onModeChange: (mode: ScanMode) => void;
+  onClose: () => void;
+  categories: Category[];
+  locations: Location[];
+}
+
+const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
+  mode,
+  onModeChange,
   onClose,
   categories,
   locations,
 }) => {
   const qc = useQueryClient();
-  const [mode, setMode] = useState<ScanMode>(initialMode);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toast, setToast] = useState<UndoToast | null>(null);
@@ -139,16 +198,16 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
   const [invCreateMap, setInvCreateMap] = useState<Record<number, { selected: boolean; due_on_date: string }>>({});
 
   useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
+    return () => {
+      lookupSeqRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast]);
-
-  if (!open) return null;
 
   const resetSubState = () => {
     lookupSeqRef.current += 1;
@@ -628,6 +687,13 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
     }
   };
 
+  const hasPurchaseContent =
+    lookupPhase !== "idle" ||
+    Boolean(upcHint) ||
+    Boolean(classifyWarning && lookupPhase === "idle") ||
+    (purchaseSearchHits.length > 0 && !purchaseProduct) ||
+    Boolean(purchaseProduct || creatingNew);
+
   return (
     <ModalBackdrop onClose={onClose} ariaLabel="Scanner" className="flex items-end justify-center sm:items-center">
       <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl sm:rounded-2xl">
@@ -645,7 +711,7 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => {
-                  setMode(m.id);
+                  onModeChange(m.id);
                   resetSubState();
                 }}
                 className={`rounded-lg py-1.5 text-xs font-medium transition ${
@@ -659,9 +725,9 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div data-testid="scanner-body" className="flex-1 space-y-4 overflow-y-auto p-4">
           {/* Persistent single-stream scanner across all modes */}
-          <BarcodeScanner active={open} defaultCameraEnabled={isMobileDevice()} onScan={handleScan} />
+          <BarcodeScanner active={true} defaultCameraEnabled={isMobileDevice()} onScan={handleScan} />
 
           {toast && (
             <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">
@@ -680,7 +746,7 @@ export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
           {errorMsg && <div className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{errorMsg}</div>}
 
           {/* PURCHASE WORKFLOW */}
-          {mode === "purchase" && (
+          {mode === "purchase" && hasPurchaseContent && (
             <div className="space-y-3">
               {lookupPhase === "upc" && (
                 <div

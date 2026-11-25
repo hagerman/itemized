@@ -57,7 +57,19 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, the next-due item's location when in stock (instead of the product's default location), next due date, and shopping-list/overdue indicators, provide list sorting and filter controls, and expose a fast fuzzy search interface—via a Quick Search modal on desktop sidebar and a dedicated `/search` page from the mobile bottom dock that mirrors Quick Search behavior and preserves search results when navigating back from a selected product.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators; provide filter, sort, and create controls that collapse into a compact single-row icon sort dropdown button and `+` create button when full labels do not fit on one line; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
+
+#### Scenario: Compact single-row toolbar on narrow index viewports
+- **WHEN** a user views an inventory index page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a narrow viewport where the filter input, full `Sort: ...` select, and `+ New Product` button do not fit on one line
+- **THEN** the toolbar keeps the filter input, sort control, and create button on a single horizontal line by rendering an icon-only sort dropdown button (with accessible label `Sort products`) and an icon-only `+` link (with accessible label `New Product`) instead of the full-width text controls
+
+#### Scenario: Changing sort order via the compact sort dropdown button
+- **WHEN** a user activates the compact sort dropdown button on a mobile index page
+- **THEN** a dropdown menu opens displaying the available sort options (`Name`, `Soonest Due`, `Stock Count`) with the active option indicated, selecting an option updates the product list sort order and closes the menu, and clicking outside or pressing `Escape` closes the menu without changing the sort order
+
+#### Scenario: Full-label toolbar controls on wider viewports
+- **WHEN** a user views an inventory index page on a wider viewport where the filter input, full `Sort: ...` select, and `+ New Product` button fit on one line
+- **THEN** the toolbar displays the filter input, full `Sort: ...` dropdown, and `+ New Product` button with visible text labels on a single row
 
 #### Scenario: Quick fuzzy search navigates to product
 - **WHEN** a user opens Quick Search from the desktop sidebar, types a partial product name, and selects a result
