@@ -819,22 +819,57 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     expect(screen.getByRole("button", { name: "Consume" }).className).toContain("bg-indigo-600");
     remounted.unmount();
 
-    // Storage access throwing falls back safely to Purchase
-    vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
-      throw new Error("SecurityError");
-    });
-    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
-      throw new Error("QuotaExceededError");
-    });
+    // Storage methods throwing fall back safely to Purchase without crashing on mode switch
+    const originalLocalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
+    try {
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        writable: true,
+        value: {
+          getItem: () => {
+            throw new Error("SecurityError");
+          },
+          setItem: () => {
+            throw new Error("QuotaExceededError");
+          },
+          removeItem: () => {},
+          clear: () => {},
+          key: () => null,
+          length: 0,
+        } as Storage,
+      });
 
-    render(
-      <QueryClientProvider client={qc}>
-        <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
-      </QueryClientProvider>
-    );
-    expect(screen.getByRole("button", { name: "Purchase" }).className).toContain("bg-indigo-600");
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    expect(screen.getByRole("button", { name: "Open" }).className).toContain("bg-indigo-600");
+      const throwingMethodsRender = render(
+        <QueryClientProvider client={qc}>
+          <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+        </QueryClientProvider>
+      );
+      expect(screen.getByRole("button", { name: "Purchase" }).className).toContain("bg-indigo-600");
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(screen.getByRole("button", { name: "Open" }).className).toContain("bg-indigo-600");
+      throwingMethodsRender.unmount();
+
+      // Accessing window.localStorage itself throwing (e.g. restricted private browsing) also falls back safely
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        get() {
+          throw new Error("SecurityError");
+        },
+      });
+
+      render(
+        <QueryClientProvider client={qc}>
+          <ScannerDrawer open={true} onClose={() => {}} categories={[]} locations={[]} />
+        </QueryClientProvider>
+      );
+      expect(screen.getByRole("button", { name: "Purchase" }).className).toContain("bg-indigo-600");
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(screen.getByRole("button", { name: "Open" }).className).toContain("bg-indigo-600");
+    } finally {
+      if (originalLocalStorage) {
+        Object.defineProperty(window, "localStorage", originalLocalStorage);
+      }
+    }
   });
 
   it("keeps idle Purchase mode compact like Consume and Open while allowing Transfer and Inventory controls", async () => {
