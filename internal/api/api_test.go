@@ -1617,3 +1617,259 @@ func TestFuzzyProductSearch(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeProductsAndAliasResolution(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	// Setup admin + bearer token
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email": "admin@home.local", "password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email": "admin@home.local", "password": "password123", "mode": "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// Create category & location
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Pantry"}, tok)
+	var catResp struct {
+		Category Category `json:"category"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Shelf"}, tok)
+	var locResp struct {
+		Location Location `json:"location"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+
+	createProduct := func(name string) Product {
+		rec := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+			"name":                name,
+			"category_id":         catResp.Category.ID,
+			"default_location_id": locResp.Location.ID,
+		}, tok)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create product %q expected 201, got %d: %s", name, rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Product Product `json:"product"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		return resp.Product
+	}
+
+	prodA := createProduct("Olive Oil, Extra Virgin")
+	prodB := createProduct("EVOO")
+	prodC := createProduct("Extra Virgin Olive Oil")
+
+	legacyUUIDB := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1"
+	legacyUUIDC := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2"
+	if _, err := conn.Exec(`UPDATE products SET legacy_uuid = ? WHERE id = ?`, legacyUUIDB, prodB.ID); err != nil {
+		t.Fatalf("set legacy_uuid B: %v", err)
+	}
+	if _, err := conn.Exec(`UPDATE products SET legacy_uuid = ? WHERE id = ?`, legacyUUIDC, prodC.ID); err != nil {
+		t.Fatalf("set legacy_uuid C: %v", err)
+	}
+
+	// Add variants, retail barcodes, and items (both unconsumed and consumed) to prodB and prodC
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", prodB.ID), map[string]any{"name": "500ml Bottle"}, tok)
+	var varBResp struct {
+		Variant Variant `json:"variant"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &varBResp)
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/variants/%d/barcodes", varBResp.Variant.ID), map[string]any{
+		"barcode": "012345678905", "default_quantity": 1,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create barcode expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": prodB.ID, "variant_id": varBResp.Variant.ID, "location_id": locResp.Location.ID, "quantity": 2,
+	}, tok)
+	var itemsBResp struct {
+		Items []Item `json:"items"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &itemsBResp)
+	// Consume one of prodB's items to verify consumed history also moves
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/items/%d/consume", itemsBResp.Items[0].ID), nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("consume item expected 200, got %d", rec.Code)
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": prodC.ID, "location_id": locResp.Location.ID, "quantity": 1,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item C expected 201, got %d", rec.Code)
+	}
+
+	// Validation error cases
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id": prodA.ID, "source_product_ids": []int64{},
+	}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty sources expected 422, got %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id": prodA.ID, "source_product_ids": []int64{prodA.ID, prodB.ID},
+	}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("self-merge expected 422, got %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id": 99999, "source_product_ids": []int64{prodB.ID},
+	}, tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing target expected 404, got %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id": prodA.ID, "source_product_ids": []int64{prodB.ID, 99999},
+	}, tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing source expected 404, got %d", rec.Code)
+	}
+
+	// Merge prodB and prodC into prodA
+	highestMergedID := prodC.ID
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id":  prodA.ID,
+		"source_product_ids": []int64{prodB.ID, prodC.ID},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("merge expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var mergeResp struct {
+		Product     Product `json:"product"`
+		MergedCount int     `json:"merged_count"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &mergeResp)
+	if mergeResp.Product.ID != prodA.ID || mergeResp.MergedCount != 2 {
+		t.Fatalf("unexpected merge response: %+v", mergeResp)
+	}
+	if mergeResp.Product.InStockCount != 2 {
+		t.Fatalf("expected 2 in-stock items after merge (1 unconsumed from B + 1 from C), got %d", mergeResp.Product.InStockCount)
+	}
+
+	// Source products are deleted
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d", prodB.ID), nil, tok)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("merged source B expected 404 on GET /api/products/:id, got %d", rec.Code)
+	}
+
+	// Target product has all variants + all items (including consumed)
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d?include_consumed=true", prodA.ID), nil, tok)
+	var detailResp struct {
+		Product  Product   `json:"product"`
+		Variants []Variant `json:"variants"`
+		Items    []Item    `json:"items"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &detailResp)
+	if len(detailResp.Variants) != 1 || detailResp.Variants[0].ID != varBResp.Variant.ID {
+		t.Fatalf("expected variant from B on A, got %+v", detailResp.Variants)
+	}
+	if len(detailResp.Items) != 3 {
+		t.Fatalf("expected 3 total items (2 unconsumed + 1 consumed) on A, got %d", len(detailResp.Items))
+	}
+
+	// Newly created product must NOT reuse highestMergedID
+	prodD := createProduct("Olive Oil, Cooking")
+	if prodD.ID <= highestMergedID {
+		t.Fatalf("expected new product ID > %d (merged highest ID), got %d", highestMergedID, prodD.ID)
+	}
+
+	// GET /go/p/<merged-id> and /go/p/<merged-legacy-uuid> redirect to prodA
+	for _, token := range []string{strconv.FormatInt(prodB.ID, 10), legacyUUIDB, strings.ToUpper(legacyUUIDC)} {
+		rec := doReq(t, h, http.MethodGet, "/go/p/"+token, nil, tok)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("GET /go/p/%s expected 302, got %d", token, rec.Code)
+		}
+		wantLoc := fmt.Sprintf("/products/%d", prodA.ID)
+		if gotLoc := rec.Header().Get("Location"); gotLoc != wantLoc {
+			t.Fatalf("GET /go/p/%s expected redirect %q, got %q", token, wantLoc, gotLoc)
+		}
+	}
+
+	// POST /api/scan/resolve resolves merged product QR URLs, bare legacy UUID, and moved retail barcode
+	for _, scanInput := range []string{
+		fmt.Sprintf("https://itemized.local/go/p/%d", prodB.ID),
+		fmt.Sprintf("https://old.itemizedapp.com/go/p/%s", legacyUUIDB),
+		legacyUUIDC,
+	} {
+		rec := doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{"input": scanInput}, tok)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("scan resolve %q expected 200, got %d", scanInput, rec.Code)
+		}
+		var scanResp struct {
+			Kind    string  `json:"kind"`
+			Product Product `json:"product"`
+			Items   []Item  `json:"items"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &scanResp)
+		if scanResp.Kind != "product" || scanResp.Product.ID != prodA.ID || len(scanResp.Items) != 2 {
+			t.Fatalf("scan resolve %q expected kind=product id=%d items=2, got %+v", scanInput, prodA.ID, scanResp)
+		}
+	}
+
+	// Retail barcode from moved variant resolves to prodA
+	rec = doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{"input": "012345678905"}, tok)
+	var bcScanResp struct {
+		Kind    string  `json:"kind"`
+		Product Product `json:"product"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &bcScanResp)
+	if bcScanResp.Kind != "barcode" || bcScanResp.Product.ID != prodA.ID {
+		t.Fatalf("moved retail barcode expected kind=barcode product=%d, got %+v", prodA.ID, bcScanResp)
+	}
+
+	// Chained merge: merge prodA into prodD -> aliases from prodB and prodC must now resolve to prodD
+	rec = doReq(t, h, http.MethodPost, "/api/products/merge", map[string]any{
+		"target_product_id":  prodD.ID,
+		"source_product_ids": []int64{prodA.ID},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chained merge expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	for _, scanInput := range []string{
+		fmt.Sprintf("https://itemized.local/go/p/%d", prodB.ID),
+		fmt.Sprintf("https://itemized.local/go/p/%d", prodA.ID),
+		legacyUUIDB,
+		legacyUUIDC,
+	} {
+		rec := doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{"input": scanInput}, tok)
+		var scanResp struct {
+			Kind    string  `json:"kind"`
+			Product Product `json:"product"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &scanResp)
+		if scanResp.Kind != "product" || scanResp.Product.ID != prodD.ID {
+			t.Fatalf("chained merge scan %q expected product %d, got %+v", scanInput, prodD.ID, scanResp)
+		}
+	}
+
+	// Deleting destination prodD cascades and removes merge aliases cleanly
+	rec = doReq(t, h, http.MethodDelete, fmt.Sprintf("/api/products/%d", prodD.ID), nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete prodD expected 200, got %d", rec.Code)
+	}
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/go/p/%d", prodB.ID), nil, tok)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?alert=product_not_found" {
+		t.Fatalf("expected product_not_found redirect after destination deleted, got %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}

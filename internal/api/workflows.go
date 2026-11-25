@@ -145,11 +145,8 @@ func (s *Server) resolveItemByToken(ctx context.Context, token string) (*Item, e
 }
 
 func (s *Server) resolveProductByToken(ctx context.Context, token string) (*Product, error) {
-	if id, err := strconv.ParseInt(token, 10, 64); err == nil {
-		return s.getProductByID(ctx, id)
-	}
-	var id int64
-	if err := s.DB.QueryRowContext(ctx, `SELECT id FROM products WHERE legacy_uuid = ?`, strings.ToLower(token)).Scan(&id); err != nil {
+	id, err := s.resolveProductIDByToken(ctx, token)
+	if err != nil {
 		return nil, err
 	}
 	return s.getProductByID(ctx, id)

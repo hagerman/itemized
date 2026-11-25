@@ -1060,19 +1060,30 @@ func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 
 type sqlExecer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 func (s *Server) insertProduct(ctx context.Context, exec sqlExecer, req productInput) (int64, error) {
+	var nextID int64
+	if err := exec.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(id), 0) + 1 FROM (
+			SELECT MAX(id) AS id FROM products
+			UNION ALL
+			SELECT MAX(source_product_id) AS id FROM product_merges
+		)
+	`).Scan(&nextID); err != nil {
+		return 0, err
+	}
 	now := db.NowUTC()
 	res, err := exec.ExecContext(ctx, `
 		INSERT INTO products (
-			name, category_id, default_location_id,
+			id, name, category_id, default_location_id,
 			default_due_days, default_due_days_on_open, default_due_days_on_freeze, default_due_days_on_thaw,
 			use_average_for_due_date, label_print_mode, minimum_value, manually_added_to_shopping_list,
 			volume_value, volume_unit, weight_value, weight_unit, length_value, length_unit,
 			created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, req.Name, req.CategoryID, req.DefaultLocationID,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, nextID, req.Name, req.CategoryID, req.DefaultLocationID,
 		req.DefaultDueDays, req.DefaultDueDaysOnOpen, req.DefaultDueDaysOnFreeze, req.DefaultDueDaysOnThaw,
 		boolToInt(req.UseAverageForDueDate), req.LabelPrintMode, req.MinimumValue, boolToInt(req.ManuallyAddedToShoppingList),
 		req.VolumeValue, req.VolumeUnit, req.WeightValue, req.WeightUnit, req.LengthValue, req.LengthUnit,
@@ -1081,6 +1092,173 @@ func (s *Server) insertProduct(ctx context.Context, exec sqlExecer, req productI
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (s *Server) resolveProductIDByToken(ctx context.Context, token string) (int64, error) {
+	var id int64
+	if parsed, err := strconv.ParseInt(token, 10, 64); err == nil {
+		if err := s.DB.QueryRowContext(ctx, `SELECT id FROM products WHERE id = ?`, parsed).Scan(&id); err == nil {
+			return id, nil
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return 0, err
+		}
+		if err := s.DB.QueryRowContext(ctx, `SELECT target_product_id FROM product_merges WHERE source_product_id = ?`, parsed).Scan(&id); err != nil {
+			return 0, err
+		}
+		return id, nil
+	}
+	lower := strings.ToLower(token)
+	if err := s.DB.QueryRowContext(ctx, `SELECT id FROM products WHERE legacy_uuid = ?`, lower).Scan(&id); err == nil {
+		return id, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	if err := s.DB.QueryRowContext(ctx, `SELECT target_product_id FROM product_merges WHERE source_legacy_uuid = ?`, lower).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *Server) handleMergeProducts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TargetProductID  int64   `json:"target_product_id"`
+		SourceProductIDs []int64 `json:"source_product_ids"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.TargetProductID <= 0 {
+		writeError(w, http.StatusUnprocessableEntity, "target_product_id is required")
+		return
+	}
+
+	seen := make(map[int64]bool, len(req.SourceProductIDs))
+	sourceIDs := make([]int64, 0, len(req.SourceProductIDs))
+	for _, id := range req.SourceProductIDs {
+		if id <= 0 {
+			writeError(w, http.StatusUnprocessableEntity, "source_product_ids must contain positive integers")
+			return
+		}
+		if id == req.TargetProductID {
+			writeError(w, http.StatusUnprocessableEntity, "target product cannot be included in source_product_ids")
+			return
+		}
+		if !seen[id] {
+			seen[id] = true
+			sourceIDs = append(sourceIDs, id)
+		}
+	}
+	if len(sourceIDs) == 0 {
+		writeError(w, http.StatusUnprocessableEntity, "at least one source product is required")
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		writeInternalError(w, "merge products begin tx", err)
+		return
+	}
+	defer tx.Rollback()
+
+	var targetCheck int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM products WHERE id = ?`, req.TargetProductID).Scan(&targetCheck); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "target product not found")
+		return
+	} else if err != nil {
+		writeInternalError(w, "merge products check target", err)
+		return
+	}
+
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(sourceIDs)), ",")
+	sourceArgs := make([]any, len(sourceIDs))
+	for i, id := range sourceIDs {
+		sourceArgs[i] = id
+	}
+
+	type sourceRecord struct {
+		id         int64
+		legacyUUID *string
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id, legacy_uuid FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...)
+	if err != nil {
+		writeInternalError(w, "merge products load sources", err)
+		return
+	}
+	var sources []sourceRecord
+	for rows.Next() {
+		var sr sourceRecord
+		var lu sql.NullString
+		if err := rows.Scan(&sr.id, &lu); err != nil {
+			rows.Close()
+			writeInternalError(w, "merge products scan source", err)
+			return
+		}
+		if lu.Valid && strings.TrimSpace(lu.String) != "" {
+			v := strings.ToLower(strings.TrimSpace(lu.String))
+			sr.legacyUUID = &v
+		}
+		sources = append(sources, sr)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		writeInternalError(w, "merge products iterate sources", err)
+		return
+	}
+	rows.Close()
+
+	if len(sources) != len(sourceIDs) {
+		writeError(w, http.StatusNotFound, "one or more source products not found")
+		return
+	}
+
+	now := db.NowUTC()
+	updateArgs := append([]any{req.TargetProductID, now}, sourceArgs...)
+
+	if _, err := tx.ExecContext(ctx, `UPDATE variants SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
+		writeInternalError(w, "merge products move variants", err)
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE items SET product_id = ?, updated_at = ? WHERE product_id IN (`+placeholders+`)`, updateArgs...); err != nil {
+		writeInternalError(w, "merge products move items", err)
+		return
+	}
+
+	repointArgs := append([]any{req.TargetProductID}, sourceArgs...)
+	if _, err := tx.ExecContext(ctx, `UPDATE product_merges SET target_product_id = ? WHERE target_product_id IN (`+placeholders+`)`, repointArgs...); err != nil {
+		writeInternalError(w, "merge products repoint aliases", err)
+		return
+	}
+
+	for _, sr := range sources {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO product_merges (source_product_id, source_legacy_uuid, target_product_id, merged_at)
+			VALUES (?, ?, ?, ?)
+		`, sr.id, sr.legacyUUID, req.TargetProductID, now); err != nil {
+			writeInternalError(w, "merge products insert alias", err)
+			return
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM products WHERE id IN (`+placeholders+`)`, sourceArgs...); err != nil {
+		writeInternalError(w, "merge products delete sources", err)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeInternalError(w, "merge products commit", err)
+		return
+	}
+
+	p, err := s.getProductByID(ctx, req.TargetProductID)
+	if err != nil {
+		writeInternalError(w, "merge products load target", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"product":      p,
+		"merged_count": len(sources),
+	})
 }
 
 func (s *Server) handleUpdateProduct(w http.ResponseWriter, r *http.Request) {

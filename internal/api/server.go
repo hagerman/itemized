@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	// Products, Variants, Barcodes
 	authed.HandleFunc("GET /api/products", s.handleListProducts)
 	authed.HandleFunc("POST /api/products", s.handleCreateProduct)
+	authed.HandleFunc("POST /api/products/merge", s.handleMergeProducts)
 	authed.HandleFunc("GET /api/products/{id}", s.handleGetProduct)
 	authed.HandleFunc("PATCH /api/products/{id}", s.handleUpdateProduct)
 	authed.HandleFunc("DELETE /api/products/{id}", s.handleDeleteProduct)
@@ -715,13 +716,7 @@ func (s *Server) handleQRProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw := strings.TrimSpace(r.PathValue("id"))
-	var productID int64
-	var err error
-	if id, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT id FROM products WHERE id = ?`, id).Scan(&productID)
-	} else {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT id FROM products WHERE legacy_uuid = ?`, strings.ToLower(raw)).Scan(&productID)
-	}
+	productID, err := s.resolveProductIDByToken(r.Context(), raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Redirect(w, r, "/?alert=product_not_found", http.StatusFound)
 		return

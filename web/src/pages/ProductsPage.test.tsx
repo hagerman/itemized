@@ -347,4 +347,85 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
     fireEvent.change(screen.getByPlaceholderText("Filter products..."), { target: { value: "Yogurt" } });
     await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
   });
+
+  it("shows Merge bulk action only when 2+ products are selected and merges via destination modal", async () => {
+    let failNextMerge = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/products/merge" && init?.method === "POST") {
+        if (failNextMerge) {
+          failNextMerge = false;
+          return new Response(JSON.stringify({ error: "source product not found" }), { status: 404 });
+        }
+        return new Response(JSON.stringify({ product: RICH_MOCK_PRODUCTS[1], merged_count: 1 }), { status: 200 });
+      }
+      if (url.startsWith("/api/products")) {
+        return new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderProductsPage("/?status=in_stock");
+
+    const tableContainer = await screen.findByTestId("products-table");
+
+    // Selecting 1 product shows Delete but NOT Merge
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Milk" }));
+    const bulkBar = screen.getByTestId("products-bulk-bar");
+    expect(within(bulkBar).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(within(bulkBar).queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
+
+    // Selecting a 2nd product reveals Merge
+    fireEvent.click(within(tableContainer).getByRole("checkbox", { name: "Select Yogurt" }));
+    const mergeBtn = within(bulkBar).getByRole("button", { name: "Merge" });
+    expect(mergeBtn).toBeInTheDocument();
+
+    // Opening modal lists selected products and dismisses on backdrop click
+    fireEvent.click(mergeBtn);
+    const dialog = screen.getByRole("dialog", { name: "Merge Products" });
+    expect(within(dialog).getByRole("radio", { name: /Milk/ })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: /Yogurt/ })).not.toBeChecked();
+    expect(within(dialog).queryByRole("radio", { name: /Rice/ })).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(dialog);
+    fireEvent.click(dialog);
+    expect(screen.queryByRole("dialog", { name: "Merge Products" })).not.toBeInTheDocument();
+
+    // Reopen and dismiss via Escape
+    fireEvent.click(mergeBtn);
+    expect(screen.getByRole("dialog", { name: "Merge Products" })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Merge Products" })).not.toBeInTheDocument();
+
+    // Reopen, choose Yogurt as destination, test API error keeps modal & selection open
+    fireEvent.click(mergeBtn);
+    const openDialog = screen.getByRole("dialog", { name: "Merge Products" });
+    fireEvent.click(within(openDialog).getByRole("radio", { name: /Yogurt/ }));
+
+    failNextMerge = true;
+    fireEvent.click(within(openDialog).getByRole("button", { name: "Confirm Merge" }));
+    await waitFor(() => expect(within(openDialog).getByRole("alert")).toHaveTextContent("source product not found"));
+    expect(screen.getByTestId("products-bulk-bar")).toBeInTheDocument();
+
+    // Retry succeeds: posts target_product_id=2, source_product_ids=[1], closes modal, clears selection, refreshes
+    const listCallsBefore = fetchMock.mock.calls.filter(([u]) => String(u).startsWith("/api/products?")).length;
+    fireEvent.click(within(openDialog).getByRole("button", { name: "Confirm Merge" }));
+
+    await waitFor(() => {
+      const mergeCalls = fetchMock.mock.calls.filter(([u, init]) => String(u) === "/api/products/merge" && init?.method === "POST");
+      expect(mergeCalls).toHaveLength(2);
+      expect(JSON.parse(String(mergeCalls[1][1]?.body))).toEqual({
+        target_product_id: 2,
+        source_product_ids: [1],
+      });
+    });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Merge Products" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
+    await waitFor(() => {
+      const listCallsAfter = fetchMock.mock.calls.filter(([u]) => String(u).startsWith("/api/products?")).length;
+      expect(listCallsAfter).toBeGreaterThan(listCallsBefore);
+    });
+  });
 });

@@ -19,10 +19,10 @@ func TestOpenMigrateAndIdempotency(t *testing.T) {
 		t.Fatalf("second Migrate failed: %v", err)
 	}
 
-	// Verify all 11 core tables exist.
+	// Verify all 12 core tables exist.
 	tables := []string{
 		"users", "sessions", "settings", "categories", "locations",
-		"products", "variants", "barcodes", "items", "printers", "label_templates",
+		"products", "product_merges", "variants", "barcodes", "items", "printers", "label_templates",
 	}
 	for _, tbl := range tables {
 		var name string

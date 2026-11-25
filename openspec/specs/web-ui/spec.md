@@ -57,7 +57,7 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes and bulk deletion, and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes, bulk deletion, and bulk product merging (when at least two products are selected), and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back without exposing product merge controls.
 
 #### Scenario: Desktop viewports display inventory list pages as a compact table
 - **WHEN** a user views an inventory list page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a desktop viewport (`>= 768px`)
@@ -70,6 +70,19 @@ The Products view SHALL display matching products with stock counts, next-due it
 #### Scenario: Selecting products and bulk deleting from the desktop table
 - **WHEN** a user on a desktop viewport selects one or more products using row checkboxes or the header select-all checkbox
 - **THEN** toggling checkboxes updates the selection without navigating to `/products/:id`, a desktop-only floating bulk actions bar remains visible while scrolling showing the selected count and a `Delete` action, confirming deletion removes the selected products via `DELETE /api/products/{id}`, clears the selection, and refreshes the product list and sidebar counts (while canceling leaves products unchanged), and changing active filters, status, or search clears the current selection
+
+#### Scenario: Merge bulk action appears only when at least two products are selected on desktop
+- **WHEN** a user on a desktop viewport selects 1 product in the inventory list table
+- **THEN** the floating bulk actions bar displays `Delete` and does not display `Merge`
+- **AND** when the user selects a second product (2 or more selected), a `Merge` action appears alongside `Delete` in the floating bulk actions bar
+
+#### Scenario: Merging selected products via destination selection modal
+- **WHEN** a user on a desktop viewport selects two or more products, clicks `Merge` in the floating bulk actions bar, selects which product to keep as the destination in the Merge Products modal, and confirms the merge
+- **THEN** the application sends `POST /api/products/merge` with the selected `target_product_id` and remaining `source_product_ids`, closes the modal, clears the selection, and refreshes the product list and sidebar counts (while canceling or dismissing the modal leaves products unchanged, and API errors are displayed inside the modal without losing the user's selection)
+
+#### Scenario: Search views do not expose product merge controls
+- **WHEN** a user uses desktop Quick Search or the mobile `/search` page
+- **THEN** no selection checkboxes or product merge actions are displayed
 
 #### Scenario: Sorting inventory list via desktop table column headers
 - **WHEN** a user views an inventory list page on a desktop viewport and clicks the `Product`, `Stock`, or `Next Due` column header button
@@ -223,10 +236,10 @@ The web application SHALL provide dedicated views for first-run Admin setup, Log
 - **THEN** the login view does not render the local email/password form, automatically redirects the browser to `/api/auth/oidc/login`, and displays a redirecting message with a manual "Sign in with OIDC" fallback link
 
 ### Requirement: Modal dialog backdrop dismissal
-Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, and Keyboard Shortcuts help dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
+Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, Keyboard Shortcuts help dialog, and Merge Products dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
 
 #### Scenario: Clicking outside a modal dialog closes it
-- **WHEN** a modal dialog (Scanner, Barcode Scan, Quick Search, or Keyboard Shortcuts) is open and the user clicks or taps the darkened backdrop outside the dialog panel
+- **WHEN** a modal dialog (Scanner, Barcode Scan, Quick Search, Keyboard Shortcuts, or Merge Products) is open and the user clicks or taps the darkened backdrop outside the dialog panel
 - **THEN** the modal dialog closes (triggering the same close behavior as its close button)
 
 #### Scenario: Clicking inside a modal dialog does not close it

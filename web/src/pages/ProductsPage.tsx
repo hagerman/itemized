@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, Clock, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { apiFetch, Product } from "../api";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 
 const SORT_OPTIONS = [
   { value: "name", label: "Name", selectLabel: "Sort: Name" },
@@ -23,6 +24,10 @@ export const ProductsPage: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
@@ -58,7 +63,23 @@ export const ProductsPage: React.FC = () => {
   useEffect(() => {
     setSelectedIds([]);
     setBulkError(null);
+    setMergeModalOpen(false);
+    setMergeTargetId(null);
+    setMergeError(null);
   }, [queryStr]);
+
+  useEffect(() => {
+    if (!mergeModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !merging) {
+        e.stopPropagation();
+        setMergeModalOpen(false);
+        setMergeError(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [mergeModalOpen, merging]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["products", queryStr],
@@ -71,6 +92,7 @@ export const ProductsPage: React.FC = () => {
 
   const visibleIdSet = new Set(products.map((p) => p.id));
   const activeSelectedIds = selectedIds.filter((id) => visibleIdSet.has(id));
+  const activeSelectedProducts = products.filter((p) => activeSelectedIds.includes(p.id));
   const allSelected = products.length > 0 && activeSelectedIds.length === products.length;
   const someSelected = activeSelectedIds.length > 0 && !allSelected;
 
@@ -125,6 +147,44 @@ export const ProductsPage: React.FC = () => {
       void qc.invalidateQueries({ queryKey: ["products"] });
     } finally {
       setBulkDeleting(false);
+    }
+  };
+
+  const openMergeModal = () => {
+    if (activeSelectedProducts.length < 2) return;
+    setMergeTargetId(activeSelectedProducts[0].id);
+    setMergeError(null);
+    setMergeModalOpen(true);
+  };
+
+  const closeMergeModal = () => {
+    if (merging) return;
+    setMergeModalOpen(false);
+    setMergeError(null);
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!mergeTargetId || activeSelectedProducts.length < 2) return;
+    const sourceIds = activeSelectedIds.filter((id) => id !== mergeTargetId);
+    if (sourceIds.length === 0) return;
+    setMerging(true);
+    setMergeError(null);
+    try {
+      await apiFetch("/api/products/merge", {
+        method: "POST",
+        body: JSON.stringify({
+          target_product_id: mergeTargetId,
+          source_product_ids: sourceIds,
+        }),
+      });
+      setMergeModalOpen(false);
+      setMergeTargetId(null);
+      setSelectedIds([]);
+      void qc.invalidateQueries({ queryKey: ["products"] });
+    } catch (err) {
+      setMergeError(err instanceof Error ? err.message : "Failed to merge products.");
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -450,9 +510,20 @@ export const ProductsPage: React.FC = () => {
               className="sticky bottom-4 z-20 mx-auto hidden w-fit items-center gap-3 rounded-xl border border-indigo-500/40 bg-slate-900/95 px-4 py-2.5 text-xs shadow-2xl backdrop-blur md:flex"
             >
               <span className="font-semibold text-indigo-200">{activeSelectedIds.length} selected:</span>
+              {activeSelectedIds.length >= 2 && (
+                <button
+                  type="button"
+                  disabled={bulkDeleting || merging}
+                  onClick={openMergeModal}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  <GitMerge className="h-3.5 w-3.5" />
+                  Merge
+                </button>
+              )}
               <button
                 type="button"
-                disabled={bulkDeleting}
+                disabled={bulkDeleting || merging}
                 onClick={() => void handleBulkDelete()}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 font-medium text-white hover:bg-rose-500 disabled:opacity-50"
               >
@@ -460,6 +531,104 @@ export const ProductsPage: React.FC = () => {
                 {bulkDeleting ? "Deleting..." : "Delete"}
               </button>
             </div>
+          )}
+
+          {mergeModalOpen && activeSelectedProducts.length >= 2 && (
+            <ModalBackdrop
+              onClose={closeMergeModal}
+              ariaLabel="Merge Products"
+              className="flex items-center justify-center p-4"
+            >
+              <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <GitMerge className="h-4 w-4 text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Merge Products</h2>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close merge dialog"
+                    disabled={merging}
+                    onClick={closeMergeModal}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 px-5 py-4">
+                  <p className="text-sm text-slate-300">
+                    Choose the destination product to keep. All variants, retail barcodes, and items from the other{" "}
+                    {activeSelectedProducts.length - 1} selected product{activeSelectedProducts.length - 1 === 1 ? "" : "s"}{" "}
+                    will be moved into it, and old product QR codes will redirect to it.
+                  </p>
+
+                  {mergeError && (
+                    <div
+                      role="alert"
+                      className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-200"
+                    >
+                      {mergeError}
+                    </div>
+                  )}
+
+                  <div className="max-h-64 space-y-2 overflow-y-auto" role="radiogroup" aria-label="Destination product">
+                    {activeSelectedProducts.map((p) => {
+                      const selected = mergeTargetId === p.id;
+                      return (
+                        <label
+                          key={p.id}
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition ${
+                            selected
+                              ? "border-indigo-500 bg-indigo-500/15"
+                              : "border-slate-800 bg-slate-950/60 hover:border-slate-700"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <input
+                              type="radio"
+                              name="merge-destination"
+                              value={p.id}
+                              checked={selected}
+                              disabled={merging}
+                              onChange={() => setMergeTargetId(p.id)}
+                              className="cursor-pointer accent-indigo-500"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium text-white">{p.name}</div>
+                              <div className="truncate text-xs text-slate-400">{p.category_name}</div>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-200">
+                            {p.in_stock_count} in stock
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3.5">
+                  <button
+                    type="button"
+                    disabled={merging}
+                    onClick={closeMergeModal}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={merging || !mergeTargetId}
+                    onClick={() => void handleConfirmMerge()}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    <GitMerge className="h-4 w-4" />
+                    {merging ? "Merging..." : "Confirm Merge"}
+                  </button>
+                </div>
+              </div>
+            </ModalBackdrop>
           )}
         </>
       )}
