@@ -130,4 +130,34 @@ describe("HierarchySelect (searchable hierarchical drill-down)", () => {
     expect(Array.from(collectDescendantIds(2, SAMPLE_LOCATIONS)).sort((a, b) => a - b)).toEqual([2, 3]);
     expect(Array.from(collectDescendantIds(4, SAMPLE_LOCATIONS))).toEqual([4]);
   });
+
+  it("supports default (h-10) and compact sm (h-8) trigger sizes", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <HierarchySelect
+        items={SAMPLE_LOCATIONS}
+        value={null}
+        onChange={onChange}
+        ariaLabel="Sized Location"
+      />
+    );
+
+    const defaultBtn = screen.getByRole("button", { name: "Sized Location" });
+    expect(defaultBtn).toHaveClass("h-10", "px-3", "text-sm");
+    expect(defaultBtn).not.toHaveClass("h-8");
+
+    rerender(
+      <HierarchySelect
+        items={SAMPLE_LOCATIONS}
+        value={null}
+        onChange={onChange}
+        ariaLabel="Sized Location"
+        size="sm"
+      />
+    );
+
+    const compactBtn = screen.getByRole("button", { name: "Sized Location" });
+    expect(compactBtn).toHaveClass("h-8", "px-2.5", "text-xs");
+    expect(compactBtn).not.toHaveClass("h-10");
+  });
 });

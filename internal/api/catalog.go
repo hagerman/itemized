@@ -585,53 +585,100 @@ func (s *Server) loadProducts(ctx context.Context, searchQuery string) ([]Produc
 		return nil, err
 	}
 
-	var rows *sql.Rows
+	const selectProductCols = `
+			SELECT p.id, p.legacy_uuid, p.name, p.category_id, p.default_location_id,
+			       p.default_due_days, p.default_due_days_on_open, p.default_due_days_on_freeze, p.default_due_days_on_thaw,
+			       p.use_average_for_due_date, p.label_print_mode, p.minimum_value, p.manually_added_to_shopping_list,
+			       p.volume_value, p.volume_unit, p.weight_value, p.weight_unit, p.length_value, p.length_unit,
+			       p.created_at, p.updated_at
+			FROM products p`
+
 	q := strings.TrimSpace(searchQuery)
-	if q != "" && len(q) >= 3 {
-		ftsQuery := `"` + strings.ReplaceAll(q, `"`, `""`) + `"`
-		rows, err = s.DB.QueryContext(ctx, `
-			SELECT p.id, p.legacy_uuid, p.name, p.category_id, p.default_location_id,
-			       p.default_due_days, p.default_due_days_on_open, p.default_due_days_on_freeze, p.default_due_days_on_thaw,
-			       p.use_average_for_due_date, p.label_print_mode, p.minimum_value, p.manually_added_to_shopping_list,
-			       p.volume_value, p.volume_unit, p.weight_value, p.weight_unit, p.length_value, p.length_unit,
-			       p.created_at, p.updated_at
-			FROM products p
-			JOIN products_fts f ON f.rowid = p.id
-			WHERE products_fts MATCH ?
-			ORDER BY bm25(products_fts), p.name COLLATE NOCASE ASC
-		`, ftsQuery)
-	} else if q != "" {
-		rows, err = s.DB.QueryContext(ctx, `
-			SELECT p.id, p.legacy_uuid, p.name, p.category_id, p.default_location_id,
-			       p.default_due_days, p.default_due_days_on_open, p.default_due_days_on_freeze, p.default_due_days_on_thaw,
-			       p.use_average_for_due_date, p.label_print_mode, p.minimum_value, p.manually_added_to_shopping_list,
-			       p.volume_value, p.volume_unit, p.weight_value, p.weight_unit, p.length_value, p.length_unit,
-			       p.created_at, p.updated_at
-			FROM products p
+	var rows *sql.Rows
+	var cleanQ string
+	var keywords []string
+	fuzzyFilter := false
+
+	if q == "" {
+		rows, err = s.DB.QueryContext(ctx, selectProductCols+` ORDER BY p.name COLLATE NOCASE ASC`)
+	} else if domain.IsBarcodeQuery(q) {
+		candidates := domain.BarcodeCandidates(q)
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(candidates)), ",")
+		args := make([]any, len(candidates))
+		for i, c := range candidates {
+			args[i] = c
+		}
+		bcRows, bcErr := s.DB.QueryContext(ctx, `
+			SELECT DISTINCT v.product_id
+			FROM barcodes b
+			JOIN variants v ON v.id = b.variant_id
+			WHERE b.barcode IN (`+placeholders+`)
+		`, args...)
+		if bcErr != nil {
+			return nil, bcErr
+		}
+		var matchedIDs []any
+		for bcRows.Next() {
+			var pid int64
+			if scanErr := bcRows.Scan(&pid); scanErr != nil {
+				bcRows.Close()
+				return nil, scanErr
+			}
+			matchedIDs = append(matchedIDs, pid)
+		}
+		bcErr = bcRows.Err()
+		bcRows.Close()
+		if bcErr != nil {
+			return nil, bcErr
+		}
+		if len(matchedIDs) > 0 {
+			idPlaceholders := strings.TrimRight(strings.Repeat("?,", len(matchedIDs)), ",")
+			rows, err = s.DB.QueryContext(ctx, selectProductCols+`
+			WHERE p.id IN (`+idPlaceholders+`)
+			ORDER BY p.name COLLATE NOCASE ASC`, matchedIDs...)
+		} else {
+			rows, err = s.DB.QueryContext(ctx, selectProductCols+`
 			WHERE p.name LIKE ? COLLATE NOCASE
-			ORDER BY p.name COLLATE NOCASE ASC
-		`, "%"+q+"%")
+			ORDER BY p.name COLLATE NOCASE ASC`, "%"+q+"%")
+		}
 	} else {
-		rows, err = s.DB.QueryContext(ctx, `
-			SELECT p.id, p.legacy_uuid, p.name, p.category_id, p.default_location_id,
-			       p.default_due_days, p.default_due_days_on_open, p.default_due_days_on_freeze, p.default_due_days_on_thaw,
-			       p.use_average_for_due_date, p.label_print_mode, p.minimum_value, p.manually_added_to_shopping_list,
-			       p.volume_value, p.volume_unit, p.weight_value, p.weight_unit, p.length_value, p.length_unit,
-			       p.created_at, p.updated_at
-			FROM products p
-			ORDER BY p.name COLLATE NOCASE ASC
-		`)
+		cleanQ = domain.NormalizeSearchQuery(q)
+		if cleanQ == "" {
+			return []Product{}, nil
+		}
+		keywords = domain.SearchKeywords(cleanQ)
+		fuzzyFilter = true
+		rows, err = s.DB.QueryContext(ctx, selectProductCols+` ORDER BY p.name COLLATE NOCASE ASC`)
 	}
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	type scoredProduct struct {
+		product Product
+		match   domain.SearchMatch
+	}
 	var products []Product
+	var scored []scoredProduct
 	for rows.Next() {
 		p, err := scanProduct(rows)
 		if err != nil {
 			return nil, err
+		}
+		if fuzzyFilter {
+			m := domain.MatchProductSearch(p.Name, cleanQ, keywords)
+			if !m.Matched {
+				continue
+			}
+			if c, ok := catMap[p.CategoryID]; ok {
+				p.CategoryName = c.HierarchyName
+			}
+			if l, ok := locMap[p.DefaultLocationID]; ok {
+				p.DefaultLocationName = l.HierarchyName
+			}
+			scored = append(scored, scoredProduct{product: p, match: m})
+			continue
 		}
 		if c, ok := catMap[p.CategoryID]; ok {
 			p.CategoryName = c.HierarchyName
@@ -643,6 +690,21 @@ func (s *Server) loadProducts(ctx context.Context, searchQuery string) ([]Produc
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if fuzzyFilter {
+		sort.SliceStable(scored, func(i, j int) bool {
+			if scored[i].match.Tier != scored[j].match.Tier {
+				return scored[i].match.Tier > scored[j].match.Tier
+			}
+			if scored[i].match.Similarity != scored[j].match.Similarity {
+				return scored[i].match.Similarity > scored[j].match.Similarity
+			}
+			return strings.ToLower(scored[i].product.Name) < strings.ToLower(scored[j].product.Name)
+		})
+		products = make([]Product, len(scored))
+		for i, sp := range scored {
+			products[i] = sp.product
+		}
 	}
 
 	// Aggregate unconsumed item stats per product (ordered so first row per product is the next-due item, tie-broken by first entered).

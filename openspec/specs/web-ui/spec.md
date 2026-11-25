@@ -96,11 +96,15 @@ The Products view SHALL display matching products with stock counts, next-due it
 - **THEN** the product card displays `"Fridge"` alongside the category instead of `"Pantry"`
 
 ### Requirement: Product detail view and bulk item management
-The Product detail view SHALL display product metadata (default measurement when set, next-due item location in the header, `~X` rolling-average due days, and human-readable `Label Mode`), variants, and barcodes, provide header actions, and list individual `Item` records showing Variant first then Location (omitting `#id`) with single-item and bulk actions including bulk variant updates.
+The Product detail view SHALL display product metadata (default measurement when set, next-due item location in the header, `~X` rolling-average due days, and human-readable `Label Mode`), variants, and barcodes, provide header actions, and list individual `Item` records showing Variant first then Location (omitting `#id`) with single-item and bulk actions including bulk variant updates, where all interactive controls in the bulk item actions bar render at a uniform height.
 
 #### Scenario: Bulk transfer of selected items
 - **WHEN** a user selects multiple unconsumed items on a Product detail page and applies a bulk Transfer to a target location
 - **THEN** all selected items update to the target location and the UI refreshes immediately without a full page reload
+
+#### Scenario: Bulk item action controls render at uniform height
+- **WHEN** a user selects one or more unconsumed items on a Product detail page so the bulk item actions bar is displayed
+- **THEN** all visible interactive controls in the bulk actions bar (`Consume`, `Open`, `Reprint Labels`, the `Transfer to...` location selector, the bulk due-date input, the `Set variant...` selector, and any revealed confirmation buttons `Move`, `Set Due`, and `Set Variant`) render with the same uniform control height and aligned vertical centers
 
 #### Scenario: Displaying product default measurement
 - **WHEN** a product has a volume, weight, or length measurement configured

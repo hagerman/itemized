@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductDetailPage } from "./ProductDetailPage";
@@ -299,5 +299,64 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
 
     const defaultBack = await waitFor(() => screen.getByRole("link", { name: "Back to inventory" }));
     expect(defaultBack).toHaveAttribute("href", "/");
+  });
+
+  it("renders all bulk item action controls at a uniform h-8 height", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(
+            JSON.stringify({
+              locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }],
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Select item #5")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Select item #5"));
+
+    const bulkBar = screen.getByText("1 selected:").closest("div")!;
+    const bar = within(bulkBar);
+
+    // Reveal conditional confirmation buttons (Move, Set Due, Set Variant)
+    fireEvent.click(bar.getByRole("button", { name: "Bulk transfer location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fridge" }));
+    fireEvent.change(bar.getByLabelText("Bulk due date"), { target: { value: "2027-01-17" } });
+    fireEvent.change(bar.getByLabelText("Bulk variant"), { target: { value: "11" } });
+
+    const controls = [
+      bar.getByRole("button", { name: "Consume" }),
+      bar.getByRole("button", { name: "Open" }),
+      bar.getByRole("button", { name: "Reprint Labels" }),
+      bar.getByRole("button", { name: "Bulk transfer location" }),
+      bar.getByRole("button", { name: "Move" }),
+      bar.getByLabelText("Bulk due date"),
+      bar.getByRole("button", { name: "Set Due" }),
+      bar.getByLabelText("Bulk variant"),
+      bar.getByRole("button", { name: "Set Variant" }),
+    ];
+
+    for (const control of controls) {
+      expect(control).toHaveClass("h-8");
+    }
   });
 });

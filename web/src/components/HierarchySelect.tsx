@@ -89,6 +89,7 @@ interface HierarchySelectProps<T extends HierarchyItem> {
   ariaLabel?: string;
   className?: string;
   inlineMenu?: boolean;
+  size?: "default" | "sm";
 }
 
 export function HierarchySelect<T extends HierarchyItem>({
@@ -101,6 +102,7 @@ export function HierarchySelect<T extends HierarchyItem>({
   ariaLabel,
   className = "",
   inlineMenu = false,
+  size = "default",
 }: HierarchySelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [drillStack, setDrillStack] = useState<number[]>([]);
@@ -393,12 +395,14 @@ export function HierarchySelect<T extends HierarchyItem>({
             setOpen(true);
           }
         }}
-        className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-left text-sm text-white hover:border-slate-600 focus:border-indigo-500 focus:outline-none"
+        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 text-left text-white hover:border-slate-600 focus:border-indigo-500 focus:outline-none ${
+          size === "sm" ? "h-8 px-2.5 text-xs" : "h-10 px-3 py-1.5 text-sm"
+        }`}
       >
         <span className={`truncate ${selectedItem ? "text-white" : "text-slate-400"}`}>
           {selectedItem ? selectedItem.hierarchy_name || selectedItem.name : allowEmpty ? emptyLabel : placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+        <ChevronDown className={`shrink-0 text-slate-400 ${size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
       </button>
 
       {open && (inlineMenu ? menuContent : typeof document !== "undefined" ? createPortal(menuContent, document.body) : menuContent)}

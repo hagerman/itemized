@@ -353,9 +353,9 @@ export const ProductDetailPage: React.FC = () => {
         {selectedIds.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs">
             <span className="font-semibold text-indigo-200">{selectedIds.length} selected:</span>
-            <button type="button" onClick={() => runBulk("consume")} className="rounded bg-rose-600 px-2.5 py-1 font-medium text-white">Consume</button>
-            <button type="button" onClick={() => runBulk("open")} className="rounded bg-amber-600 px-2.5 py-1 font-medium text-white">Open</button>
-            <button type="button" onClick={() => runBulk("print_label")} className="rounded bg-slate-700 px-2.5 py-1 font-medium text-white">Reprint Labels</button>
+            <button type="button" onClick={() => runBulk("consume")} className="inline-flex h-8 items-center rounded-lg bg-rose-600 px-2.5 font-medium text-white">Consume</button>
+            <button type="button" onClick={() => runBulk("open")} className="inline-flex h-8 items-center rounded-lg bg-amber-600 px-2.5 font-medium text-white">Open</button>
+            <button type="button" onClick={() => runBulk("print_label")} className="inline-flex h-8 items-center rounded-lg bg-slate-700 px-2.5 font-medium text-white">Reprint Labels</button>
             <div className="min-w-[180px]">
               <HierarchySelect
                 items={locations}
@@ -364,14 +364,21 @@ export const ProductDetailPage: React.FC = () => {
                 allowEmpty
                 emptyLabel="Transfer to..."
                 ariaLabel="Bulk transfer location"
+                size="sm"
               />
             </div>
             {bulkLocationId > 0 && (
-              <button type="button" onClick={() => runBulk("transfer")} className="rounded bg-indigo-600 px-2.5 py-1 font-medium text-white">Move</button>
+              <button type="button" onClick={() => runBulk("transfer")} className="inline-flex h-8 items-center rounded-lg bg-indigo-600 px-2.5 font-medium text-white">Move</button>
             )}
-            <input type="date" value={bulkDueDate} onChange={(e) => setBulkDueDate(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white" />
+            <input
+              type="date"
+              aria-label="Bulk due date"
+              value={bulkDueDate}
+              onChange={(e) => setBulkDueDate(e.target.value)}
+              className="h-8 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-0 text-white"
+            />
             {bulkDueDate && (
-              <button type="button" onClick={() => runBulk("update_due_date")} className="rounded bg-emerald-600 px-2.5 py-1 font-medium text-white">Set Due</button>
+              <button type="button" onClick={() => runBulk("update_due_date")} className="inline-flex h-8 items-center rounded-lg bg-emerald-600 px-2.5 font-medium text-white">Set Due</button>
             )}
             {variants.length > 0 && (
               <>
@@ -379,7 +386,7 @@ export const ProductDetailPage: React.FC = () => {
                   aria-label="Bulk variant"
                   value={bulkVariantId}
                   onChange={(e) => setBulkVariantId(e.target.value)}
-                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+                  className="h-8 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-0 text-white"
                 >
                   <option value="">Set variant...</option>
                   <option value="none">None</option>
@@ -388,7 +395,7 @@ export const ProductDetailPage: React.FC = () => {
                   ))}
                 </select>
                 {bulkVariantId && (
-                  <button type="button" onClick={() => runBulk("update_variant")} className="rounded bg-indigo-600 px-2.5 py-1 font-medium text-white">
+                  <button type="button" onClick={() => runBulk("update_variant")} className="inline-flex h-8 items-center rounded-lg bg-indigo-600 px-2.5 font-medium text-white">
                     Set Variant
                   </button>
                 )}

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -1440,5 +1441,179 @@ func TestTaxonomyUpdateValidation(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
 	if locResp.Location.ParentID != nil || locResp.Location.IsFreezer || locResp.Location.HierarchyName != "Chest Freezer" {
 		t.Fatalf("expected top-level non-freezer location, got %+v", locResp.Location)
+	}
+}
+
+func TestFuzzyProductSearch(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "fuzzy@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "fuzzy@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	var catResp struct{ Category Category }
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Food"}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	catID := catResp.Category.ID
+
+	var locResp struct{ Location Location }
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Pantry"}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	locID := locResp.Location.ID
+
+	createProduct := func(name string) int64 {
+		var pResp struct{ Product Product }
+		r := doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+			"name":                name,
+			"category_id":         catID,
+			"default_location_id": locID,
+		}, tok)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("create product %q failed: %d %s", name, r.Code, r.Body.String())
+		}
+		_ = json.Unmarshal(r.Body.Bytes(), &pResp)
+		return pResp.Product.ID
+	}
+
+	chickenID := createProduct("Chicken, Popcorn, Fried")
+	createProduct("Soup, Chicken Noodle")
+	createProduct("Nuts, Cashews, Whole")
+	createProduct("Cashews")
+	milkID := createProduct("Milk")
+	createProduct("Milk, Whole")
+	almondMilkID := createProduct("Almond Milk, Unsweetened")
+	createProduct("Buttermilk")
+
+	// Add a variant and 12-digit UPC-A barcode to Chicken, Popcorn, Fried
+	var varResp struct{ Variant Variant }
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", chickenID), map[string]any{"name": "Tyson"}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create variant failed: %d %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &varResp)
+
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/variants/%d/barcodes", varResp.Variant.ID), map[string]any{
+		"barcode":          "012345678905",
+		"default_quantity": 1,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create barcode failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Add stock & due dates to test explicit sort overrides
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id":  milkID,
+		"location_id": locID,
+		"due_on_date": "2026-12-20",
+		"quantity":    1,
+	}, tok)
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id":  almondMilkID,
+		"location_id": locID,
+		"due_on_date": "2026-12-05",
+		"quantity":    3,
+	}, tok)
+
+	searchNames := func(q, sortParam string) []string {
+		params := url.Values{}
+		params.Set("status", "all")
+		params.Set("q", q)
+		if sortParam != "" {
+			params.Set("sort", sortParam)
+		}
+		r := doReq(t, h, http.MethodGet, "/api/products?"+params.Encode(), nil, tok)
+		if r.Code != http.StatusOK {
+			t.Fatalf("search q=%q failed: %d %s", q, r.Code, r.Body.String())
+		}
+		var resp struct {
+			Products []Product `json:"products"`
+		}
+		_ = json.Unmarshal(r.Body.Bytes(), &resp)
+		names := make([]string, len(resp.Products))
+		for i, p := range resp.Products {
+			names[i] = p.Name
+		}
+		return names
+	}
+
+	contains := func(list []string, target string) bool {
+		for _, s := range list {
+			if s == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. Reordered words & omitted punctuation
+	if got := searchNames("Fried Chicken Popcorn", ""); !contains(got, "Chicken, Popcorn, Fried") {
+		t.Fatalf("expected reordered words to match Chicken, Popcorn, Fried; got %v", got)
+	}
+
+	// 2. Extra descriptive words (LLM-classified style)
+	if got := searchNames("Chicken, Popcorn, Fried, Original", ""); !contains(got, "Chicken, Popcorn, Fried") {
+		t.Fatalf("expected extra descriptive words to match Chicken, Popcorn, Fried; got %v", got)
+	}
+
+	// 3. Multi-word order-independent keywords
+	if got := searchNames("whole nuts", ""); !contains(got, "Nuts, Cashews, Whole") {
+		t.Fatalf("expected multi-word keywords to match Nuts, Cashews, Whole; got %v", got)
+	}
+
+	// 4. Partial substring
+	if got := searchNames("cash", ""); !contains(got, "Nuts, Cashews, Whole") {
+		t.Fatalf("expected partial substring to match Nuts, Cashews, Whole; got %v", got)
+	}
+
+	// 5. Typo tolerance via trigram similarity (single-word and multi-word names)
+	if got := searchNames("Cashewz", ""); !contains(got, "Cashews") {
+		t.Fatalf("expected typo 'Cashewz' to match 'Cashews'; got %v", got)
+	}
+	if got := searchNames("chiken", ""); !contains(got, "Chicken, Popcorn, Fried") {
+		t.Fatalf("expected typo 'chiken' to match 'Chicken, Popcorn, Fried'; got %v", got)
+	}
+
+	// 6. Tiered relevance ordering: Exact > Prefix > WholeWord > Substring
+	if got := searchNames("Milk", ""); len(got) < 4 ||
+		got[0] != "Milk" ||
+		got[1] != "Milk, Whole" ||
+		got[2] != "Almond Milk, Unsweetened" ||
+		got[3] != "Buttermilk" {
+		t.Fatalf("expected tiered order [Milk, Milk, Whole, Almond Milk, Unsweetened, Buttermilk], got %v", got)
+	}
+	if got := searchNames("chick", ""); len(got) < 2 || got[0] != "Chicken, Popcorn, Fried" {
+		t.Fatalf("expected prefix match 'Chicken, Popcorn, Fried' before 'Soup, Chicken Noodle', got %v", got)
+	}
+
+	// 7. Explicit sort overrides (due_date and stock put Almond Milk first)
+	if got := searchNames("Milk", "due_date"); len(got) < 2 || got[0] != "Almond Milk, Unsweetened" {
+		t.Fatalf("expected sort=due_date to put Almond Milk first, got %v", got)
+	}
+	if got := searchNames("Milk", "stock"); len(got) < 2 || got[0] != "Almond Milk, Unsweetened" {
+		t.Fatalf("expected sort=stock to put Almond Milk first, got %v", got)
+	}
+
+	// 8. Punctuation-only query returns empty
+	if got := searchNames(",,,---", ""); len(got) != 0 {
+		t.Fatalf("expected punctuation-only query to return empty, got %v", got)
+	}
+
+	// 9. 12-digit UPC-A and 13-digit leading-zero EAN-13 barcode queries
+	for _, bc := range []string{"012345678905", "0012345678905"} {
+		got := searchNames(bc, "")
+		if len(got) != 1 || got[0] != "Chicken, Popcorn, Fried" {
+			t.Fatalf("expected barcode query %q to return [Chicken, Popcorn, Fried], got %v", bc, got)
+		}
 	}
 }
