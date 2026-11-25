@@ -64,6 +64,21 @@ export function flattenHierarchyTree<T extends HierarchyItem>(
   return out;
 }
 
+export function collectDescendantIds<T extends HierarchyItem>(rootId: number, items: T[]): Set<number> {
+  const ids = new Set<number>([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of items) {
+      if (item.parent_id != null && ids.has(item.parent_id) && !ids.has(item.id)) {
+        ids.add(item.id);
+        changed = true;
+      }
+    }
+  }
+  return ids;
+}
+
 interface HierarchySelectProps<T extends HierarchyItem> {
   items: T[];
   value: number | null;

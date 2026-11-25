@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { HierarchySelect, HierarchyItem } from "./HierarchySelect";
+import { collectDescendantIds, HierarchySelect, HierarchyItem } from "./HierarchySelect";
 
 const SAMPLE_LOCATIONS: HierarchyItem[] = [
   { id: 1, name: "Kitchen", parent_id: null, hierarchy_name: "Kitchen" },
@@ -123,5 +123,11 @@ describe("HierarchySelect (searchable hierarchical drill-down)", () => {
     const inlineMenu = screen.getByTestId("hierarchy-inline-menu");
     expect(inlineMenu).toBeInTheDocument();
     expect(container.contains(inlineMenu)).toBe(true);
+  });
+
+  it("collectDescendantIds returns the root ID and all transitive descendants", () => {
+    expect(Array.from(collectDescendantIds(1, SAMPLE_LOCATIONS)).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    expect(Array.from(collectDescendantIds(2, SAMPLE_LOCATIONS)).sort((a, b) => a - b)).toEqual([2, 3]);
+    expect(Array.from(collectDescendantIds(4, SAMPLE_LOCATIONS))).toEqual([4]);
   });
 });

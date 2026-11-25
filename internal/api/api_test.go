@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -1312,5 +1313,132 @@ func TestForceOIDCSettingAndLoginEnforcement(t *testing.T) {
 	}, "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("local login after disabling OIDC expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestTaxonomyUpdateValidation(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{"email": "admin@home.local", "password": "password123", "mode": "bearer"}, "")
+	var loginResp struct{ Token string `json:"token"` }
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// --- Categories: Food -> Dairy -> Cheese, plus Beverages ---
+	var catResp struct{ Category Category }
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Food"}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	foodID := catResp.Category.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Dairy", "parent_id": foodID}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	dairyID := catResp.Category.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Cheese", "parent_id": dairyID}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	cheeseID := catResp.Category.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Beverages"}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	bevID := catResp.Category.ID
+
+	// Reject blank category name
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/categories/%d", dairyID), map[string]any{"name": "   ", "parent_id": foodID}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blank category name expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Reject self-parenting
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/categories/%d", foodID), map[string]any{"name": "Food", "parent_id": foodID}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("self-parent category expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Reject child & grandchild cycle
+	for _, descID := range []int64{dairyID, cheeseID} {
+		rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/categories/%d", foodID), map[string]any{"name": "Food", "parent_id": descID}, tok)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("descendant cycle category (parent=%d) expected 422, got %d: %s", descID, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Rename & reparent Cheese under Beverages
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/categories/%d", cheeseID), map[string]any{"name": "Milk Drinks", "parent_id": bevID}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update category expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	if catResp.Category.Name != "Milk Drinks" || catResp.Category.ParentID == nil || *catResp.Category.ParentID != bevID || catResp.Category.HierarchyName != "Beverages > Milk Drinks" {
+		t.Fatalf("unexpected updated category: %+v", catResp.Category)
+	}
+
+	// Promote Milk Drinks to top-level (parent_id: null)
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/categories/%d", cheeseID), map[string]any{"name": "Milk Drinks", "parent_id": nil}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("promote category to top-level expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &catResp)
+	if catResp.Category.ParentID != nil || catResp.Category.HierarchyName != "Milk Drinks" {
+		t.Fatalf("expected top-level category, got %+v", catResp.Category)
+	}
+
+	// --- Locations: Kitchen -> Fridge -> Top Shelf, plus Garage ---
+	var locResp struct{ Location Location }
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Kitchen", "is_freezer": false}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	kitchenID := locResp.Location.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Fridge", "parent_id": kitchenID, "is_freezer": false}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	fridgeID := locResp.Location.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Top Shelf", "parent_id": fridgeID, "is_freezer": false}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	shelfID := locResp.Location.ID
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Garage", "is_freezer": false}, tok)
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	garageID := locResp.Location.ID
+
+	// Reject blank location name
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/locations/%d", fridgeID), map[string]any{"name": "  ", "parent_id": kitchenID, "is_freezer": false}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blank location name expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Reject self-parenting and child/grandchild cycles
+	for _, descID := range []int64{kitchenID, fridgeID, shelfID} {
+		rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/locations/%d", kitchenID), map[string]any{"name": "Kitchen", "parent_id": descID, "is_freezer": false}, tok)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("cycle location (parent=%d) expected 422, got %d: %s", descID, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Rename, reparent under Garage, and enable is_freezer
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/locations/%d", shelfID), map[string]any{"name": "Chest Freezer", "parent_id": garageID, "is_freezer": true}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update location expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	if locResp.Location.Name != "Chest Freezer" || locResp.Location.ParentID == nil || *locResp.Location.ParentID != garageID || !locResp.Location.IsFreezer || locResp.Location.HierarchyName != "Garage > Chest Freezer" {
+		t.Fatalf("unexpected updated location: %+v", locResp.Location)
+	}
+
+	// Promote to top-level and disable is_freezer
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/locations/%d", shelfID), map[string]any{"name": "Chest Freezer", "parent_id": nil, "is_freezer": false}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("promote location to top-level expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &locResp)
+	if locResp.Location.ParentID != nil || locResp.Location.IsFreezer || locResp.Location.HierarchyName != "Chest Freezer" {
+		t.Fatalf("expected top-level non-freezer location, got %+v", locResp.Location)
 	}
 }

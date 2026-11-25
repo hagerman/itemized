@@ -229,14 +229,30 @@ func (s *Server) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.ParentID != nil && *req.ParentID == id {
-		writeError(w, http.StatusUnprocessableEntity, "category cannot be its own parent")
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "name is required")
 		return
+	}
+	if req.ParentID != nil {
+		if *req.ParentID == id {
+			writeError(w, http.StatusUnprocessableEntity, "category cannot be its own parent")
+			return
+		}
+		cats, _, err := s.listAllCategories(r.Context())
+		if err != nil {
+			writeInternalError(w, "catalog internal error", err)
+			return
+		}
+		if collectDescendantCategoryIDs(id, cats)[*req.ParentID] {
+			writeError(w, http.StatusUnprocessableEntity, "category cannot be moved under its own descendant")
+			return
+		}
 	}
 	now := db.NowUTC()
 	res, err := s.DB.ExecContext(r.Context(), `
 		UPDATE categories SET name = ?, parent_id = ?, updated_at = ? WHERE id = ?
-	`, strings.TrimSpace(req.Name), req.ParentID, now, id)
+	`, req.Name, req.ParentID, now, id)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -424,14 +440,30 @@ func (s *Server) handleUpdateLocation(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.ParentID != nil && *req.ParentID == id {
-		writeError(w, http.StatusUnprocessableEntity, "location cannot be its own parent")
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusUnprocessableEntity, "name is required")
 		return
+	}
+	if req.ParentID != nil {
+		if *req.ParentID == id {
+			writeError(w, http.StatusUnprocessableEntity, "location cannot be its own parent")
+			return
+		}
+		locs, _, err := s.listAllLocations(r.Context())
+		if err != nil {
+			writeInternalError(w, "catalog internal error", err)
+			return
+		}
+		if collectDescendantLocationIDs(id, locs)[*req.ParentID] {
+			writeError(w, http.StatusUnprocessableEntity, "location cannot be moved under its own descendant")
+			return
+		}
 	}
 	now := db.NowUTC()
 	res, err := s.DB.ExecContext(r.Context(), `
 		UPDATE locations SET name = ?, parent_id = ?, is_freezer = ?, updated_at = ? WHERE id = ?
-	`, strings.TrimSpace(req.Name), req.ParentID, boolToInt(req.IsFreezer), now, id)
+	`, req.Name, req.ParentID, boolToInt(req.IsFreezer), now, id)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
