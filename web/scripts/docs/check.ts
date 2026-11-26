@@ -313,17 +313,21 @@ export function checkDocs(opts: CheckOptions = {}): string[] {
   }
 
   // 8. Check generated in-app help staleness
+  // Ignore HELP_VERSION differences so tagging an already-committed revision
+  // (which changes `git describe --tags`) does not trip the staleness check.
   if (checkStaleness) {
     const version = detectDocsVersion(root);
     const expectedHelp = generateHelpFilesContent(docs, version);
     const helpDir = path.join(root, "web/src/generated/help");
+    const stripVersion = (s: string) =>
+      s.replace(/^export const HELP_VERSION = .*;$/m, "export const HELP_VERSION = <version>;");
     for (const [name, expectedContent] of expectedHelp) {
       const actualPath = path.join(helpDir, name);
       if (!fs.existsSync(actualPath)) {
         errors.push(`web/src/generated/help/${name}: missing generated in-app help file (run 'make docs-build')`);
       } else {
         const actual = fs.readFileSync(actualPath, "utf8");
-        if (actual !== expectedContent) {
+        if (stripVersion(actual) !== stripVersion(expectedContent)) {
           errors.push(`web/src/generated/help/${name}: generated in-app help is stale (run 'make docs-build')`);
         }
       }
