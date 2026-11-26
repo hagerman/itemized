@@ -129,7 +129,7 @@ Open `http://localhost:8080` (or your reverse-proxy URL) to complete first-run a
 | --- | --- | --- |
 | Docker Compose | [Docker Compose](docs/self-hosting/docker-compose.md) | Recommended for Linux servers and homelabs |
 | Docker Run | [Docker Run](docs/self-hosting/docker-run.md) | Quick single-container deployments |
-| Unraid | [Unraid Community Apps](docs/self-hosting/unraid.md) | Unraid NAS appliances using the built-in XML template |
+| Unraid | [Unraid Community Apps](docs/self-hosting/unraid.md) | Unraid NAS appliances using the Community Apps template in [itemizedapp/itemized-unraid](https://github.com/itemizedapp/itemized-unraid) |
 | Single Binary | [Single Binary](docs/self-hosting/binary.md) | Bare-metal Linux/macOS or systemd without containers |
 
 ---

@@ -1,6 +1,6 @@
 ---
 title: Unraid Community Apps
-summary: Install itemized on Unraid using the included Community Apps XML template.
+summary: Install itemized on Unraid using the Community Apps XML template in itemizedapp/itemized-unraid.
 audience: admin
 entry_point: self-host
 order: 4
@@ -9,7 +9,7 @@ capabilities:
 screens: []
 ---
 
-Itemized includes an Unraid Community Apps template at `unraid/itemized.xml` in the repository.
+The Unraid Community Apps template for itemized is maintained in the [itemizedapp/itemized-unraid](https://github.com/itemizedapp/itemized-unraid) repository and installs the official `ghcr.io/itemizedapp/itemized:latest` image.
 
 ## Storage and permissions
 

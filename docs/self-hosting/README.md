@@ -19,7 +19,7 @@ Itemized ships as a single Go binary with an embedded React SPA and a single SQL
 | --- | --- | --- |
 | Docker Compose | [Docker Compose](docker-compose.md) | Recommended for Linux servers and homelabs |
 | Docker Run | [Docker Run](docker-run.md) | Quick single-container deployments |
-| Unraid | [Unraid Community Apps](unraid.md) | Unraid NAS appliances using the built-in XML template |
+| Unraid | [Unraid Community Apps](unraid.md) | Unraid NAS appliances using the Community Apps template in [itemizedapp/itemized-unraid](https://github.com/itemizedapp/itemized-unraid) |
 | Single Binary | [Single Binary](binary.md) | Bare-metal Linux/macOS or systemd without containers |
 
 ## 2. First run

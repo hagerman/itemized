@@ -13,8 +13,8 @@ The application SHALL compile the React frontend into static assets embedded ins
 - **WHEN** the container starts with a mounted `/data` volume
 - **THEN** the server initializes `/data/itemized.db` (applying any pending schema migrations automatically), serves the React SPA at `/`, serves JSON endpoints at `/api/*`, and responds `200 OK` on `GET /up`
 
-### Requirement: Multi-architecture container image and Unraid template
-The repository SHALL include a multi-stage `Dockerfile` producing `linux/amd64` and `linux/arm64` images with a `PUID`/`PGID` privilege-drop entrypoint that ensures the data directory is writable and runs `/usr/local/bin/itemized` as a non-root user, and an Unraid Community Apps XML template mapping port `8080`, persistent volume `/data`, `PUID` (`99`), `PGID` (`100`), and core environment variables (`BASE_URL`, `TZ`, `TRUST_PROXY`, optional OIDC/LLM settings).
+### Requirement: Multi-architecture container image
+The repository SHALL include a multi-stage `Dockerfile` producing `linux/amd64` and `linux/arm64` images with a `PUID`/`PGID` privilege-drop entrypoint that ensures the data directory is writable and runs `/usr/local/bin/itemized` as a non-root user.
 
 #### Scenario: Data persists across container upgrades
 - **WHEN** the container is recreated against the same `/data` bind mount
