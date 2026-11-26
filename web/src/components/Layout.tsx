@@ -6,6 +6,7 @@ import {
   Box,
   Clock,
   FolderTree,
+  HelpCircle,
   LayoutGrid,
   LogOut,
   MapPin,
@@ -20,9 +21,12 @@ import {
 } from "lucide-react";
 import { apiFetch, Category, Location, Product, User } from "../api";
 import { BrandLogo } from "./BrandLogo";
+import { useHelp } from "./HelpContext";
 import { buildHierarchyTree, flattenHierarchyTree } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
 import { ScannerDrawer } from "./ScannerDrawer";
+import { screenIdForPathname } from "../screens";
+import { KEYBOARD_SHORTCUTS } from "../shortcuts";
 
 interface LayoutProps {
   user: User;
@@ -65,6 +69,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
   const qc = useQueryClient();
   const navigate = useNavigate();
   const loc = useLocation();
+  const { openHelpForScreen } = useHelp();
   const [searchParams] = useSearchParams();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [treeTab, setTreeTab] = useState<"locations" | "categories">("locations");
@@ -135,11 +140,6 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
       if (isTyping) return;
       if (e.key !== "Escape" && (e.metaKey || e.ctrlKey || e.altKey)) return;
 
-      if (e.key === "?") {
-        e.preventDefault();
-        setHelpOpen((v) => !v);
-        return;
-      }
       if (e.key === "Escape") {
         if (helpOpen) { setHelpOpen(false); return; }
         if (searchOpen) { setSearchOpen(false); return; }
@@ -147,9 +147,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
         if (loc.pathname !== "/") { navigate("/"); }
         return;
       }
-      if (e.key === "n") {
+      if (pendingPrefix.current === "g") {
+        pendingPrefix.current = null;
+        if (prefixTimer.current) clearTimeout(prefixTimer.current);
+        const match = KEYBOARD_SHORTCUTS.find((s) => s.prefix === "g" && s.key === e.key && s.route);
+        if (match?.route) {
+          e.preventDefault();
+          navigate(match.route);
+        }
+        return;
+      }
+      if (e.key === "?") {
         e.preventDefault();
-        navigate("/products/new");
+        setHelpOpen((v) => !v);
         return;
       }
       if (e.key === "g" && !pendingPrefix.current) {
@@ -159,20 +169,10 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
         }, 1000);
         return;
       }
-      if (pendingPrefix.current === "g") {
-        pendingPrefix.current = null;
-        if (prefixTimer.current) clearTimeout(prefixTimer.current);
-        const map: Record<string, string> = {
-          i: "in_stock",
-          s: "shopping_list",
-          d: "due_soon",
-          o: "overdue",
-          a: "all",
-        };
-        if (map[e.key]) {
-          e.preventDefault();
-          navigate(`/?status=${map[e.key]}`);
-        }
+      const direct = KEYBOARD_SHORTCUTS.find((s) => !s.prefix && s.key === e.key && s.route);
+      if (direct?.route) {
+        e.preventDefault();
+        navigate(direct.route);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -273,9 +273,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
 
           {treeTab === "locations" ? (
             <div className="space-y-0.5">
-              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-500">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-400">
                 <span>Filter by location</span>
-                <Link to="/locations" onClick={() => setMobileMenuOpen(false)} className="text-indigo-400 hover:underline">Manage</Link>
+                <Link to="/locations" onClick={() => setMobileMenuOpen(false)} className="text-indigo-300 hover:underline">Manage</Link>
               </div>
               {flattenHierarchyTree(buildHierarchyTree(locations)).map(({ item: l, depth }) => {
                 const isSelected = activeLocId === String(l.id);
@@ -301,9 +301,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
             </div>
           ) : (
             <div className="space-y-0.5">
-              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-500">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-400">
                 <span>Filter by category</span>
-                <Link to="/categories" onClick={() => setMobileMenuOpen(false)} className="text-indigo-400 hover:underline">Manage</Link>
+                <Link to="/categories" onClick={() => setMobileMenuOpen(false)} className="text-indigo-300 hover:underline">Manage</Link>
               </div>
               {flattenHierarchyTree(buildHierarchyTree(categories)).map(({ item: c, depth }) => {
                 const isSelected = activeCatId === String(c.id);
@@ -329,6 +329,20 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
       </nav>
 
       <div className="border-t border-slate-800 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3">
+        <div className="mb-2">
+          <Link
+            to="/help"
+            onClick={() => setMobileMenuOpen(false)}
+            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+              loc.pathname.startsWith("/help")
+                ? "bg-indigo-600/20 text-indigo-300"
+                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span>Help</span>
+          </Link>
+        </div>
         <div className="flex items-center justify-between text-xs text-slate-400">
           <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 truncate hover:text-white">
             <Settings className="h-4 w-4" />
@@ -346,6 +360,12 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[80] focus:rounded-lg focus:bg-indigo-600 focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to content
+      </a>
       {/* Desktop persistent sidebar */}
       <aside className="hidden w-64 shrink-0 lg:block">{sidebarContent}</aside>
 
@@ -371,7 +391,19 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
             </button>
             <h1 className="truncate text-lg font-semibold text-white">{title}</h1>
           </div>
-          <div className="flex items-center gap-2">{headerActions}</div>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <button
+              type="button"
+              onClick={() => openHelpForScreen(screenIdForPathname(loc.pathname))}
+              aria-label="Help for this screen"
+              title="Help"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+            >
+              <HelpCircle className="h-4 w-4 text-indigo-300" />
+              <span className="hidden sm:inline">Help</span>
+            </button>
+          </div>
         </header>
 
         {demoMode && (
@@ -387,7 +419,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>
       </div>
@@ -490,15 +522,22 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
               <button type="button" onClick={() => setHelpOpen(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
             </div>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex justify-between"><span>In Stock</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g i</kbd></li>
-              <li className="flex justify-between"><span>Shopping List</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g s</kbd></li>
-              <li className="flex justify-between"><span>Due Soon</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g d</kbd></li>
-              <li className="flex justify-between"><span>Overdue</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g o</kbd></li>
-              <li className="flex justify-between"><span>All Items</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">g a</kbd></li>
-              <li className="flex justify-between"><span>New Product</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">n</kbd></li>
-              <li className="flex justify-between"><span>Back / Close</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">Esc</kbd></li>
-              <li className="flex justify-between"><span>Help</span><kbd className="rounded bg-slate-800 px-1.5 py-0.5">?</kbd></li>
+              {KEYBOARD_SHORTCUTS.map((s) => (
+                <li key={s.keys} className="flex justify-between gap-3">
+                  <span>{s.label}</span>
+                  <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-200">{s.keys}</kbd>
+                </li>
+              ))}
             </ul>
+            <div className="mt-4 border-t border-slate-800 pt-3 text-right">
+              <Link
+                to="/help"
+                onClick={() => setHelpOpen(false)}
+                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+              >
+                Open full Help guide →
+              </Link>
+            </div>
           </div>
         </ModalBackdrop>
       )}

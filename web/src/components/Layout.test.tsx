@@ -344,4 +344,45 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     expect(banner.textContent).toMatch(/resets in \d+m/i);
     expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
   });
+
+  it("drives keyboard shortcuts modal from KEYBOARD_SHORTCUTS and navigates to /help on g ?", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        if (url === "/api/categories") return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        return new Response(JSON.stringify({ status_counts: {} }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Layout
+            user={{ id: 1, email: "a@b.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Inventory"
+          >
+            <LocationEcho />
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Press '?' to open Keyboard Shortcuts modal
+    fireEvent.keyDown(window, { key: "?" });
+    expect(screen.getByRole("heading", { name: "Keyboard Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByText("g ?")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open full Help guide/i })).toHaveAttribute("href", "/help");
+
+    // Close modal with Escape
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("heading", { name: "Keyboard Shortcuts" })).not.toBeInTheDocument();
+
+    // Press 'g' then '?' to navigate to /help
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "?" });
+    expect(screen.getByTestId("current-url").textContent).toBe("/help");
+  });
 });

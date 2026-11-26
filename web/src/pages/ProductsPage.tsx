@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, Loader2, Plus, Search, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, HelpCircle, Loader2, Plus, Search, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
 import { apiFetch, AuthStatus, Product } from "../api";
+import { useHelp } from "../components/HelpContext";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 
 interface ReclassifyRow {
@@ -35,6 +36,7 @@ const SORT_OPTIONS = [
 export const ProductsPage: React.FC = () => {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { openHelpForScreen } = useHelp();
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get("status") || "in_stock";
   const categoryId = searchParams.get("category_id") || "";
@@ -797,15 +799,25 @@ export const ProductsPage: React.FC = () => {
                     <GitMerge className="h-4 w-4 text-indigo-400" />
                     <h2 className="text-base font-semibold text-white">Merge Products</h2>
                   </div>
-                  <button
-                    type="button"
-                    aria-label="Close merge dialog"
-                    disabled={merging}
-                    onClick={closeMergeModal}
-                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openHelpForScreen("dialog/merge-products")}
+                      aria-label="Help for Merge Products"
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+                    >
+                      <HelpCircle className="h-4 w-4" /> Help
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Close merge dialog"
+                      disabled={merging}
+                      onClick={closeMergeModal}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4 px-5 py-4">
@@ -895,15 +907,25 @@ export const ProductsPage: React.FC = () => {
                     <Sparkles className="h-4 w-4 text-amber-400" />
                     <h2 className="text-base font-semibold text-white">Reclassify Products</h2>
                   </div>
-                  <button
-                    type="button"
-                    aria-label="Close reclassify dialog"
-                    disabled={reclassifyApplying}
-                    onClick={closeReclassifyModal}
-                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openHelpForScreen("dialog/reclassify-products")}
+                      aria-label="Help for Reclassify Products"
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+                    >
+                      <HelpCircle className="h-4 w-4" /> Help
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Close reclassify dialog"
+                      disabled={reclassifyApplying}
+                      onClick={closeReclassifyModal}
+                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">

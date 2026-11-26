@@ -1,7 +1,8 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, AuthStatus } from "./api";
+import { HelpProvider } from "./components/HelpContext";
 import { Layout } from "./components/Layout";
 import { AuthPage } from "./pages/AuthPage";
 import { ProductsPage } from "./pages/ProductsPage";
@@ -10,6 +11,8 @@ import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { SearchPage } from "./pages/SearchPage";
 import { CategoriesPage, LocationDetailPage, LocationsPage } from "./pages/TaxonomyPages";
 import { SettingsPage } from "./pages/SettingsPage";
+
+const LazyHelpPage = React.lazy(() => import("./pages/HelpPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
@@ -23,7 +26,7 @@ const AppRoutes: React.FC = () => {
   });
 
   if (isLoading || !authStatus) {
-    return <div className="flex h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">Loading Itemized...</div>;
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">Loading itemized...</div>;
   }
 
   if (!authStatus.user) {
@@ -57,6 +60,8 @@ const AppRoutes: React.FC = () => {
       <Route path="/locations" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Locations" demoMode={demoMode} demoResetAt={demoResetAt}><LocationsPage /></Layout>} />
       <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location" demoMode={demoMode} demoResetAt={demoResetAt}><LocationDetailPage /></Layout>} />
       <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt}><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
+      <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
+      <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -65,7 +70,9 @@ const AppRoutes: React.FC = () => {
 export const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
-      <AppRoutes />
+      <HelpProvider>
+        <AppRoutes />
+      </HelpProvider>
     </BrowserRouter>
   </QueryClientProvider>
 );

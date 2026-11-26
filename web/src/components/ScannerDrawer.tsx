@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, Loader2, RotateCcw, ScanBarcode, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, HelpCircle, Loader2, RotateCcw, ScanBarcode, Sparkles, X } from "lucide-react";
 import {
   apiFetch,
   Category,
@@ -10,6 +10,7 @@ import {
   ScanResolution,
 } from "../api";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { useHelp } from "./HelpContext";
 import { HierarchySelect } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
 import {
@@ -143,6 +144,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   locations,
 }) => {
   const qc = useQueryClient();
+  const { openHelpForScreen } = useHelp();
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toast, setToast] = useState<UndoToast | null>(null);
@@ -943,9 +945,19 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         <div className="border-b border-slate-800 px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold text-white">Scan &amp; Action</h2>
-            <button type="button" onClick={onClose} aria-label="Close scanner" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => openHelpForScreen("dialog/scanner")}
+                aria-label="Help for Scan and Action"
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+              >
+                <HelpCircle className="h-4 w-4" /> Help
+              </button>
+              <button type="button" onClick={onClose} aria-label="Close scanner" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-5 gap-1 rounded-xl bg-slate-900 p-1">
             {MODES.map((m) => (

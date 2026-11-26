@@ -147,7 +147,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         if (!navigator.mediaDevices?.getUserMedia) {
           setCameraError(
             window.isSecureContext === false
-              ? "Camera requires HTTPS. Access Itemized over HTTPS (e.g., via a reverse proxy) to use live barcode scanning."
+              ? "Camera requires HTTPS. Access itemized over HTTPS (e.g., via a reverse proxy) to use live barcode scanning."
               : "Camera API unavailable in this browser."
           );
           return;

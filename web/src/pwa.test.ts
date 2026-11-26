@@ -34,7 +34,8 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
     expect(doc.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe(
       "black-translucent"
     );
-    expect(doc.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute("content")).toBe("Itemized");
+    expect(doc.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute("content")).toBe("itemized");
+    expect(doc.querySelector("title")?.textContent).toBe("itemized");
 
     const appleIcon = doc.querySelector('link[rel="apple-touch-icon"]');
     expect(appleIcon?.getAttribute("href")).toBe("/apple-touch-icon.png");

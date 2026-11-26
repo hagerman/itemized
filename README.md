@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="web/public/icon-192.png" alt="Itemized logo" width="96" height="96" />
+  <img src="web/public/icon-192.png" alt="itemized logo" width="96" height="96" />
 </p>
 
-<h1 align="center">Itemized</h1>
+<h1 align="center">itemized</h1>
 
 <p align="center">
   <strong>Self-hosted household inventory management, expiration tracking, barcode scanning, and direct Zebra ZPL label printing.</strong>
@@ -11,11 +11,13 @@
 <p align="center">
   <a href="https://demo.itemizedapp.com"><strong>🚀 Try the Live Demo</strong></a>
   &nbsp;·&nbsp;
-  <a href="#quick-start">Quick Start</a>
+  <a href="docs/get-started/getting-started.md">User Guide</a>
   &nbsp;·&nbsp;
-  <a href="#configuration">Configuration</a>
+  <a href="docs/self-hosting/README.md">Self-Hosting</a>
   &nbsp;·&nbsp;
-  <a href="#unraid-community-apps">Unraid</a>
+  <a href="docs/api.md">API</a>
+  &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
@@ -23,12 +25,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-inventory.jpg" alt="Itemized inventory screenshot" width="900" />
+  <img src="docs/screenshot-inventory.jpg" alt="itemized inventory screenshot" width="900" />
 </p>
 
 ---
 
-## What Itemized Does
+## What itemized does
 
 Itemized is designed to make tracking everything in your pantry, fridge, freezers, and storage shelves fast and effortless—from your phone at the grocery store or a desktop with a USB barcode scanner.
 
@@ -88,7 +90,7 @@ Open `http://localhost:8080` (or your reverse-proxy URL) to complete first-run a
 
 ## HTTPS & Reverse Proxy (Required for Mobile Barcode Scanning)
 
-Modern mobile browsers (including iOS Safari and Chrome/Firefox on iOS) disable the camera API (`navigator.mediaDevices`) on plain `http://` LAN URLs such as `http://192.168.1.x:8080`. To use live camera barcode scanning on phones and tablets, serve Itemized over **HTTPS** by placing it behind a reverse proxy (such as Nginx Proxy Manager, Caddy, Traefik, SWAG, or Tailscale Serve).
+Modern mobile browsers (including iOS Safari and Chrome/Firefox on iOS) disable the camera API (`navigator.mediaDevices`) on plain `http://` LAN URLs such as `http://192.168.1.x:8080`. To use live camera barcode scanning on phones and tablets, serve itemized over **HTTPS** by placing it behind a reverse proxy (such as Nginx Proxy Manager, Caddy, Traefik, SWAG, or Tailscale Serve).
 
 When running behind a reverse proxy, set:
 
@@ -105,8 +107,8 @@ All instance settings (except `PORT`, `DB_PATH`, `PUID`/`PGID`, `TRUST_PROXY`, a
 |---|---|---|
 | `PORT` | `8080` | HTTP listen port |
 | `DB_PATH` | `/data/itemized.db` | SQLite database path |
-| `PUID` | `1000` | User ID for running Itemized and owning `/data` (`99` in Unraid template) |
-| `PGID` | `1000` | Group ID for running Itemized and owning `/data` (`100` in Unraid template) |
+| `PUID` | `1000` | User ID for running itemized and owning `/data` (`99` in Unraid template) |
+| `PGID` | `1000` | Group ID for running itemized and owning `/data` (`100` in Unraid template) |
 | `BASE_URL` | *(request host)* | Base URL encoded into printed QR labels |
 | `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so rate limiting uses `X-Forwarded-For` / `X-Real-IP` |
 | `OIDC_ISSUER` | *(disabled)* | Optional OIDC issuer URL (Auth Code + PKCE) |

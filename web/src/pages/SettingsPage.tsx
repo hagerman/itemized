@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer, RotateCcw, Trash2 } from "lucide-react";
+import { HelpCircle, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { apiFetch, AppSettings, LabelTemplate, PrinterRecord, User } from "../api";
+import { useHelp } from "../components/HelpContext";
 
 interface SettingsPageProps {
   user: User;
@@ -10,6 +11,7 @@ interface SettingsPageProps {
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = false }) => {
   const qc = useQueryClient();
+  const { openHelpForScreen } = useHelp();
   const isAdmin = user.role === "admin";
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +158,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       <form onSubmit={saveAccount} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-white">Account</h2>
-          {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+          <div className="flex items-center gap-3">
+            {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+            <button
+              type="button"
+              data-help-screen="settings/account"
+              onClick={() => openHelpForScreen("settings/account")}
+              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+            >
+              <HelpCircle className="h-3.5 w-3.5" /> Learn more
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block text-xs text-slate-400">
@@ -178,7 +190,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       {/* Instance Configuration (Admin Only) */}
       {isAdmin && (
       <form onSubmit={saveInstanceSettings} className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h2 className="text-base font-semibold text-white">Instance Configuration</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-white">Instance Configuration</h2>
+          <button
+            type="button"
+            data-help-screen="settings/instance"
+            onClick={() => openHelpForScreen("settings/instance")}
+            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+          >
+            <HelpCircle className="h-3.5 w-3.5" /> Learn more
+          </button>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="block text-xs text-slate-400">
             Base URL (encoded in QR labels)
@@ -193,7 +215,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
         <div className="border-t border-slate-800 pt-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">OIDC (Optional)</h3>
-            {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+            <div className="flex items-center gap-3">
+              {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+              <button
+                type="button"
+                data-help-screen="settings/oidc"
+                onClick={() => openHelpForScreen("settings/oidc")}
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+              >
+                <HelpCircle className="h-3.5 w-3.5" /> Learn more
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <input disabled={demoMode} value={oidcIssuer} onChange={(e) => setOidcIssuer(e.target.value)} placeholder="Issuer URL" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" />
@@ -223,7 +255,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
         <div className="border-t border-slate-800 pt-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">LLM Product Classification (Optional)</h3>
-            {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+            <div className="flex items-center gap-3">
+              {demoMode && <span className="text-xs text-amber-300">Disabled in demo mode</span>}
+              <button
+                type="button"
+                data-help-screen="settings/llm"
+                onClick={() => openHelpForScreen("settings/llm")}
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+              >
+                <HelpCircle className="h-3.5 w-3.5" /> Learn more
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <select disabled={demoMode} value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50">
@@ -246,7 +288,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       {/* Household Users (Admin Only) */}
       {isAdmin && (
         <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-base font-semibold text-white">Household Users (Admin)</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-white">Household Users (Admin)</h2>
+            <button
+              type="button"
+              data-help-screen="settings/users"
+              onClick={() => openHelpForScreen("settings/users")}
+              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+            >
+              <HelpCircle className="h-3.5 w-3.5" /> Learn more
+            </button>
+          </div>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -328,7 +380,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       {/* Printers (Admin Only) */}
       {isAdmin && (
       <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <h2 className="text-base font-semibold text-white">Label Printers</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-white">Label Printers</h2>
+          <button
+            type="button"
+            data-help-screen="settings/printers"
+            onClick={() => openHelpForScreen("settings/printers")}
+            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+          >
+            <HelpCircle className="h-3.5 w-3.5" /> Learn more
+          </button>
+        </div>
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -405,7 +467,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       {isAdmin && (
       <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-white">ZPL Label Templates</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-white">ZPL Label Templates</h2>
+            <button
+              type="button"
+              data-help-screen="settings/label-templates"
+              onClick={() => openHelpForScreen("settings/label-templates")}
+              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+            >
+              <HelpCircle className="h-3.5 w-3.5" /> Learn more
+            </button>
+          </div>
           <div className="flex gap-1 rounded-lg bg-slate-950 p-1 text-xs">
             {(["item", "product", "location"] as const).map((et) => (
               <button

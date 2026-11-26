@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs:build": "tsx scripts/docs/build.ts",
+    "docs:check": "tsx scripts/docs/check.ts",
+    "docs:screenshots": "tsx scripts/docs/screenshots.ts",
+    "docs:a11y": "tsx scripts/docs/a11y.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.66.0",
@@ -17,14 +21,20 @@
     "zxing-wasm": "^3.1.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.1",
     "@tailwindcss/vite": "^4.0.6",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@types/node": "^26.6.11",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "gray-matter": "^4.0.3",
     "jsdom": "^26.0.0",
+    "marked": "^18.3.0",
+    "playwright": "^1.65.1",
     "tailwindcss": "^4.0.6",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"

@@ -1,6 +1,6 @@
 {
-  "name": "Itemized",
-  "short_name": "Itemized",
+  "name": "itemized",
+  "short_name": "itemized",
   "description": "Self-hosted household inventory and label management",
   "start_url": "/",
   "display": "standalone",
