@@ -151,3 +151,13 @@ DEMO_MODE=true DB_PATH=/tmp/itemized-demo.db go run ./cmd/itemized
 # Build Docker image locally
 docker build -t itemized:local .
 ```
+
+---
+
+## Security
+
+To report a security vulnerability, please see [SECURITY.md](SECURITY.md).
+
+## License
+
+itemized is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
