@@ -68,7 +68,7 @@ User guide pages SHALL be under 600 words each and lead with a screenshot. The k
 - **THEN** the docs check fails and names the page and its word count
 
 ### Requirement: Documentation website
-Every release and CI build SHALL produce the documentation as a standalone static website bundle (deployable to GitHub Pages or `/docs/` on `itemizedapp.com`) with sidebar navigation, an "On this page" outline, client-side search over a prebuilt index, the version described, and an "Edit this page" link pointing to the source file on GitHub. Every page SHALL belong to one of six entry points (`Get started`, `Use Itemized`, `Self-host`, `Integrate`, `Reference`, `Under the hood`). The landing page SHALL display the search input and the six entry points, each with a one-line description, its key pages, and a link to its section page; each section page SHALL list every page of its entry point with its summary. The sidebar SHALL follow the entry points, and every page SHALL display its entry point in a breadcrumb. The header and footer SHALL carry Itemized navigation links (`Docs`, `Demo` linking to `https://demo.itemizedapp.com`, and `GitHub` linking to `https://github.com/itemizedapp/itemized`). Pages SHALL be readable and navigable without JavaScript, no search query SHALL be sent over the network, and no page SHALL request assets (including fonts or stylesheets) from any third-party origin.
+Every release and CI build SHALL produce the documentation as a standalone static website bundle (deployable to GitHub Pages or `/docs/` on `itemizedapp.com`) with sidebar navigation, an "On this page" outline, client-side search over a prebuilt index, the version described, and an "Edit this page" link pointing to the source file on GitHub. Every page SHALL belong to one of six entry points (`Get started`, `Use itemized`, `Self-host`, `Integrate`, `Reference`, `Under the hood`). The landing page SHALL display the search input and the six entry points, each with a one-line description, its key pages, and a link to its section page; each section page SHALL list every page of its entry point with its summary. The sidebar SHALL follow the entry points, and every page SHALL display its entry point in a breadcrumb. The header and footer SHALL carry itemized navigation links (`Docs`, `Demo` linking to `https://demo.itemizedapp.com`, and `GitHub` linking to `https://github.com/itemizedapp/itemized`). Pages SHALL be readable and navigable without JavaScript, no search query SHALL be sent over the network, and no page SHALL request assets (including fonts or stylesheets) from any third-party origin.
 
 #### Scenario: Client-side search
 - **WHEN** a visitor types `"freezer"` in the docs website search
@@ -109,9 +109,9 @@ The `/help` view's landing page SHALL focus the search input on open, followed b
 - "Track expiration dates and due rules"
 - "Manage your shopping list"
 - "Print QR labels on a Zebra printer"
-- "Install Itemized on your phone"
+- "Install itemized on your phone"
 - "Use keyboard shortcuts"
-- "Self-host Itemized"
+- "Self-host itemized"
 
 #### Scenario: Task-shaped landing
 - **WHEN** a user opens `/help`
@@ -245,3 +245,14 @@ The repository `README.md` SHALL be generated from `docs/` during the docs build
 #### Scenario: Broken image or link in README fails docs check
 - **WHEN** a screenshot or relative link referenced by `README.md` does not exist on disk or lacks alt text
 - **THEN** the docs check fails and names the missing image, missing link target, or missing alt text in `README.md`
+
+### Requirement: Brand name capitalization in documentation
+All authored documentation (`docs/`, `README.md`, `CONTRIBUTING.md`), generated static documentation website pages (`<title>`, headings, entry points, breadcrumbs, footer, and metadata), and generated in-app Help pages and task entries SHALL render the brand name in lowercase as `itemized` everywhere except when `Itemized` is the first word of a sentence. The docs check (`make docs-check`) SHALL automatically fail when non-sentence-start `Itemized` appears in documentation prose, headings, titles, or labels.
+
+#### Scenario: Docs prose and metadata follow lowercase brand rule
+- **WHEN** a visitor or user reads any page on the docs website or in-app Help
+- **THEN** the brand wordmark, page titles, entry point headings, footer, and mid-sentence copy render `itemized` in lowercase, capitalizing `Itemized` only when it starts a sentence
+
+#### Scenario: Automated brand-casing check catches mid-sentence capitalization
+- **WHEN** a contributor writes `"configure Itemized behind Caddy"` in a Markdown file under `docs/`
+- **THEN** `make docs-check` fails and names the file and offending phrase
