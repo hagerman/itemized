@@ -283,6 +283,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, architecture t
 
 ---
 
+## AI-Assisted Development & OpenSpec
+
+AI coding assistants are actively used in the development of itemized—helping author specifications, code, tests, and documentation—under human direction and review. To keep changes intentional and reliable, itemized follows a spec-driven workflow with **OpenSpec** (\`openspec/\`):
+
+- **Spec-first planning**: Changes are proposed, specified, and reviewed before implementation begins.
+- **Living specifications**: Archived changes update \`openspec/specs/\` so humans and AI agents always share an authoritative behavioral contract.
+- **Automated verification**: All changes are validated with \`make check\` (Go tests/vet, API doc contract checks, Vitest frontend tests, and docs/link/freshness checks).
+
+Learn more in the [OpenSpec workflow guide](docs/contributing/openspec.md).
+
+---
+
 ## Security
 
 To report a security vulnerability, please see [SECURITY.md](SECURITY.md).

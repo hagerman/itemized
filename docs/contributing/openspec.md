@@ -1,6 +1,6 @@
 ---
 title: OpenSpec workflow
-summary: How itemized uses OpenSpec to specify behavior before implementing changes.
+summary: How itemized uses AI-assisted development and OpenSpec to specify behavior before implementing changes.
 audience: developer
 entry_point: under-the-hood
 order: 4
@@ -10,6 +10,16 @@ screens: []
 ---
 
 Itemized tracks durable system behavior in `openspec/specs/` and active proposals in `openspec/changes/`.
+
+## AI-assisted development & why itemized uses OpenSpec
+
+AI coding assistants are actively used throughout the itemized development cycle—helping draft proposals, specifications, code, tests, and documentation—under human direction, architectural review, and verification.
+
+Rather than relying on ad-hoc prompts, itemized pairs AI-assisted development with **OpenSpec** for three key benefits:
+
+- **Spec-first clarity**: Every non-trivial change starts with a written `proposal.md`, testable behavioral spec deltas, optional `design.md`, and an ordered `tasks.md` checklist before code is written. This prevents scope creep and ensures intent is agreed upon up front.
+- **Durable living specifications**: When a change is archived, its spec deltas merge into `openspec/specs/`. Both human contributors and AI agents work from the same up-to-date behavioral contract instead of reverse-engineering intent from scattered code or old PRs.
+- **Automated verification**: Every change—human-written or AI-assisted—is gated by `make check` (Go vet and tests, API documentation contract tests, frontend Vitest tests, documentation freshness/link/coverage checks) and WCAG 2.2 AA accessibility checks.
 
 ## Directory layout
 
