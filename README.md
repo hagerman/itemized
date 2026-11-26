@@ -1,3 +1,5 @@
+<!-- Generated from docs/ by `make docs-build`. Do not edit by hand; update files under docs/ or web/scripts/docs/readme.ts instead. -->
+
 <p align="center">
   <img src="web/public/icon-192.png" alt="itemized logo" width="96" height="96" />
 </p>
@@ -25,7 +27,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-inventory.jpg" alt="itemized inventory screenshot" width="900" />
+  <img src="docs/assets/inventory.png" alt="Itemized inventory dashboard showing In Stock products, sidebar counts, and location tree" width="900" />
 </p>
 
 ---
@@ -34,13 +36,48 @@
 
 Itemized is designed to make tracking everything in your pantry, fridge, freezers, and storage shelves fast and effortless—from your phone at the grocery store or a desktop with a USB barcode scanner.
 
-- **Track Stock & Expiration Dates**: Organize items into nested **Locations** (such as *Kitchen → Refrigerator → Crisper Drawer* or *Garage → Chest Freezer*) and **Categories**. Automatically highlights **Due Soon** and **Overdue** items, with smart due-date rules for opening, freezing, thawing, and rolling-average consumption history.
-- **Automatic Shopping List**: Set minimum stock levels on products to automatically surface low-stock items on your **Shopping List**, add items manually with one click, and have them clear automatically once restocked.
-- **Mobile & USB Barcode / QR Scanning**: Use your phone's camera (installable as a mobile PWA) or a USB/Bluetooth scanner in the unified **Scan / Action** workflow to **Purchase**, **Consume**, **Open**, **Transfer**, or run a **Location Inventory Audit**. Unknown retail barcodes automatically look up product details via OpenFoodFacts, with optional AI-assisted naming and categorization (Anthropic, OpenAI, Gemini, or local Ollama).
-- **Direct LAN Label Printing**: Print QR labels directly to **Zebra ZSB** (IPP) and **Raw TCP (`:9100`) ZPL** printers on your local network—no companion print server needed—with customizable Go-template ZPL layouts for items, products, and locations.
-- **Instant Search & Keyboard Shortcuts**: Typo-tolerant SQLite FTS5 trigram search plus Gmail-style desktop shortcuts (`g i`, `g s`, `g d`, `g o`, `g a`, `n`, `?`).
-- **Household Accounts & SSO**: Supports multiple household users with **Admin** and **Member** roles, local password auth, and optional **OIDC SSO** (Authentik, Authelia, Pocket ID, Keycloak, etc.) with auto-provisioning.
-- **Zero-Dependency Self-Hosting**: Ships as a single Go binary with an embedded React SPA and a single SQLite database file (`WAL` mode)—multi-arch (`linux/amd64` and `linux/arm64`) with an Unraid Community Apps template included.
+- **[Inventory and expiration tracking](docs/use/inventory-and-expiration.md)**: Track stock quantities, Due Soon and Overdue alerts, rolling-average due dates, and bulk item actions.
+- **[Locations and categories](docs/use/locations-and-categories.md)**: Organize storage areas and product categories in nested trees, mark freezers, and print location QR labels.
+- **[Barcode scanning and workflows](docs/use/barcode-scanning.md)**: Use your phone camera or a USB/Bluetooth scanner to Purchase, Consume, Open, Transfer, and Audit stock.
+- **[Variants and barcodes](docs/use/variants-and-barcodes.md)**: Group brands and package sizes under one product, attach multiple barcodes, and merge duplicate products.
+- **[UPC lookup and AI classification](docs/use/upc-and-ai.md)**: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
+- **[Shopping list and minimum stock](docs/use/shopping-list.md)**: Surface low-stock items automatically, pin products manually, and auto-clear them when restocked.
+- **[Label printing and ZPL templates](docs/use/label-printing.md)**: Print scannable QR labels directly to Zebra ZSB (IPP) and Raw TCP (:9100) ZPL printers on your LAN.
+- **[Search and keyboard shortcuts](docs/use/search-and-shortcuts.md)**: Find products instantly with typo-tolerant FTS5 search and navigate desktop views with Gmail-style shortcuts.
+- **[Household accounts and OIDC SSO](docs/use/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
+- **[Settings overview](docs/use/settings.md)**: Navigate Account, Instance Configuration, OIDC, AI classification, Household Users, Printers, and ZPL Templates.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="docs/use/barcode-scanning.md"><img src="docs/assets/scanner.png" alt="Scan / Action drawer showing camera scanner and workflow mode tabs" width="440" /></a><br />
+      <strong><a href="docs/use/barcode-scanning.md">Barcode scanning and workflows</a></strong>
+    </td>
+    <td align="center" width="50%">
+      <a href="docs/use/shopping-list.md"><img src="docs/assets/shopping-list.png" alt="Shopping List view displaying low-stock and manually added products" width="440" /></a><br />
+      <strong><a href="docs/use/shopping-list.md">Shopping list and minimum stock</a></strong>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <a href="docs/use/inventory-and-expiration.md"><img src="docs/assets/product-detail.png" alt="Product detail page with expiration tracking in itemized" width="440" /></a><br />
+      <strong><a href="docs/use/inventory-and-expiration.md">Inventory and expiration tracking</a></strong>
+    </td>
+    <td align="center" width="50%">
+      <a href="docs/use/label-printing.md"><img src="docs/assets/settings-printers.png" alt="Label Printers and ZPL Label Templates cards in Settings" width="440" /></a><br />
+      <strong><a href="docs/use/label-printing.md">Label printing and ZPL templates</a></strong>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="docs/get-started/install-pwa.md"><img src="docs/assets/mobile-pwa.png" alt="Itemized running on a mobile phone with the bottom Inventory, Scan / Action, and Search dock" width="260" /></a><br />
+  <strong><a href="docs/get-started/install-pwa.md">Install itemized on your phone</a></strong>
+</p>
 
 ---
 
@@ -86,64 +123,62 @@ docker run -d \
 
 Open `http://localhost:8080` (or your reverse-proxy URL) to complete first-run administrator setup.
 
+### Other Deployment Options
+
+| Platform | Guide | Best for |
+| --- | --- | --- |
+| Docker Compose | [Docker Compose](docs/self-hosting/docker-compose.md) | Recommended for Linux servers and homelabs |
+| Docker Run | [Docker Run](docs/self-hosting/docker-run.md) | Quick single-container deployments |
+| Unraid | [Unraid Community Apps](docs/self-hosting/unraid.md) | Unraid NAS appliances using the built-in XML template |
+| Single Binary | [Single Binary](docs/self-hosting/binary.md) | Bare-metal Linux/macOS or systemd without containers |
+
 ---
 
-## HTTPS & Reverse Proxy (Required for Mobile Barcode Scanning)
+## HTTPS & Reverse Proxy
 
-Modern mobile browsers (including iOS Safari and Chrome/Firefox on iOS) disable the camera API (`navigator.mediaDevices`) on plain `http://` LAN URLs such as `http://192.168.1.x:8080`. To use live camera barcode scanning on phones and tablets, serve itemized over **HTTPS** by placing it behind a reverse proxy (such as Nginx Proxy Manager, Caddy, Traefik, SWAG, or Tailscale Serve).
+Modern mobile browsers (including iOS Safari and Chrome/Firefox on iOS) disable camera access (`navigator.mediaDevices`) on plain `http://` LAN URLs. Serve itemized over **HTTPS** behind a reverse proxy (Caddy, nginx, Traefik, or Tailscale Serve) with `TRUST_PROXY=true` and `BASE_URL=https://itemized.example.com`.
 
-When running behind a reverse proxy, set:
-
-- `TRUST_PROXY=true` so rate limiting reads client IPs from `X-Forwarded-For` / `X-Real-IP`.
-- `BASE_URL=https://itemized.example.com` so printed QR labels encode your HTTPS URL.
+See [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls) for ready-to-use Caddy, nginx, and Traefik configurations.
 
 ---
 
 ## Configuration
 
-All instance settings (except `PORT`, `DB_PATH`, `PUID`/`PGID`, `TRUST_PROXY`, and `DEMO_*`) can also be edited in **Settings** after first-run setup.
+**No environment variable is mandatory.** Settings marked **Editable in UI** can be changed anytime under **Settings → Instance Configuration**; values saved in the database take precedence over environment variable defaults. See [Configuration reference](docs/self-hosting/configuration.md) for full details.
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8080` | HTTP listen port |
-| `DB_PATH` | `/data/itemized.db` | SQLite database path |
-| `PUID` | `1000` | User ID for running itemized and owning `/data` (`99` in Unraid template) |
-| `PGID` | `1000` | Group ID for running itemized and owning `/data` (`100` in Unraid template) |
-| `BASE_URL` | *(request host)* | Base URL encoded into printed QR labels |
-| `TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy so rate limiting uses `X-Forwarded-For` / `X-Real-IP` |
-| `OIDC_ISSUER` | *(disabled)* | Optional OIDC issuer URL (Auth Code + PKCE) |
-| `OIDC_CLIENT_ID` | | Optional OIDC client ID |
-| `OIDC_CLIENT_SECRET` | | Optional OIDC client secret |
-| `OIDC_AUTO_PROVISION` | `false` | Auto-create `member` accounts on first OIDC login |
-| `OIDC_FORCE` | `false` | Require OIDC sign-in (redirect login page to IdP and disable local password login) |
-| `LLM_PROVIDER` | *(disabled)* | `anthropic`, `openai`, `gemini`, or `openai-compatible` |
-| `LLM_MODEL` | | LLM model name for optional UPC normalization |
-| `LLM_BASE_URL` | | Custom endpoint (e.g. `http://ollama:11434/v1`) |
-| `LLM_API_KEY` | | API key for the configured LLM provider |
-| `DEMO_MODE` | `false` | Set to `true` to run in public demo mode (bypasses login as demo admin, seeds sample household data, sandboxes outbound printer/OIDC/LLM calls, rate-limits UPC lookup to 5/min) |
-| `DEMO_RESET_INTERVAL` | `1h` | Reset interval for demo mode (Go duration, aligned to wall-clock boundaries) |
-
----
-
-## Unraid Community Apps
-
-An Unraid template is provided at [unraid/itemized.xml](unraid/itemized.xml). Bridge networking reaches LAN printers directly on outbound connections (e.g. `http://192.168.1.50:631/ipp/print` for Zebra ZSB or `192.168.1.50:9100` for Raw TCP ZPL printers).
-
-The container entrypoint automatically ensures `/data` ownership matches `PUID:PGID` (`99:100` / `nobody:users` in the Unraid template, or `1000:1000` by default) before dropping privileges to run `/usr/local/bin/itemized` as a non-root user. If launched with an explicit non-root `--user` flag, privilege dropping is skipped automatically.
+| Variable | Default | Example | Editable in UI | Explained in |
+| --- | --- | --- | --- | --- |
+| `PORT` | `8080` | `8080` | No | [Self-hosting handbook](docs/self-hosting/README.md) |
+| `DB_PATH` | `/data/itemized.db` | `/data/itemized.db` | No | [Backups and restore drill](docs/self-hosting/README.md#4-backups-and-restore-drill) |
+| `PUID` | `1000` | `99` | No | [Unraid Community Apps](docs/self-hosting/unraid.md) |
+| `PGID` | `1000` | `100` | No | [Unraid Community Apps](docs/self-hosting/unraid.md) |
+| `BASE_URL` | *(request host)* | `https://itemized.example.com` | Yes | [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls) |
+| `TRUST_PROXY` | `false` | `true` | No | [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls) |
+| `OIDC_ISSUER` | *(disabled)* | `https://auth.example.com/application/o/itemized/` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
+| `OIDC_CLIENT_ID` | *(empty)* | `itemized-client` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
+| `OIDC_CLIENT_SECRET` | *(empty)* | `secret-value` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
+| `OIDC_AUTO_PROVISION` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
+| `OIDC_FORCE` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
+| `LLM_PROVIDER` | *(disabled)* | `openai-compatible` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
+| `LLM_MODEL` | *(empty)* | `llama3.2` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
+| `LLM_BASE_URL` | *(provider default)* | `http://ollama:11434/v1` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
+| `LLM_API_KEY` | *(empty)* | `sk-...` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
+| `DEMO_MODE` | `false` | `true` | No | [Demo mode](docs/get-started/demo-mode.md) |
+| `DEMO_RESET_INTERVAL` | `1h` | `30m` | No | [Demo mode](docs/get-started/demo-mode.md) |
 
 ---
 
 ## Development
 
 ```bash
-# Backend tests
-go test ./...
-
-# Frontend tests & build
-cd web && npm test && npm run build
+# Run docs checks, Go vet/tests, and frontend tests
+make check
 
 # Build full single binary (embeds web/dist)
-go build ./cmd/itemized
+make build
+
+# Regenerate static docs, in-app Help, and README.md
+make docs-build
 
 # Run locally in demo mode
 DEMO_MODE=true DB_PATH=/tmp/itemized-demo.db go run ./cmd/itemized
@@ -151,6 +186,8 @@ DEMO_MODE=true DB_PATH=/tmp/itemized-demo.db go run ./cmd/itemized
 # Build Docker image locally
 docker build -t itemized:local .
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, architecture tour, and package map.
 
 ---
 

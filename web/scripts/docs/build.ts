@@ -13,6 +13,7 @@ import {
   renderMarkdown,
   repoRoot,
 } from "./lib";
+import { generateReadmeContent } from "./readme";
 
 const GITHUB_REPO = "https://github.com/itemizedapp/itemized";
 const SITE_ORIGIN = "https://itemizedapp.com";
@@ -544,6 +545,7 @@ export interface BuildResult {
   helpPagesCount: number;
   siteDir: string;
   helpDir: string;
+  readmePath: string;
 }
 
 export function generateHelpFilesContent(docs: ParsedDoc[], version: string): Map<string, string> {
@@ -851,11 +853,16 @@ export function buildAllDocs(root = repoRoot()): BuildResult {
     }
   }
 
+  // Generate repository README.md from docs/
+  const readmePath = path.join(root, "README.md");
+  fs.writeFileSync(readmePath, generateReadmeContent(docs), "utf8");
+
   return {
     docsCount: docs.length,
     helpPagesCount: userDocs.length,
     siteDir,
     helpDir,
+    readmePath,
   };
 }
 
@@ -863,6 +870,6 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   const result = buildAllDocs();
   console.log(
-    `Built docs: ${result.docsCount} website pages -> ${result.siteDir}, ${result.helpPagesCount} in-app Help pages -> ${result.helpDir}`
+    `Built docs: ${result.docsCount} website pages -> ${result.siteDir}, ${result.helpPagesCount} in-app Help pages -> ${result.helpDir}, README -> ${result.readmePath}`
   );
 }

@@ -4,12 +4,133 @@ import { fileURLToPath } from "node:url";
 import { APP_SCREEN_IDS } from "../../src/screens";
 import { buildAllDocs, detectDocsVersion, generateHelpFilesContent } from "./build";
 import { ParsedDoc, VALID_AUDIENCES, VALID_ENTRY_POINTS, loadDocs, repoRoot } from "./lib";
+import { generateReadmeContent } from "./readme";
 
 export interface CheckOptions {
   root?: string;
   screenIds?: string[];
   checkStaleness?: boolean;
   buildSite?: boolean;
+  checkReadme?: boolean;
+}
+
+const BAD_BRAND_RE = /(?:\b[A-Za-z][a-z0-9'-]*|[0-9,’"”]|©\s*\d+)\s+Itemized\b/g;
+
+function stripCode(md: string): string {
+  return md.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
+}
+
+function checkReadmeFile(
+  root: string,
+  docs: ParsedDoc[],
+  byRelPath: Map<string, ParsedDoc>,
+  checkStaleness: boolean,
+  errors: string[]
+): void {
+  const readmePath = path.join(root, "README.md");
+  if (!fs.existsSync(readmePath)) {
+    if (checkStaleness) {
+      errors.push("README.md: missing generated README.md (run 'make docs-build')");
+    }
+    return;
+  }
+
+  const content = fs.readFileSync(readmePath, "utf8");
+
+  // 1. Staleness check against docs-generated README
+  if (checkStaleness) {
+    try {
+      const expected = generateReadmeContent(docs);
+      if (content !== expected) {
+        errors.push("README.md: generated README.md is stale (run 'make docs-build')");
+      }
+    } catch (err) {
+      errors.push(`README.md: failed to generate expected README: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const contentWithoutCode = stripCode(content);
+
+  // 2. HTML <img> tags: non-empty alt and existing local file
+  const imgTagRe = /<img\b([^>]*?)\/?>/gi;
+  let imgMatch: RegExpExecArray | null;
+  while ((imgMatch = imgTagRe.exec(contentWithoutCode)) !== null) {
+    const attrs = imgMatch[1];
+    const srcMatch = attrs.match(/\bsrc\s*=\s*"([^"]*)"/i) ?? attrs.match(/\bsrc\s*=\s*'([^']*)'/i);
+    const altMatch = attrs.match(/\balt\s*=\s*"([^"]*)"/i) ?? attrs.match(/\balt\s*=\s*'([^']*)'/i);
+    const src = srcMatch?.[1]?.trim() ?? "";
+    const alt = altMatch?.[1]?.trim() ?? "";
+    if (!alt) {
+      errors.push(`README.md: image '${src || "(missing src)"}' is missing alt text`);
+    }
+    if (src && !/^(https?:|data:)/i.test(src)) {
+      const absImg = path.resolve(root, src);
+      if (!fs.existsSync(absImg)) {
+        errors.push(`README.md: missing image file '${src}'`);
+      }
+    }
+  }
+
+  // 3. Markdown images: ![alt](src)
+  const mdImgRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let mdImgMatch: RegExpExecArray | null;
+  while ((mdImgMatch = mdImgRe.exec(contentWithoutCode)) !== null) {
+    const alt = mdImgMatch[1].trim();
+    const src = mdImgMatch[2].trim();
+    if (!alt) {
+      errors.push(`README.md: image '${src}' is missing alt text`);
+    }
+    if (src && !/^(https?:|data:)/i.test(src)) {
+      const absImg = path.resolve(root, src);
+      if (!fs.existsSync(absImg)) {
+        errors.push(`README.md: missing image file '${src}'`);
+      }
+    }
+  }
+
+  // 4. Relative links (both Markdown [text](href) and HTML <a href="...">)
+  const hrefs: string[] = [];
+  const mdLinkRe = /(?<!!)\[[^\]]+\]\(([^)]+)\)/g;
+  let linkMatch: RegExpExecArray | null;
+  while ((linkMatch = mdLinkRe.exec(contentWithoutCode)) !== null) {
+    hrefs.push(linkMatch[1].trim());
+  }
+  const htmlLinkRe = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let htmlLinkMatch: RegExpExecArray | null;
+  while ((htmlLinkMatch = htmlLinkRe.exec(contentWithoutCode)) !== null) {
+    hrefs.push((htmlLinkMatch[1] ?? htmlLinkMatch[2] ?? "").trim());
+  }
+
+  for (const href of hrefs) {
+    if (!href || /^(https?:|mailto:|tel:|#)/i.test(href)) continue;
+    const [rawTarget, anchor] = href.split("#");
+    const normalized = path.posix.normalize(rawTarget);
+    if (normalized.startsWith("docs/") && normalized.endsWith(".md")) {
+      const docRel = normalized.slice("docs/".length);
+      const targetDoc = byRelPath.get(docRel);
+      if (!targetDoc) {
+        errors.push(`README.md: broken link '${href}' (target '${normalized}' not found)`);
+        continue;
+      }
+      if (anchor && !targetDoc.headings.some((h) => h.id === anchor)) {
+        errors.push(`README.md: broken anchor '${href}' (heading '#${anchor}' not found in ${normalized})`);
+      }
+    } else {
+      const absTarget = path.resolve(root, rawTarget);
+      if (!fs.existsSync(absTarget)) {
+        errors.push(`README.md: broken relative file link '${href}'`);
+      }
+    }
+  }
+
+  // 5. Brand capitalization check (strip HTML tags so alt="..." attributes don't false-positive)
+  const plainLines = contentWithoutCode.replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").split(/\r?\n/);
+  for (const line of plainLines) {
+    const matches = line.replace(/\s+/g, " ").trim().match(BAD_BRAND_RE);
+    if (matches) {
+      errors.push(`README.md: non-sentence-start "Itemized" in body (${matches.join(", ")})`);
+    }
+  }
 }
 
 export function checkDocs(opts: CheckOptions = {}): string[] {
@@ -18,6 +139,7 @@ export function checkDocs(opts: CheckOptions = {}): string[] {
   const screenIds = opts.screenIds ?? APP_SCREEN_IDS;
   const checkStaleness = opts.checkStaleness ?? true;
   const buildSite = opts.buildSite ?? true;
+  const checkReadme = opts.checkReadme ?? true;
 
   const errors: string[] = [];
   const docs = loadDocs(docsDir);
@@ -208,7 +330,12 @@ export function checkDocs(opts: CheckOptions = {}): string[] {
     }
   }
 
-  // 9. Verify static website builds cleanly
+  // 9. Verify README.md freshness, images, links, and brand capitalization
+  if (checkReadme) {
+    checkReadmeFile(root, docs, byRelPath, checkStaleness, errors);
+  }
+
+  // 10. Verify static website builds cleanly
   if (buildSite && errors.length === 0) {
     try {
       buildAllDocs(root);
