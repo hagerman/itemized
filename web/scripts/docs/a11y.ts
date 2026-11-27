@@ -50,24 +50,30 @@ function startStaticServer(rootDir: string, port: number): Promise<http.Server> 
         return;
       }
       const relPath = urlPath.replace(/^\/+/, "") || "index.html";
-      let filePath = path.resolve(resolvedRoot, relPath);
-      if (!filePath.startsWith(resolvedRoot + path.sep)) {
-        res.writeHead(403);
-        res.end("Forbidden");
-        return;
-      }
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-        filePath = path.join(filePath, "index.html");
-      }
-      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-        res.writeHead(404);
-        res.end("Not Found");
-        return;
-      }
-      const ext = path.extname(filePath).toLowerCase();
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
-      fs.createReadStream(filePath).pipe(res);
-    });
+        const candidatePath = path.resolve(resolvedRoot, relPath);
+        if (!candidatePath.startsWith(resolvedRoot + path.sep)) {
+          res.writeHead(403);
+          res.end("Forbidden");
+          return;
+        }
+          const targetPath =
+            fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()
+              ? path.resolve(candidatePath, "index.html")
+              : candidatePath;
+          if (!targetPath.startsWith(resolvedRoot + path.sep)) {
+            res.writeHead(403);
+            res.end("Forbidden");
+            return;
+          }
+            if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
+              res.writeHead(404);
+              res.end("Not Found");
+              return;
+            }
+            const ext = path.extname(targetPath).toLowerCase();
+            res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+            fs.createReadStream(targetPath).pipe(res);
+          });
     server.listen(port, "127.0.0.1", () => resolve(server));
   });
 }
