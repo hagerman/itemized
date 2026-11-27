@@ -228,6 +228,14 @@ describe("BarcodeScanner and ScannerDrawer", () => {
 
     await waitFor(() => expect(screen.queryByText("Classifying product...")).not.toBeInTheDocument());
     expect(screen.getAllByText("67.63 fl_oz").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Beverages");
+    expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Select location");
+    expect(screen.getByRole("button", { name: /Confirm & Add/i })).toBeDisabled();
+
+    // Select a location before submitting
+    fireEvent.click(screen.getByRole("button", { name: "Purchase location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fridge" }));
+    expect(screen.getByRole("button", { name: /Confirm & Add/i })).not.toBeDisabled();
 
     // Submit form and verify product + variant measurements are sent
     fireEvent.click(screen.getByRole("button", { name: /Confirm & Add/i }));
@@ -1780,5 +1788,284 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     // Clicking the similar product switches directly to Confirm & Add
     fireEvent.click(screen.getByRole("button", { name: /Apples, Gala/i }));
     expect(screen.getByText("Confirm & Add: Apples, Gala")).toBeInTheDocument();
+  });
+
+  it("leaves Category and Location unselected for new products without defaults and blocks submission until both are selected", async () => {
+    let purchaseCalls = 0;
+    let purchaseBody: Record<string, unknown> | null = null;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "099988877766" }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(JSON.stringify({ found: false }), { status: 200 });
+        }
+        if (url === "/api/workflows/purchase") {
+          purchaseCalls += 1;
+          purchaseBody = JSON.parse(String(init?.body || "{}"));
+          return new Response(
+            JSON.stringify({ product: { id: 10, name: "New Snack" }, items: [{ id: 1 }] }),
+            { status: 201 }
+          );
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[
+            { id: 1, name: "Beverages", parent_id: null, hierarchy_name: "Beverages" },
+            { id: 2, name: "Snacks", parent_id: null, hierarchy_name: "Snacks" },
+          ]}
+          locations={[
+            { id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" },
+            { id: 2, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Pantry" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "099988877766" } });
+    fireEvent.submit(input.closest("form")!);
+
+    const nameInput = await screen.findByPlaceholderText("Product name");
+    fireEvent.change(nameInput, { target: { value: "New Snack" } });
+
+    const catBtn = screen.getByRole("button", { name: "New product category" });
+    const locBtn = screen.getByRole("button", { name: "Purchase location" });
+    const submitBtn = screen.getByRole("button", { name: /Confirm & Add/i });
+
+    expect(catBtn).toHaveTextContent("Select category");
+    expect(locBtn).toHaveTextContent("Select location");
+    expect(submitBtn).toBeDisabled();
+
+    // Programmatic submit while both are unselected shows validation error and does not call API
+    fireEvent.submit(submitBtn.closest("form")!);
+    expect(screen.getByText("Please select a category and location.")).toBeInTheDocument();
+    expect(purchaseCalls).toBe(0);
+
+    // Selecting only category still blocks submission
+    fireEvent.click(catBtn);
+    fireEvent.click(screen.getByRole("button", { name: "Snacks" }));
+    expect(submitBtn).toBeDisabled();
+    fireEvent.submit(submitBtn.closest("form")!);
+    expect(screen.getByText("Please select a location.")).toBeInTheDocument();
+    expect(purchaseCalls).toBe(0);
+
+    // Selecting location enables submission and submits chosen IDs
+    fireEvent.click(locBtn);
+    fireEvent.click(screen.getByRole("button", { name: "Pantry" }));
+    expect(submitBtn).not.toBeDisabled();
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => expect(purchaseCalls).toBe(1));
+    expect(purchaseBody).toMatchObject({
+      location_id: 2,
+      new_product: {
+        name: "New Snack",
+        category_id: 2,
+        default_location_id: 2,
+      },
+    });
+  });
+
+  it("preserves user-selected category when in-flight LLM classification resolves with a different category", async () => {
+    let resolveClassify!: (resp: Response) => void;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "044455566677" }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(
+            JSON.stringify({ found: true, result: { title: "Sparkling Water", measurement: "12 fl oz" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/upc/classify") {
+          return new Promise<Response>((resolve) => {
+            resolveClassify = resolve;
+          });
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[
+            { id: 1, name: "Beverages", parent_id: null, hierarchy_name: "Beverages" },
+            { id: 2, name: "Pantry Goods", parent_id: null, hierarchy_name: "Pantry Goods" },
+          ]}
+          locations={[
+            { id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "044455566677" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Classifying product...")).toBeInTheDocument());
+
+    // User manually picks Pantry Goods while classification is still in flight
+    fireEvent.click(screen.getByRole("button", { name: "New product category" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pantry Goods" }));
+    expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Pantry Goods");
+
+    // Classification resolves with Beverages (id: 1) -> must not overwrite user's choice
+    resolveClassify(
+      new Response(
+        JSON.stringify({
+          enabled: true,
+          classification: {
+            product_name: "Water, Sparkling",
+            category_id: 1,
+          },
+        }),
+        { status: 200 }
+      )
+    );
+
+    await waitFor(() => expect(screen.queryByText("Classifying product...")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Pantry Goods");
+    expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Select location");
+  });
+
+  it("clears matched product location on Create new product instead while keeping LLM category", async () => {
+    const matchedProd = {
+      id: 42,
+      name: "Mustard, Dijon",
+      category_id: 2,
+      category_name: "Condiments",
+      default_location_id: 1,
+      default_location_name: "Fridge",
+      default_due_days: 90,
+      use_average_for_due_date: false,
+      label_print_mode: "per_item",
+      in_stock_count: 1,
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "011122233399" }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(
+            JSON.stringify({ found: true, result: { title: "Artisan Mustard", measurement: "8 oz" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/upc/classify") {
+          return new Response(
+            JSON.stringify({
+              enabled: true,
+              classification: {
+                product_name: "Mustard, Whole Grain",
+                matched_product_id: 42,
+                category_id: 2,
+              },
+              matched_product: matchedProd,
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[
+            { id: 1, name: "Baking", parent_id: null, hierarchy_name: "Baking" },
+            { id: 2, name: "Condiments", parent_id: null, hierarchy_name: "Condiments" },
+          ]}
+          locations={[
+            { id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" },
+            { id: 2, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Pantry" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "011122233399" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByTestId("llm-matched-product-banner")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Fridge");
+
+    // Switching to Create new product instead keeps LLM category but clears location and blocks submit
+    fireEvent.click(screen.getByRole("button", { name: "Create new product instead" }));
+    expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Condiments");
+    expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Select location");
+    expect(screen.getByRole("button", { name: /Confirm & Add/i })).toBeDisabled();
+  });
+
+  it("leaves Category and Location unselected on unmatched text search in Purchase mode", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/scan/resolve") {
+          return new Response(JSON.stringify({ kind: "unknown", barcode: "Dragonfruit" }), { status: 200 });
+        }
+        if (url.startsWith("/api/products?status=all&q=")) {
+          return new Response(JSON.stringify({ products: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[
+            { id: 1, name: "Produce", parent_id: null, hierarchy_name: "Produce" },
+          ]}
+          locations={[
+            { id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "Dragonfruit" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Create Product & Add Items")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Select category");
+    expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Select location");
+    expect(screen.getByRole("button", { name: /Confirm & Add/i })).toBeDisabled();
   });
 });

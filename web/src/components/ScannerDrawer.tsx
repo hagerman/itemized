@@ -180,6 +180,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const [scanTarget, setScanTarget] = useState<null | "primary_barcode" | "second_barcode">(null);
   const lookupSeqRef = useRef(0);
   const userEditedNameRef = useRef(false);
+  const userEditedCatRef = useRef(false);
   const userEditedProdMeasRef = useRef(false);
   const userEditedVarMeasRef = useRef(false);
 
@@ -274,12 +275,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const resetSubState = () => {
     lookupSeqRef.current += 1;
     userEditedNameRef.current = false;
+    userEditedCatRef.current = false;
     userEditedProdMeasRef.current = false;
     userEditedVarMeasRef.current = false;
     setStatusMsg(null);
     setErrorMsg(null);
     setPurchaseProduct(null);
     setCreatingNew(false);
+    setNewProdCatId(0);
+    setNewProdLocId(0);
+    setPurchaseLocId(0);
     setPurchaseSearchHits([]);
     setPurchaseExistingQuery("");
     setLlmMatchedProduct(null);
@@ -420,6 +425,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     if (isNumericBarcode) {
       const seq = ++lookupSeqRef.current;
       userEditedNameRef.current = false;
+      userEditedCatRef.current = false;
       userEditedProdMeasRef.current = false;
       userEditedVarMeasRef.current = false;
 
@@ -440,9 +446,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setPurchaseBarcode(raw.trim());
       setShowVariantSection(true);
       setVariantId(null);
-      setNewProdCatId(categories[0]?.id || 0);
-      setNewProdLocId(locations[0]?.id || 0);
-      setPurchaseLocId(locations[0]?.id || 0);
+      setNewProdCatId(0);
+      setNewProdLocId(0);
+      setPurchaseLocId(0);
       setLookupPhase("upc");
 
       try {
@@ -498,8 +504,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               suggestedName = clsRes.classification.product_name;
               setNewProdName(suggestedName);
             }
-            if (clsRes.classification?.category_id) {
-              setNewProdCatId(clsRes.classification.category_id);
+            const clsCatId = clsRes.classification?.category_id;
+            if (clsCatId && !userEditedCatRef.current && categories.some((c) => c.id === clsCatId)) {
+              setNewProdCatId(clsCatId);
             }
             const llmMeas = measurementFromLLM(
               clsRes.classification?.product_value,
@@ -550,10 +557,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     const search = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(raw)}`);
     setPurchaseSearchHits(search.products.slice(0, 8));
     if (search.products.length === 0) {
+      userEditedCatRef.current = false;
       setNewProdName(raw);
-      setNewProdCatId(categories[0]?.id || 0);
-      setNewProdLocId(locations[0]?.id || 0);
-      setPurchaseLocId(locations[0]?.id || 0);
+      setNewProdCatId(0);
+      setNewProdLocId(0);
+      setPurchaseLocId(0);
       setCreatingNew(true);
     }
   };
@@ -561,6 +569,20 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const submitPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    const missingCat = creatingNew && !newProdCatId;
+    const missingLoc = !purchaseLocId;
+    if (missingCat && missingLoc) {
+      setErrorMsg("Please select a category and location.");
+      return;
+    }
+    if (missingCat) {
+      setErrorMsg("Please select a category.");
+      return;
+    }
+    if (missingLoc) {
+      setErrorMsg("Please select a location.");
+      return;
+    }
     try {
       const payload: Record<string, unknown> = {
         variant_id: variantId,
@@ -931,6 +953,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     }
   };
 
+  const purchaseMissingRequired = (creatingNew && !newProdCatId) || !purchaseLocId;
+
   const hasPurchaseContent =
     lookupPhase !== "idle" ||
     Boolean(upcHint) ||
@@ -1053,6 +1077,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     onClick={() => {
                       setPurchaseProduct(null);
                       setLlmMatchedProduct(null);
+                      setPurchaseLocId(0);
+                      setNewProdLocId(0);
                       setCreatingNew(true);
                     }}
                     className="rounded-md border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
@@ -1153,8 +1179,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                       <HierarchySelect
                         items={categories}
                         value={newProdCatId || null}
-                        onChange={(v) => setNewProdCatId(v || 0)}
-                        placeholder="Category"
+                        onChange={(v) => {
+                          userEditedCatRef.current = true;
+                          setNewProdCatId(v || 0);
+                        }}
+                        placeholder="Select category"
                         ariaLabel="New product category"
                       />
                       <input
@@ -1207,7 +1236,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                           setPurchaseLocId(v || 0);
                           setNewProdLocId(v || 0);
                         }}
-                        placeholder="Location"
+                        placeholder="Select location"
                         ariaLabel="Purchase location"
                       />
                     </div>
@@ -1354,7 +1383,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                    disabled={purchaseMissingRequired}
+                    className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Confirm &amp; Add ({purchaseQty})
                   </button>
