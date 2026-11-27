@@ -2,8 +2,8 @@
 title: Troubleshooting
 summary: Fix common issues with mobile camera scanning, Zebra label printing, OIDC sign-in, and database permissions.
 audience: user
-entry_point: use
-order: 11
+entry_point: configure
+order: 5
 capabilities:
   - web-ui
 screens: []

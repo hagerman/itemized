@@ -125,7 +125,7 @@ Database migrations run automatically on startup. Before upgrading:
 - Set `TRUST_PROXY=true` only when a trusted reverse proxy sets `X-Forwarded-For` / `X-Real-IP`.
 - Run the container as a non-root `PUID`/`PGID` (default `1000:1000`; `99:100` on Unraid).
 - Restrict LAN/firewall access if itemized does not need to be exposed to the public internet (e.g., use Tailscale or VPN).
-- Consider enabling [OIDC SSO](../use/accounts-and-sso.md) with `OIDC_FORCE=true` if you already run an identity provider.
+- Consider enabling [OIDC SSO](../configure/accounts-and-sso.md) with `OIDC_FORCE=true` if you already run an identity provider.
 - Schedule automated SQLite `.backup` runs and test a restore drill at least quarterly.
 
 ## 8. Sizing

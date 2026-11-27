@@ -11,6 +11,7 @@ import {
 const ENTRY_LABELS: Record<string, string> = {
   "get-started": "Get started",
   use: "Use itemized",
+  configure: "Configure & connect",
 };
 
 export const HelpPage: React.FC = () => {
@@ -82,7 +83,7 @@ export const HelpPage: React.FC = () => {
     );
   }
 
-  const grouped = ["get-started", "use"].map((ep) => ({
+  const grouped = ["get-started", "use", "configure"].map((ep) => ({
     id: ep,
     label: ENTRY_LABELS[ep] || ep,
     pages: HELP_PAGES.filter((p) => p.entryPoint === ep),

@@ -9,8 +9,8 @@ export type Audience = "user" | "admin" | "developer";
 export type EntryPointId =
   | "get-started"
   | "use"
+  | "configure"
   | "self-host"
-  | "integrate"
   | "reference"
   | "under-the-hood";
 
@@ -29,7 +29,12 @@ export const ENTRY_POINTS: EntryPointMeta[] = [
   {
     id: "use",
     title: "Use itemized",
-    description: "Task guides for inventory, expiration rules, barcode scanning, shopping lists, and label printing.",
+    description: "Daily workflows for inventory, locations, barcode scanning, variants, shopping lists, and search.",
+  },
+  {
+    id: "configure",
+    title: "Configure & connect",
+    description: "Set up Zebra label printing, UPC/AI classification, household accounts and OIDC SSO, settings, and troubleshooting.",
   },
   {
     id: "self-host",
@@ -37,14 +42,9 @@ export const ENTRY_POINTS: EntryPointMeta[] = [
     description: "Install with Docker, Unraid, or a single binary, configure TLS, and run backup drills.",
   },
   {
-    id: "integrate",
-    title: "Integrate",
-    description: "Automate workflows with the itemized HTTP API and connect external services.",
-  },
-  {
     id: "reference",
-    title: "Reference",
-    description: "Complete environment variable reference and configuration tables.",
+    title: "API & reference",
+    description: "Automate workflows with the HTTP API and look up every environment variable.",
   },
   {
     id: "under-the-hood",

@@ -2,8 +2,8 @@
 title: Household accounts and OIDC SSO
 summary: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
 audience: user
-entry_point: use
-order: 9
+entry_point: configure
+order: 3
 capabilities:
   - user-auth
 screens:

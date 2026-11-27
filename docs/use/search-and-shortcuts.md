@@ -3,7 +3,7 @@ title: Search and keyboard shortcuts
 summary: Find products instantly with typo-tolerant FTS5 search and navigate desktop views with Gmail-style shortcuts.
 audience: user
 entry_point: use
-order: 8
+order: 6
 capabilities:
   - web-ui
 screens:

@@ -29,7 +29,7 @@ const DESKTOP_SHOWCASE: ShowcaseShot[] = [
   },
   {
     src: "docs/assets/settings-printers.png",
-    docRelPath: "use/label-printing.md",
+    docRelPath: "configure/label-printing.md",
     fallbackTitle: "Label printing and ZPL templates",
     fallbackAlt: "Label Printers configuration in itemized Settings",
   },
@@ -152,10 +152,21 @@ ${showcaseCells[3]}
   <strong><a href="docs/get-started/install-pwa.md">${installPwa?.frontMatter.title ?? "Install itemized on your phone"}</a></strong>
 </p>`;
 
-  // Feature bullets from docs/use/*.md (excluding troubleshooting)
+  // Feature bullets from docs/use/*.md and docs/configure/*.md (excluding troubleshooting)
   const useGuides = docs
-    .filter((d) => d.relPath.startsWith("use/") && d.relPath !== "use/troubleshooting.md")
-    .sort((a, b) => a.frontMatter.order - b.frontMatter.order || a.frontMatter.title.localeCompare(b.frontMatter.title));
+    .filter(
+      (d) =>
+        d.relPath.startsWith("use/") ||
+        (d.relPath.startsWith("configure/") && d.relPath !== "configure/troubleshooting.md")
+    )
+    .sort((a, b) => {
+      const groupRank = (relPath: string) => (relPath.startsWith("use/") ? 0 : 1);
+      return (
+        groupRank(a.relPath) - groupRank(b.relPath) ||
+        a.frontMatter.order - b.frontMatter.order ||
+        a.frontMatter.title.localeCompare(b.frontMatter.title)
+      );
+    });
 
   const featureBullets = useGuides
     .map((d) => `- **[${d.frontMatter.title}](docs/${d.relPath})**: ${d.frontMatter.summary}`)

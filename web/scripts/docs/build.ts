@@ -612,7 +612,7 @@ export function generateHelpFilesContent(docs: ParsedDoc[], version: string): Ma
     { label: "Organize locations and categories", slug: "use/locations-and-categories", external: false },
     { label: "Track expiration dates and due rules", slug: "use/inventory-and-expiration", external: false },
     { label: "Manage your shopping list", slug: "use/shopping-list", external: false },
-    { label: "Print QR labels on a Zebra printer", slug: "use/label-printing", external: false },
+    { label: "Print QR labels on a Zebra printer", slug: "configure/label-printing", external: false },
     { label: "Install itemized on your phone", slug: "get-started/install-pwa", external: false },
     { label: "Use keyboard shortcuts", slug: "use/search-and-shortcuts", external: false },
     { label: "Self-host itemized", slug: `${PUBLIC_DOCS_BASE}/self-hosting/index.html`, external: true },

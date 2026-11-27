@@ -135,6 +135,7 @@ Itemized starts this sentence cleanly. However, serving Itemized mid-sentence sh
   it("generates README.md from docs/ with rewritten links and docs/assets/ screenshots", () => {
     const dir = makeTempProject();
     fs.mkdirSync(path.join(dir, "docs/get-started"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "docs/configure"), { recursive: true });
     fs.writeFileSync(path.join(dir, "docs/assets/inventory.png"), "png");
     fs.writeFileSync(path.join(dir, "docs/assets/scanner.png"), "png");
     fs.writeFileSync(path.join(dir, "docs/assets/shopping-list.png"), "png");
@@ -185,6 +186,21 @@ screens: []
 ---
 
 ![Scanner drawer](../assets/scanner.png)
+`
+    );
+    fs.writeFileSync(
+      path.join(dir, "docs/configure/label-printing.md"),
+      `---
+title: Label printing and ZPL templates
+summary: Print QR labels to Zebra printers.
+audience: user
+entry_point: configure
+order: 1
+capabilities: []
+screens: []
+---
+
+![Label printers](../assets/settings-printers.png)
 `
     );
     fs.writeFileSync(
@@ -273,6 +289,7 @@ screens: []
     expect(readme).toContain('src="docs/assets/mobile-pwa.png"');
     expect(readme).not.toContain("screenshot-inventory.jpg");
     expect(readme).toContain("[Barcode scanning and workflows](docs/use/barcode-scanning.md)");
+    expect(readme).toContain("[Label printing and ZPL templates](docs/configure/label-printing.md)");
     expect(readme).toContain("image: ghcr.io/itemizedapp/itemized:latest");
     expect(readme).toContain("docker run -d ghcr.io/itemizedapp/itemized:latest");
     expect(readme).toContain("[Docker Compose](docs/self-hosting/docker-compose.md)");

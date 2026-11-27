@@ -16,7 +16,7 @@ Get from a fresh itemized instance to tracking your pantry, fridge, and freezer 
 
 ## Create your administrator account
 
-When you open itemized for the first time, the setup screen prompts you to create the initial **Admin** account with an email address and password (at least 8 characters). You can add other household members or configure OIDC later in [Accounts and SSO](../use/accounts-and-sso.md).
+When you open itemized for the first time, the setup screen prompts you to create the initial **Admin** account with an email address and password (at least 8 characters). You can add other household members or configure OIDC later in [Accounts and SSO](../configure/accounts-and-sso.md).
 
 ## Set up a few locations and categories
 

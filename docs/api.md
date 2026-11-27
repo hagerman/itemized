@@ -2,7 +2,7 @@
 title: HTTP API reference
 summary: Authenticate with session cookies and automate inventory, scanning, label printing, and settings over JSON HTTP endpoints.
 audience: developer
-entry_point: integrate
+entry_point: reference
 order: 1
 capabilities:
   - inventory-catalog

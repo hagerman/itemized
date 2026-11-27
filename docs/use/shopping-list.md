@@ -3,7 +3,7 @@ title: Shopping list and minimum stock
 summary: Surface low-stock items automatically, pin products manually, and auto-clear them when restocked.
 audience: user
 entry_point: use
-order: 6
+order: 5
 capabilities:
   - shopping-list-auto-clear
 screens: []

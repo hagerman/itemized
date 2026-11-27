@@ -2,8 +2,8 @@
 title: UPC lookup and AI classification
 summary: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
 audience: user
-entry_point: use
-order: 5
+entry_point: configure
+order: 2
 capabilities:
   - upc-and-classification
 screens:

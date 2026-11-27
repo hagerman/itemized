@@ -144,7 +144,7 @@ async function main() {
         }
       });
 
-      for (const p of ["/index.html", "/use/index.html", "/use/label-printing.html", "/self-hosting/index.html", "/api.html"]) {
+      for (const p of ["/index.html", "/use/index.html", "/configure/index.html", "/configure/label-printing.html", "/self-hosting/index.html", "/api.html"]) {
         await page.goto(`${staticUrl}${p}`, { waitUntil: "networkidle" });
         await assertAxeClean(page, `static ${p} (${colorScheme})`);
         await assertNoHorizontalOverflow(page, `static ${p} (${colorScheme} desktop)`);
@@ -170,13 +170,13 @@ async function main() {
       javaScriptEnabled: false,
     });
     const noJsPage = await noJsCtx.newPage();
-    await noJsPage.goto(`${staticUrl}/use/label-printing.html`, { waitUntil: "domcontentloaded" });
+    await noJsPage.goto(`${staticUrl}/configure/label-printing.html`, { waitUntil: "domcontentloaded" });
     await noJsPage.locator("details.mobile-menu summary").click();
     const demoVisible = await noJsPage.locator("details.mobile-menu a", { hasText: "Try the demo" }).isVisible();
     if (!demoVisible) {
       throw new Error("Mobile menu links not visible with JavaScript disabled at 360px");
     }
-    await assertNoHorizontalOverflow(noJsPage, "static /use/label-printing.html (360px no-JS)");
+    await assertNoHorizontalOverflow(noJsPage, "static /configure/label-printing.html (360px no-JS)");
     await noJsCtx.close();
 
     // 3. In-app /help and contextual Help drawer WCAG 2.2 AA check (desktop + 360px mobile)
@@ -192,10 +192,10 @@ async function main() {
       await assertAxeClean(appPage, `in-app /help (${vp.name})`);
       await assertNoHorizontalOverflow(appPage, `in-app /help (${vp.name})`);
 
-      await appPage.goto(`${appUrl}/help/use/label-printing`, { waitUntil: "networkidle" });
+      await appPage.goto(`${appUrl}/help/configure/label-printing`, { waitUntil: "networkidle" });
       await appPage.waitForSelector("article");
-      await assertAxeClean(appPage, `in-app /help/use/label-printing (${vp.name})`);
-      await assertNoHorizontalOverflow(appPage, `in-app /help/use/label-printing (${vp.name})`);
+      await assertAxeClean(appPage, `in-app /help/configure/label-printing (${vp.name})`);
+      await assertNoHorizontalOverflow(appPage, `in-app /help/configure/label-printing (${vp.name})`);
 
       // Open contextual Help drawer from Settings page
       await appPage.goto(`${appUrl}/settings`, { waitUntil: "networkidle" });

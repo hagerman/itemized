@@ -2,8 +2,8 @@
 title: Label printing and ZPL templates
 summary: Print scannable QR labels directly to Zebra ZSB (IPP) and Raw TCP (:9100) ZPL printers on your LAN.
 audience: user
-entry_point: use
-order: 7
+entry_point: configure
+order: 1
 capabilities:
   - label-printing
 screens:

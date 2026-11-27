@@ -22,7 +22,7 @@ Itemized decodes retail barcodes (UPC-A, UPC-E, EAN-13, EAN-8) as well as itemiz
 
 Open **Scan / Action** from the sidebar or mobile bottom dock and select a mode:
 
-- **Purchase**: Scan a retail barcode or product QR to add new in-stock items, pick quantity, location, due date, and optional label printing. Unknown retail barcodes automatically query OpenFoodFacts (see [UPC lookup and AI classification](upc-and-ai.md)).
+- **Purchase**: Scan a retail barcode or product QR to add new in-stock items, pick quantity, location, due date, and optional label printing. Unknown retail barcodes automatically query OpenFoodFacts (see [UPC lookup and AI classification](../configure/upc-and-ai.md)).
 - **Consume**: Scan an item QR or retail barcode to mark the soonest-due matching item as consumed.
 - **Open**: Scan an item or product to mark it opened and apply its **Days After Opening** rule.
 - **Transfer**: Scan a destination **Location** QR (or pick one), then scan items to move them there—automatically applying freeze or thaw due-date rules when moving into or out of a freezer.

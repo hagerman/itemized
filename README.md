@@ -40,12 +40,12 @@ Itemized is designed to make tracking everything in your pantry, fridge, freezer
 - **[Locations and categories](docs/use/locations-and-categories.md)**: Organize storage areas and product categories in nested trees, mark freezers, and print location QR labels.
 - **[Barcode scanning and workflows](docs/use/barcode-scanning.md)**: Use your phone camera or a USB/Bluetooth scanner to Purchase, Consume, Open, Transfer, and Audit stock.
 - **[Variants and barcodes](docs/use/variants-and-barcodes.md)**: Group brands and package sizes under one product, attach multiple barcodes, and merge duplicate products.
-- **[UPC lookup and AI classification](docs/use/upc-and-ai.md)**: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
 - **[Shopping list and minimum stock](docs/use/shopping-list.md)**: Surface low-stock items automatically, pin products manually, and auto-clear them when restocked.
-- **[Label printing and ZPL templates](docs/use/label-printing.md)**: Print scannable QR labels directly to Zebra ZSB (IPP) and Raw TCP (:9100) ZPL printers on your LAN.
 - **[Search and keyboard shortcuts](docs/use/search-and-shortcuts.md)**: Find products instantly with typo-tolerant FTS5 search and navigate desktop views with Gmail-style shortcuts.
-- **[Household accounts and OIDC SSO](docs/use/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
-- **[Settings overview](docs/use/settings.md)**: Navigate Account, Instance Configuration, OIDC, AI classification, Household Users, Printers, and ZPL Templates.
+- **[Label printing and ZPL templates](docs/configure/label-printing.md)**: Print scannable QR labels directly to Zebra ZSB (IPP) and Raw TCP (:9100) ZPL printers on your LAN.
+- **[UPC lookup and AI classification](docs/configure/upc-and-ai.md)**: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
+- **[Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
+- **[Settings overview](docs/configure/settings.md)**: Navigate Account, Instance Configuration, OIDC, AI classification, Household Users, Printers, and ZPL Templates.
 
 ---
 
@@ -68,8 +68,8 @@ Itemized is designed to make tracking everything in your pantry, fridge, freezer
       <strong><a href="docs/use/inventory-and-expiration.md">Inventory and expiration tracking</a></strong>
     </td>
     <td align="center" width="50%">
-      <a href="docs/use/label-printing.md"><img src="docs/assets/settings-printers.png" alt="Label Printers and ZPL Label Templates cards in Settings" width="440" /></a><br />
-      <strong><a href="docs/use/label-printing.md">Label printing and ZPL templates</a></strong>
+      <a href="docs/configure/label-printing.md"><img src="docs/assets/settings-printers.png" alt="Label Printers and ZPL Label Templates cards in Settings" width="440" /></a><br />
+      <strong><a href="docs/configure/label-printing.md">Label printing and ZPL templates</a></strong>
     </td>
   </tr>
 </table>
@@ -154,15 +154,15 @@ See [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls)
 | `PGID` | `1000` | `100` | No | [Unraid Community Apps](docs/self-hosting/unraid.md) |
 | `BASE_URL` | *(request host)* | `https://itemized.example.com` | Yes | [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls) |
 | `TRUST_PROXY` | `false` | `true` | No | [Reverse proxy and TLS](docs/self-hosting/README.md#3-reverse-proxy-and-tls) |
-| `OIDC_ISSUER` | *(disabled)* | `https://auth.example.com/application/o/itemized/` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
-| `OIDC_CLIENT_ID` | *(empty)* | `itemized-client` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
-| `OIDC_CLIENT_SECRET` | *(empty)* | `secret-value` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
-| `OIDC_AUTO_PROVISION` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
-| `OIDC_FORCE` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/use/accounts-and-sso.md) |
-| `LLM_PROVIDER` | *(disabled)* | `openai-compatible` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
-| `LLM_MODEL` | *(empty)* | `llama3.2` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
-| `LLM_BASE_URL` | *(provider default)* | `http://ollama:11434/v1` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
-| `LLM_API_KEY` | *(empty)* | `sk-...` | Yes | [UPC lookup and AI classification](docs/use/upc-and-ai.md) |
+| `OIDC_ISSUER` | *(disabled)* | `https://auth.example.com/application/o/itemized/` | Yes | [Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md) |
+| `OIDC_CLIENT_ID` | *(empty)* | `itemized-client` | Yes | [Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md) |
+| `OIDC_CLIENT_SECRET` | *(empty)* | `secret-value` | Yes | [Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md) |
+| `OIDC_AUTO_PROVISION` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md) |
+| `OIDC_FORCE` | `false` | `true` | Yes | [Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md) |
+| `LLM_PROVIDER` | *(disabled)* | `openai-compatible` | Yes | [UPC lookup and AI classification](docs/configure/upc-and-ai.md) |
+| `LLM_MODEL` | *(empty)* | `llama3.2` | Yes | [UPC lookup and AI classification](docs/configure/upc-and-ai.md) |
+| `LLM_BASE_URL` | *(provider default)* | `http://ollama:11434/v1` | Yes | [UPC lookup and AI classification](docs/configure/upc-and-ai.md) |
+| `LLM_API_KEY` | *(empty)* | `sk-...` | Yes | [UPC lookup and AI classification](docs/configure/upc-and-ai.md) |
 | `DEMO_MODE` | `false` | `true` | No | [Demo mode](docs/get-started/demo-mode.md) |
 | `DEMO_RESET_INTERVAL` | `1h` | `30m` | No | [Demo mode](docs/get-started/demo-mode.md) |
 
