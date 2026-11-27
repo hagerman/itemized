@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, AuthStatus } from "./api";
 import { HelpProvider } from "./components/HelpContext";
@@ -18,8 +18,13 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 15_000 } },
 });
 
-const AppRoutes: React.FC = () => {
+export interface AppRoutesProps {
+  onOidcRedirect?: (url: string) => void;
+}
+
+export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { data: authStatus, isLoading } = useQuery({
     queryKey: ["auth-status"],
     queryFn: () => apiFetch<AuthStatus>("/api/auth/status"),
@@ -36,6 +41,7 @@ const AppRoutes: React.FC = () => {
         oidcEnabled={authStatus.oidc_enabled}
         oidcForce={authStatus.oidc_force}
         onAuthenticated={() => void qc.invalidateQueries({ queryKey: ["auth-status"] })}
+        onOidcRedirect={onOidcRedirect}
       />
     );
   }
@@ -44,9 +50,17 @@ const AppRoutes: React.FC = () => {
   const demoResetAt = authStatus.demo_reset_at;
 
   const handleLogout = async () => {
-    await apiFetch("/api/auth/logout", { method: "POST" });
-    qc.clear();
-    void qc.invalidateQueries({ queryKey: ["auth-status"] });
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Proceed with client-side cleanup and re-verify auth status with the server.
+    } finally {
+      await qc.cancelQueries();
+      qc.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth-status" });
+      qc.setQueryData<AuthStatus>(["auth-status"], (prev) => (prev ? { ...prev, user: null } : prev));
+      navigate("/", { replace: true });
+      void qc.invalidateQueries({ queryKey: ["auth-status"] });
+    }
   };
 
   return (

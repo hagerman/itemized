@@ -227,7 +227,7 @@ The web application SHALL support Gmail-style keyboard shortcuts when focus is n
 - **THEN** no navigation shortcut is triggered
 
 ### Requirement: Authentication and settings views
-The web application SHALL provide dedicated views for first-run Admin setup, Login (displaying an OIDC sign-in button when OIDC is configured, or automatically redirecting to `/api/auth/oidc/login` without rendering the local email/password form when Force OIDC is active on an initialized instance), and Settings organized into Account (accessible to all authenticated users) and Admin-only sections for Household Users (creation, role promotion/demotion between `member` and `admin`, deletion, and password reset), Instance Configuration (`base_url`, `due_date_average_count`, OIDC including Force OIDC, LLM), Printers (CRUD + test print), and ZPL Label Templates (editor with variable reference and reset-to-default).
+The web application SHALL provide dedicated views for first-run Admin setup, Login (displaying an OIDC sign-in button when OIDC is configured, or automatically redirecting to `/api/auth/oidc/login` without rendering the local email/password form when Force OIDC is active on an initialized instance), and Settings organized into Account (accessible to all authenticated users) and Admin-only sections for Household Users (creation, role promotion/demotion between `member` and `admin`, deletion, and password reset), Instance Configuration (`base_url`, `due_date_average_count`, OIDC including Force OIDC, LLM), Printers (CRUD + test print), and ZPL Label Templates (editor with variable reference and reset-to-default). When an authenticated user clicks Logout, the web application SHALL revoke the session via `POST /api/auth/logout`, clear cached authenticated application data, reset the browser route to `/`, and immediately transition to the Login view (or trigger the Force OIDC redirect when Force OIDC is active) without requiring a manual page refresh.
 
 #### Scenario: Non-admin user opens Settings
 - **WHEN** a logged-in `member` opens Settings
@@ -244,6 +244,14 @@ The web application SHALL provide dedicated views for first-run Admin setup, Log
 #### Scenario: Unauthenticated user lands on login screen with Force OIDC active
 - **WHEN** an unauthenticated visitor opens the application on an initialized instance where `GET /api/auth/status` returns `oidc_enabled: true` and `oidc_force: true`
 - **THEN** the login view does not render the local email/password form, automatically redirects the browser to `/api/auth/oidc/login`, and displays a redirecting message with a manual "Sign in with OIDC" fallback link
+
+#### Scenario: Logging out returns the user to the login screen immediately
+- **WHEN** an authenticated user (signed in via local credentials or optional OIDC) on any route (such as `/` or `/settings`) clicks the Logout button
+- **THEN** the application calls `POST /api/auth/logout`, clears cached authenticated data, resets the URL path to `/`, and immediately renders the Login view without requiring a manual page refresh
+
+#### Scenario: Logging out with Force OIDC active initiates OIDC redirect
+- **WHEN** an authenticated user on an initialized instance with `oidc_enabled: true` and `oidc_force: true` clicks the Logout button
+- **THEN** the application calls `POST /api/auth/logout`, clears cached authenticated data, resets the URL path to `/`, and immediately renders the unauthenticated Force OIDC view which redirects the browser to `/api/auth/oidc/login` without requiring a manual page refresh
 
 ### Requirement: Modal dialog backdrop dismissal
 Every modal dialog in the web application (including the Scanner modal, Barcode Scan modal, Quick Search dialog, Keyboard Shortcuts help dialog, Merge Products dialog, and Reclassify Products dialog) SHALL close when the user clicks or taps the backdrop area outside the dialog panel, and SHALL remain open when the user interacts with elements inside the dialog panel or finishes a pointer drag on the backdrop that started inside the dialog panel.
