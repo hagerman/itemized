@@ -38,10 +38,24 @@ async function findFreePort(): Promise<number> {
 }
 
 function startStaticServer(rootDir: string, port: number): Promise<http.Server> {
+  const resolvedRoot = path.resolve(rootDir);
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
-      const urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-      let filePath = path.join(rootDir, urlPath === "/" ? "index.html" : urlPath);
+      let urlPath: string;
+      try {
+        urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
+      } catch {
+        res.writeHead(400);
+        res.end("Bad Request");
+        return;
+      }
+      const relPath = urlPath.replace(/^\/+/, "") || "index.html";
+      let filePath = path.resolve(resolvedRoot, relPath);
+      if (!filePath.startsWith(resolvedRoot + path.sep)) {
+        res.writeHead(403);
+        res.end("Forbidden");
+        return;
+      }
       if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
         filePath = path.join(filePath, "index.html");
       }

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
+import { JSDOM } from "jsdom";
 import { Marked } from "marked";
 import { KEYBOARD_SHORTCUTS } from "../../src/shortcuts";
 
@@ -104,11 +105,9 @@ export function repoRoot(): string {
 }
 
 export function slugifyHeading(text: string): string {
-  return text
+  const plain = JSDOM.fragment(text.replace(/`([^`]+)`/g, "$1")).textContent ?? "";
+  return plain
     .toLowerCase()
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&[a-z0-9#]+;/gi, "")
     .replace(/[^a-z0-9\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-")
@@ -144,17 +143,11 @@ export function countWords(markdown: string): number {
 }
 
 export function stripHtmlToText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+  const fragment = JSDOM.fragment(html);
+  for (const el of fragment.querySelectorAll("script, style")) {
+    el.remove();
+  }
+  return (fragment.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 export function docRelPathToUrl(relPath: string): string {
