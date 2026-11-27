@@ -10,9 +10,16 @@ on:
     branches:
       - main
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to build and attach docs to (e.g. v0.10.0)'
+        required: false
+        type: string
+        default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -25,6 +32,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || '' }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -55,6 +64,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || '' }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -100,6 +111,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || '' }}
 
       - name: Set up QEMU
         if: github.event_name != 'pull_request'
@@ -124,12 +137,14 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=ref,event=branch,enable=${{ inputs.tag == '' }}
+            type=ref,event=pr,enable=${{ inputs.tag == '' }}
+            type=semver,pattern={{version}},enable=${{ inputs.tag == '' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ inputs.tag == '' }}
+            type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=sha,prefix=sha-,enable=${{ inputs.tag == '' }}
+            type=raw,value=latest,enable=${{ (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')) || (inputs.tag != '' && !contains(inputs.tag, '-')) }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -144,7 +159,7 @@ jobs:
 
   release:
     needs: [test, docs, build-and-push]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -158,8 +173,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${RELEASE_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" itemized-docs.tar.gz --clobber
           else
