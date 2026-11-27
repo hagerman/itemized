@@ -11,6 +11,7 @@ import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { SearchPage } from "./pages/SearchPage";
 import { CategoriesPage, LocationDetailPage, LocationsPage } from "./pages/TaxonomyPages";
 import { SettingsPage } from "./pages/SettingsPage";
+import { QrActionPage } from "./pages/QrActionPage";
 
 const LazyHelpPage = React.lazy(() => import("./pages/HelpPage"));
 
@@ -73,6 +74,7 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
       <Route path="/categories" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Categories" demoMode={demoMode} demoResetAt={demoResetAt}><CategoriesPage /></Layout>} />
       <Route path="/locations" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Locations" demoMode={demoMode} demoResetAt={demoResetAt}><LocationsPage /></Layout>} />
       <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location" demoMode={demoMode} demoResetAt={demoResetAt}><LocationDetailPage /></Layout>} />
+      <Route path="/go/:kind/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Quick Action" demoMode={demoMode} demoResetAt={demoResetAt}><QrActionPage /></Layout>} />
       <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt}><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
       <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
       <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />

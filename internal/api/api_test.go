@@ -64,7 +64,10 @@ func TestFullAPILifecycle(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	drv := &fakeDriver{}
 	srv.Printer.RegisterDriver(printer.DriverIPPZPL, drv)
 	h := srv.Handler()
@@ -225,10 +228,12 @@ func TestFullAPILifecycle(t *testing.T) {
 		t.Fatalf("integer QR resolve failed: %d %s", rec.Code, rec.Body.String())
 	}
 
-	// Browser QR redirect /go/i/<legacy_uuid>
-	rec = doReq(t, h, http.MethodGet, "/go/i/"+legacyUUID, nil, memberTok)
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/products/1" {
-		t.Fatalf("expected 302 -> /products/1, got %d -> %s", rec.Code, rec.Header().Get("Location"))
+	// Browser QR links (/go/i/:id, /go/p/:id, /go/l/:id) serve SPA directly for the QR Quick Action screen
+	for _, qrPath := range []string{"/go/i/" + legacyUUID, "/go/p/1", "/go/l/1"} {
+		rec = doReq(t, h, http.MethodGet, qrPath, nil, memberTok)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "itemized-spa") {
+			t.Fatalf("expected 200 SPA HTML for %s, got %d -> %s", qrPath, rec.Code, rec.Body.String())
+		}
 	}
 
 	// 9. Consume item 1 + Already-consumed idempotency + Undo via PATCH
@@ -262,10 +267,14 @@ func TestFullAPILifecycle(t *testing.T) {
 	if !repeatConsume.AlreadyConsumed || repeatConsume.Item.ConsumedOnDate == nil || *repeatConsume.Item.ConsumedOnDate != "2026-10-01" {
 		t.Fatalf("expected already_consumed=true preserving 2026-10-01, got %+v", repeatConsume)
 	}
-	// Consumed QR redirect includes notice
+	// Consumed QR link serves SPA directly and /api/scan/resolve returns the item with consumed_on_date intact
 	rec = doReq(t, h, http.MethodGet, "/go/i/1", nil, memberTok)
-	if rec.Code != http.StatusFound || !strings.Contains(rec.Header().Get("Location"), "notice=item_already_consumed") {
-		t.Fatalf("expected consumed notice redirect, got %d -> %s", rec.Code, rec.Header().Get("Location"))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "itemized-spa") {
+		t.Fatalf("expected 200 SPA HTML for /go/i/1, got %d -> %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{"input": "/go/i/1"}, memberTok)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"consumed_on_date":"2026-10-01"`) {
+		t.Fatalf("expected scan resolve for consumed item 1 to include consumed_on_date, got %d -> %s", rec.Code, rec.Body.String())
 	}
 	// Undo consume
 	rec = doReq(t, h, http.MethodPatch, "/api/items/1", map[string]any{"consumed_on_date": nil}, memberTok)
@@ -324,7 +333,10 @@ func TestShoppingListClearedOnPurchase(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	// Setup admin + bearer token
@@ -410,7 +422,10 @@ func TestPurchaseWorkflowVariantMeasurements(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -488,7 +503,10 @@ func TestNextLocationNameAndBulkUpdateVariant(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -579,7 +597,10 @@ func TestCalculatedRollingAverageDueDays(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -933,7 +954,10 @@ func TestSecurityBodyLimitAndQuantityCaps(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -1015,7 +1039,10 @@ func TestRawTCPPrinterEndpointNormalizationAndTestPrint(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -1107,7 +1134,10 @@ func TestAdminUserRoleManagement(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	// Setup initial admin
@@ -1211,7 +1241,10 @@ func TestForceOIDCSettingAndLoginEnforcement(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	// Setup admin and get bearer token
@@ -1324,7 +1357,10 @@ func TestTaxonomyUpdateValidation(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "admin@home.local", "password": "password123"}, "")
@@ -1451,7 +1487,10 @@ func TestFuzzyProductSearch(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{"email": "fuzzy@home.local", "password": "password123"}, "")
@@ -1625,7 +1664,10 @@ func TestMergeProductsAndAliasResolution(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	// Setup admin + bearer token
@@ -1793,15 +1835,11 @@ func TestMergeProductsAndAliasResolution(t *testing.T) {
 		t.Fatalf("expected new product ID > %d (merged highest ID), got %d", highestMergedID, prodD.ID)
 	}
 
-	// GET /go/p/<merged-id> and /go/p/<merged-legacy-uuid> redirect to prodA
+	// GET /go/p/<merged-id> and /go/p/<merged-legacy-uuid> serve the SPA directly for QR Quick Action
 	for _, token := range []string{strconv.FormatInt(prodB.ID, 10), legacyUUIDB, strings.ToUpper(legacyUUIDC)} {
 		rec := doReq(t, h, http.MethodGet, "/go/p/"+token, nil, tok)
-		if rec.Code != http.StatusFound {
-			t.Fatalf("GET /go/p/%s expected 302, got %d", token, rec.Code)
-		}
-		wantLoc := fmt.Sprintf("/products/%d", prodA.ID)
-		if gotLoc := rec.Header().Get("Location"); gotLoc != wantLoc {
-			t.Fatalf("GET /go/p/%s expected redirect %q, got %q", token, wantLoc, gotLoc)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "itemized-spa") {
+			t.Fatalf("GET /go/p/%s expected 200 SPA HTML, got %d -> %s", token, rec.Code, rec.Body.String())
 		}
 	}
 
@@ -1868,9 +1906,11 @@ func TestMergeProductsAndAliasResolution(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete prodD expected 200, got %d", rec.Code)
 	}
-	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/go/p/%d", prodB.ID), nil, tok)
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/?alert=product_not_found" {
-		t.Fatalf("expected product_not_found redirect after destination deleted, got %d %q", rec.Code, rec.Header().Get("Location"))
+	rec = doReq(t, h, http.MethodPost, "/api/scan/resolve", map[string]any{
+		"input": fmt.Sprintf("/go/p/%d", prodB.ID),
+	}, tok)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"kind":"unknown"`) {
+		t.Fatalf("expected kind=unknown after destination deleted, got %d %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -1881,7 +1921,10 @@ func TestScanResolveRetailBarcodeEquivalence(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
@@ -2013,7 +2056,10 @@ func setupCatalogTestServer(t *testing.T) (*Server, http.Handler, string, int64,
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
@@ -2472,7 +2518,10 @@ func TestAuthStatusPrintersEnabled(t *testing.T) {
 	}
 	defer conn.Close()
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	h := srv.Handler()
 
 	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{

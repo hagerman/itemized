@@ -239,3 +239,29 @@ func TestUpdateUserRoleSafeguards(t *testing.T) {
 		t.Fatalf("expected ErrUserNotFound, got %v", err)
 	}
 }
+
+func TestSanitizeNextPath(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", "/"},
+		{"   ", "/"},
+		{"/", "/"},
+		{"/go/i/42", "/go/i/42"},
+		{"/go/p/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "/go/p/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"},
+		{"/go/l/3?foo=bar", "/go/l/3?foo=bar"},
+		{"https://evil.example/phish", "/"},
+		{"http://evil.example/go/i/1", "/"},
+		{"//evil.example/go/i/1", "/"},
+		{"/\\evil.example", "/"},
+		{"/go/i/1\\foo", "/"},
+		{"/go/i/1\r\nSet-Cookie: a=b", "/"},
+		{"javascript:alert(1)", "/"},
+	}
+	for _, tc := range cases {
+		if got := SanitizeNextPath(tc.in); got != tc.want {
+			t.Errorf("SanitizeNextPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

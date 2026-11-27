@@ -34,7 +34,28 @@ func (c OIDCConfig) ForceActive() bool {
 type pendingOIDCState struct {
 	Verifier  string
 	Kind      string
+	Next      string
 	ExpiresAt time.Time
+}
+
+// SanitizeNextPath validates a post-login redirect path so only safe relative
+// in-app paths starting with a single "/" are allowed. Anything else falls back
+// to "/".
+func SanitizeNextPath(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "/") {
+		return "/"
+	}
+	if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/\\") {
+		return "/"
+	}
+	for i := 0; i < len(trimmed); i++ {
+		c := trimmed[i]
+		if c < 0x20 || c == 0x7f || c == '\\' {
+			return "/"
+		}
+	}
+	return trimmed
 }
 
 type OIDCManager struct {
@@ -53,7 +74,7 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func (m *OIDCManager) BeginAuth(ctx context.Context, cfg OIDCConfig, sessionKind string) (string, error) {
+func (m *OIDCManager) BeginAuth(ctx context.Context, cfg OIDCConfig, sessionKind, nextPath string) (string, error) {
 	if !cfg.Enabled() {
 		return "", errors.New("oidc is not configured")
 	}
@@ -76,6 +97,7 @@ func (m *OIDCManager) BeginAuth(ctx context.Context, cfg OIDCConfig, sessionKind
 	m.states[state] = pendingOIDCState{
 		Verifier:  verifier,
 		Kind:      sessionKind,
+		Next:      SanitizeNextPath(nextPath),
 		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 	}
 	m.mu.Unlock()
@@ -101,6 +123,7 @@ type OIDCResult struct {
 	Subject     string
 	Email       string
 	SessionKind string
+	Next        string
 }
 
 func (m *OIDCManager) CompleteAuth(ctx context.Context, cfg OIDCConfig, state, code string) (*OIDCResult, error) {
@@ -162,6 +185,7 @@ func (m *OIDCManager) CompleteAuth(ctx context.Context, cfg OIDCConfig, state, c
 		Subject:     idToken.Subject,
 		Email:       claims.Email,
 		SessionKind: pending.Kind,
+		Next:        SanitizeNextPath(pending.Next),
 	}, nil
 }
 

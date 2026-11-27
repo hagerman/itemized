@@ -1,0 +1,23 @@
+# Tasks
+
+## 1. Backend QR SPA Routing and OIDC Next-Path Preservation
+
+- [x] 1.1 Update `internal/api/server.go` to remove the server-side HTTP 302 redirect handlers (`handleQRItem`, `handleQRProduct`, `handleQRLocation`, and unused `requireBrowserAuth`) so `GET /go/i/{id}`, `GET /go/p/{id}`, and `GET /go/l/{id}` fall through to `spaHandler()` and serve `index.html`; update `internal/api/api_test.go` and `internal/api/demo_test.go` to verify `/go/i/:id`, `/go/p/:id`, and `/go/l/:id` serve the SPA HTML (using a mock `StaticFS`) while `POST /api/scan/resolve` continues resolving integer IDs, `legacy_uuid`, and merged product aliases, and verify `go test ./internal/api/...` passes.
+- [x] 1.2 Add `Next` path support to `internal/auth/oidc.go` (`pendingOIDCState` and `OIDCResult`) and `internal/api/server.go` (`handleOIDCLogin` and `handleOIDCCallback`) with a `sanitizeNextPath` helper that permits only safe relative paths starting with a single `/` (rejecting `//...`, schemes, hosts, backslashes, or control characters and falling back to `/`); add unit tests covering safe `/go/...` redirects and unsafe external redirect rejection, and verify `go test ./internal/auth/... ./internal/api/...` passes.
+
+## 2. Frontend OIDC Next-Path Forwarding and QR Quick Action Route
+
+- [x] 2.1 Update `web/src/pages/AuthPage.tsx` so OIDC login links and `oidc_force` auto-redirects append `?next=<encoded pathname+search>` when the current path is not `/` or `/login`; add/update unit tests in `web/src/pages/AuthPage.test.tsx` verifying `/go/i/42` is forwarded to `/api/auth/oidc/login?next=%2Fgo%2Fi%2F42`, and verify `npm --prefix web test -- --run src/pages/AuthPage.test.tsx` passes.
+- [x] 2.2 Register `/go/:kind/:id` in `web/src/App.tsx` rendering `QrActionPage` inside `Layout` and implement `web/src/pages/QrActionPage.tsx` with `POST /api/scan/resolve` resolution, loading state, and friendly error/not-found state for unknown IDs or invalid `:kind` segments; verify route resolution and error-state tests in `web/src/pages/QrActionPage.test.tsx` pass.
+
+## 3. Item, Product, and Location Quick-Action Views
+
+- [x] 3.1 Implement the **Item QR** (`/go/i/:id`) view in `web/src/pages/QrActionPage.tsx` showing product name, variant, location, due date/status badge, opened status, and notes, with one-tap **Consume** (+ inline **Undo**), **Open** (+ inline **Undo** when unopened), inline **Transfer** using `HierarchySelect`, **Shopping List** toggle, already-consumed state with **Restore / Unconsume**, and **View Full Product** link; add unit tests in `web/src/pages/QrActionPage.test.tsx` covering consume/undo, open/undo, transfer, shopping list toggle, and already-consumed restore, and verify they pass.
+- [x] 3.2 Implement the **Product QR** (`/go/p/:id`) view in `web/src/pages/QrActionPage.tsx` showing product summary, stock count, prominent **Consume Next** (soonest-due FIFO) action with **Undo**, per-item **Consume**, **Open**, and **Transfer** controls, **Quick Add (+1)** restock using the product's default location and calculated/default due days, **Shopping List** toggle, and **View Full Product** link; add unit tests in `web/src/pages/QrActionPage.test.tsx` covering FIFO consume/undo, per-item transfer, and out-of-stock quick restock, and verify they pass.
+- [x] 3.3 Implement the **Location QR** (`/go/l/:id`) view in `web/src/pages/QrActionPage.tsx` showing `hierarchy_name`, freezer badge, item count, clickable **Sub-locations** chips (`/go/l/:childId`) when child locations exist, quick search filter when more than 5 items are listed, per-item one-tap **Consume** (+ **Undo** banner), **Open**, and **Transfer** actions, and **View Full Location** link; add unit tests in `web/src/pages/QrActionPage.test.tsx` covering consume/undo, transfer, filtering, and sub-location chips, and verify they pass.
+- [x] 3.4 Update `docs/use/barcode-scanning.md` (and regenerate `web/src/generated/help/index.ts` via the project docs build script if present) to document that scanning printed QR codes with the phone camera opens the QR Quick Action screen for items, products, and locations; verify the docs build/test checks pass.
+
+## 4. End-to-End Verification
+
+- [x] 4.1 Run backend verification: `go test ./...`, `go vet ./...`, and `gopls check` on all modified/added Go files (resolving `gopls` from `PATH` or `$(go env GOPATH)/bin/gopls`), fixing any reported diagnostics.
+- [x] 4.2 Run frontend verification: `npm --prefix web test -- --run` and `npm --prefix web run build` to confirm all TypeScript types, component tests, and production bundle build succeed cleanly.

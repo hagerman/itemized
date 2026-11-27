@@ -7,27 +7,31 @@ Provides unified QR and retail barcode resolution, legacy QR redirect compatibil
 ## Requirements
 
 ### Requirement: Legacy QR code redirect routes
-The system SHALL serve `GET /go/i/:id`, `GET /go/p/:id`, and `GET /go/l/:id` accepting either an integer ID or a `legacy_uuid`, redirecting authenticated users to the corresponding item's product view, product view, or location view so both newly printed compact labels and previously printed UUID labels work seamlessly. When `GET /go/p/:id` receives an integer ID or `legacy_uuid` belonging to a product that was merged into another product, the system SHALL follow the merge alias and redirect to the destination product view.
+The system SHALL serve the web application SPA directly on `GET /go/i/:id`, `GET /go/p/:id`, and `GET /go/l/:id` (instead of issuing server-side HTTP 302 redirects to `/products/:id` or `/locations/:id`) so scanning any printed QR code lands directly on the QR Quick Action screen at that URL. Both newly printed integer IDs and previously printed `legacy_uuid` tokens—as well as merged product aliases on `/go/p/:id`—SHALL resolve cleanly through the QR Quick Action screen once authenticated (or automatically in demo mode).
 
 #### Scenario: Scanning an existing legacy UUID item QR with phone camera
 - **WHEN** an authenticated user navigates to `/go/i/<legacy-uuid>`
-- **THEN** the system resolves the item by `legacy_uuid` and redirects to its product view (with a notice if the item was already consumed)
+- **THEN** the server serves the web application SPA at `/go/i/<legacy-uuid>` and the QR Quick Action screen resolves the item by `legacy_uuid` (displaying an already-consumed state with restore option if already consumed)
 
 #### Scenario: Scanning a newly printed integer item QR with phone camera
 - **WHEN** an authenticated user navigates to `/go/i/<int-id>`
-- **THEN** the system resolves the item by integer `id` and redirects to its product view
+- **THEN** the server serves the web application SPA at `/go/i/<int-id>` and the QR Quick Action screen resolves the item by integer `id`
 
 #### Scenario: Scanning an unknown identifier
-- **WHEN** a user navigates to `/go/i/<unknown-id>`
-- **THEN** the system redirects to the home view with an item-not-found alert
+- **WHEN** an authenticated user navigates to `/go/i/<unknown-id>`
+- **THEN** the server serves the web application SPA at `/go/i/<unknown-id>` and the QR Quick Action screen displays an item-not-found state with a link back to Inventory
 
 #### Scenario: Scanning a merged product integer QR with phone camera
 - **WHEN** Product A (ID `12`) was merged into Product B (ID `4`) and an authenticated user navigates to `/go/p/12`
-- **THEN** the system resolves the merge alias and redirects to `/products/4`
+- **THEN** the server serves the web application SPA at `/go/p/12` and the QR Quick Action screen resolves the merge alias to Product B
 
 #### Scenario: Scanning a merged product legacy UUID QR with phone camera
 - **WHEN** Product A (with `legacy_uuid`) was merged into Product B (ID `4`) and an authenticated user navigates to `/go/p/<product-a-legacy-uuid>`
-- **THEN** the system resolves the merge alias and redirects to `/products/4`
+- **THEN** the server serves the web application SPA at `/go/p/<product-a-legacy-uuid>` and the QR Quick Action screen resolves the merge alias to Product B
+
+#### Scenario: Unauthenticated user scans a QR code
+- **WHEN** an unauthenticated user navigates to `/go/i/42`
+- **THEN** the web application renders the sign-in screen while preserving `/go/i/42` as the post-login destination so the user lands directly on `/go/i/42` after signing in
 
 ### Requirement: Unified scan resolution endpoint
 The system SHALL provide `POST /api/scan/resolve` accepting raw scanned input (QR URL on any hostname containing `/go/{i,l,p}/<id-or-uuid>`, bare UUID, or retail barcode string) and returning the resolved entity kind (`item`, `product`, `location`, `barcode`, or `unknown`) with associated unconsumed items. When a scanned product QR URL (`/go/p/<id-or-uuid>`) or bare legacy UUID refers to a product that was merged into another product, `POST /api/scan/resolve` SHALL follow the merge alias and return `{ "kind": "product", "product": <destination-product>, "items": <destination-unconsumed-items> }` so all scanner workflows act against the destination product. When resolving a retail barcode against `barcodes`, the system SHALL first attempt an exact match on the trimmed input; if no exact match exists and the input is a numeric retail barcode (6–14 digits), the system SHALL fall back to matching equivalent leading-zero UPC/EAN/GTIN forms (such as 12-digit UPC-A ↔ 13-digit EAN-13 with a leading `0` ↔ 14-digit GTIN-14 with leading `0`/`00`, and 11-digit UPC-A without a leading `0` ↔ 12-digit UPC-A) and return `{ "kind": "barcode", ... }` with the matched variant and product.

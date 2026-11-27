@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"itemized/internal/db"
@@ -36,7 +37,10 @@ func TestDemoModeAuthBypassSandboxingAndReset(t *testing.T) {
 		t.Fatalf("new demo manager: %v", err)
 	}
 
-	srv := NewServer(conn, nil)
+	spaFS := fstest.MapFS{
+		"index.html": {Data: []byte("<!doctype html><html><body>itemized-spa</body></html>")},
+	}
+	srv := NewServer(conn, spaFS)
 	srv.EnableDemoMode(mgr)
 	drv := &fakeDriver{}
 	srv.Printer.RegisterDriver(printer.DriverIPPZPL, drv)
@@ -100,10 +104,10 @@ func TestDemoModeAuthBypassSandboxingAndReset(t *testing.T) {
 	}
 	firstProductID := prodResp.Products[0].ID
 
-	// 3. Unauthenticated QR redirect goes straight to product page, not /login.
+	// 3. Unauthenticated QR link serves the SPA directly for the QR Quick Action screen (no /login redirect).
 	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/go/p/%d", firstProductID), nil, "")
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != fmt.Sprintf("/products/%d", firstProductID) {
-		t.Fatalf("GET /go/p/%d expected 302 to /products/%d, got %d -> %q", firstProductID, firstProductID, rec.Code, rec.Header().Get("Location"))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "itemized-spa") {
+		t.Fatalf("GET /go/p/%d expected 200 SPA HTML, got %d -> %q", firstProductID, rec.Code, rec.Body.String())
 	}
 
 	// 4. Auth mutation endpoints are rejected with 403.

@@ -58,4 +58,28 @@ describe("AuthPage Force OIDC behavior", () => {
     expect(redirect).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /Create Admin Account/i })).toBeInTheDocument();
   });
+
+  it("forwards scanned /go/... path as next query param on OIDC login links and force redirect", () => {
+    window.history.pushState({}, "", "/go/i/42");
+    try {
+      const redirect = vi.fn();
+      render(
+        <AuthPage
+          initialized={true}
+          oidcEnabled={true}
+          oidcForce={true}
+          onAuthenticated={vi.fn()}
+          onOidcRedirect={redirect}
+        />
+      );
+
+      expect(redirect).toHaveBeenCalledWith("/api/auth/oidc/login?next=%2Fgo%2Fi%2F42");
+      expect(screen.getByRole("link", { name: /Sign in with OIDC/i })).toHaveAttribute(
+        "href",
+        "/api/auth/oidc/login?next=%2Fgo%2Fi%2F42"
+      );
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
 });

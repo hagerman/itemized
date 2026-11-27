@@ -71,11 +71,6 @@ func (s *Server) Handler() http.Handler {
 	// Healthcheck
 	mux.HandleFunc("GET /up", s.handleHealth)
 
-	// Legacy & new QR redirect routes
-	mux.HandleFunc("GET /go/i/{id}", s.handleQRItem)
-	mux.HandleFunc("GET /go/p/{id}", s.handleQRProduct)
-	mux.HandleFunc("GET /go/l/{id}", s.handleQRLocation)
-
 	// Public auth routes
 	mux.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
 	mux.HandleFunc("POST /api/auth/setup", s.handleAuthSetup)
@@ -531,7 +526,8 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	if strings.EqualFold(r.URL.Query().Get("mode"), auth.SessionKindBearer) {
 		kind = auth.SessionKindBearer
 	}
-	authURL, err := s.OIDC.BeginAuth(r.Context(), cfg, kind)
+	nextPath := auth.SanitizeNextPath(r.URL.Query().Get("next"))
+	authURL, err := s.OIDC.BeginAuth(r.Context(), cfg, kind, nextPath)
 	if err != nil {
 		log.Printf("oidc begin auth: %v", err)
 		writeError(w, http.StatusBadGateway, "oidc provider unavailable")
@@ -567,7 +563,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auth.SetSessionCookie(w, r, raw, auth.DefaultSessionTTL)
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, auth.SanitizeNextPath(res.Next), http.StatusFound)
 }
 
 func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
@@ -818,88 +814,6 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.handleGetSettings(w, r)
-}
-
-// --- QR Redirect Handlers (/go/i/:id, /go/p/:id, /go/l/:id) ---
-
-func (s *Server) requireBrowserAuth(w http.ResponseWriter, r *http.Request) bool {
-	if s.DemoMode {
-		return true
-	}
-	tok := auth.ExtractToken(r)
-	if _, _, err := s.Auth.ValidateToken(r.Context(), tok); err != nil {
-		http.Redirect(w, r, "/login?next="+r.URL.RequestURI(), http.StatusFound)
-		return false
-	}
-	return true
-}
-
-func (s *Server) handleQRItem(w http.ResponseWriter, r *http.Request) {
-	if !s.requireBrowserAuth(w, r) {
-		return
-	}
-	raw := strings.TrimSpace(r.PathValue("id"))
-	var productID int64
-	var consumed sql.NullString
-	var err error
-	if id, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT product_id, consumed_on_date FROM items WHERE id = ?`, id).Scan(&productID, &consumed)
-	} else {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT product_id, consumed_on_date FROM items WHERE legacy_uuid = ?`, strings.ToLower(raw)).Scan(&productID, &consumed)
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Redirect(w, r, "/?alert=item_not_found", http.StatusFound)
-		return
-	}
-	if err != nil {
-		http.Redirect(w, r, "/?alert=error", http.StatusFound)
-		return
-	}
-	target := fmt.Sprintf("/products/%d", productID)
-	if consumed.Valid && consumed.String != "" {
-		target += "?notice=item_already_consumed"
-	}
-	http.Redirect(w, r, target, http.StatusFound)
-}
-
-func (s *Server) handleQRProduct(w http.ResponseWriter, r *http.Request) {
-	if !s.requireBrowserAuth(w, r) {
-		return
-	}
-	raw := strings.TrimSpace(r.PathValue("id"))
-	productID, err := s.resolveProductIDByToken(r.Context(), raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Redirect(w, r, "/?alert=product_not_found", http.StatusFound)
-		return
-	}
-	if err != nil {
-		http.Redirect(w, r, "/?alert=error", http.StatusFound)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/products/%d", productID), http.StatusFound)
-}
-
-func (s *Server) handleQRLocation(w http.ResponseWriter, r *http.Request) {
-	if !s.requireBrowserAuth(w, r) {
-		return
-	}
-	raw := strings.TrimSpace(r.PathValue("id"))
-	var locID int64
-	var err error
-	if id, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT id FROM locations WHERE id = ?`, id).Scan(&locID)
-	} else {
-		err = s.DB.QueryRowContext(r.Context(), `SELECT id FROM locations WHERE legacy_uuid = ?`, strings.ToLower(raw)).Scan(&locID)
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Redirect(w, r, "/?alert=location_not_found", http.StatusFound)
-		return
-	}
-	if err != nil {
-		http.Redirect(w, r, "/?alert=error", http.StatusFound)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/locations/%d", locID), http.StatusFound)
 }
 
 func todayUTC() time.Time {

@@ -15,6 +15,7 @@ export const APP_SCREENS: AppScreen[] = [
   { id: "categories", kind: "route", label: "Categories", routePath: "/categories" },
   { id: "locations", kind: "route", label: "Locations", routePath: "/locations" },
   { id: "location-detail", kind: "route", label: "Location Detail", routePath: "/locations/:id" },
+  { id: "qr-action", kind: "route", label: "QR Quick Action", routePath: "/go/:kind/:id" },
   { id: "settings", kind: "route", label: "Settings", routePath: "/settings" },
   { id: "help", kind: "route", label: "Help", routePath: "/help" },
   { id: "help-article", kind: "route", label: "Help Article", routePath: "/help/*" },
@@ -45,6 +46,7 @@ export function screenIdForPathname(pathname: string): string {
   if (pathname === "/categories") return "categories";
   if (pathname === "/locations") return "locations";
   if (/^\/locations\/[^/]+$/.test(pathname)) return "location-detail";
+  if (/^\/go\/[^/]+\/[^/]+$/.test(pathname)) return "qr-action";
   if (pathname === "/settings") return "settings";
   if (pathname === "/help") return "help";
   if (/^\/help\/[^/]+$/.test(pathname)) return "help-article";

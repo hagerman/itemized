@@ -24,12 +24,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [loading, setLoading] = useState(false);
 
   const forceOidc = initialized && oidcEnabled && oidcForce;
+  const oidcLoginHref = (() => {
+    const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    if (!pathname || pathname === "/" || pathname === "/login") {
+      return "/api/auth/oidc/login";
+    }
+    return `/api/auth/oidc/login?next=${encodeURIComponent(`${pathname}${search}`)}`;
+  })();
 
   useEffect(() => {
     if (!forceOidc) return;
     const redirect = onOidcRedirect ?? ((url: string) => window.location.assign(url));
-    redirect("/api/auth/oidc/login");
-  }, [forceOidc, onOidcRedirect]);
+    redirect(oidcLoginHref);
+  }, [forceOidc, oidcLoginHref, onOidcRedirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +75,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         {forceOidc ? (
           <div className="space-y-4 text-center">
             <a
-              href="/api/auth/oidc/login"
+              href={oidcLoginHref}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
             >
               <KeyRound className="h-4 w-4" /> Sign in with OIDC
@@ -116,7 +124,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             {initialized && oidcEnabled && (
               <div className="mt-5 border-t border-slate-800 pt-5">
                 <a
-                  href="/api/auth/oidc/login"
+                  href={oidcLoginHref}
                   className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 py-2.5 text-sm font-medium text-slate-100 hover:bg-slate-700"
                 >
                   <KeyRound className="h-4 w-4" /> Sign in with OIDC
