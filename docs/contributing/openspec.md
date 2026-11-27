@@ -18,7 +18,7 @@ AI coding assistants are actively used throughout the itemized development cycle
 Rather than relying on ad-hoc prompts, itemized pairs AI-assisted development with **OpenSpec** for three key benefits:
 
 - **Spec-first clarity**: Every non-trivial change starts with a written `proposal.md`, testable behavioral spec deltas, optional `design.md`, and an ordered `tasks.md` checklist before code is written. This prevents scope creep and ensures intent is agreed upon up front.
-- **Durable living specifications**: When a change is archived, its spec deltas merge into `openspec/specs/`. Both human contributors and AI agents work from the same up-to-date behavioral contract instead of reverse-engineering intent from scattered code or old PRs.
+- **Durable living specifications**: When a change is archived, its spec deltas merge into `openspec/specs/`. Both human readers and AI agents can work from the same up-to-date behavioral contract instead of reverse-engineering intent from scattered code or old commits.
 - **Automated verification**: Every change—human-written or AI-assisted—is gated by `make check` (Go vet and tests, API documentation contract tests, frontend Vitest tests, documentation freshness/link/coverage checks) and WCAG 2.2 AA accessibility checks.
 
 ## Directory layout

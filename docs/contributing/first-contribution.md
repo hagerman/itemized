@@ -1,6 +1,6 @@
 ---
-title: First contribution
-summary: Set up your local itemized development environment and submit your first pull request in 30 minutes.
+title: Local development setup
+summary: Set up your local itemized development environment, run checks, and build from source.
 audience: developer
 entry_point: under-the-hood
 order: 2
@@ -9,7 +9,9 @@ capabilities:
 screens: []
 ---
 
-This walkthrough takes you from cloning the repository to running tests and opening your first pull request in about 30 minutes.
+This walkthrough takes you from cloning the repository to running itemized locally, verifying tests, and building a production binary.
+
+> **Contribution policy:** itemized is open source (AGPL-3.0), not open contribution—external pull requests are not accepted. Bug reports and feature ideas are always welcome via [GitHub Issues](https://github.com/itemizedapp/itemized/issues), and you are free to build from source or maintain your own fork.
 
 ## Prerequisites
 
@@ -35,14 +37,9 @@ DEMO_MODE=true DB_PATH=/tmp/itemized-demo.db go run ./cmd/itemized
 
 Open `http://localhost:8080` to interact with the seeded household inventory. For frontend hot-reload, run `cd web && npm run dev` alongside the Go server.
 
-## 3. Make a small change and run checks
+## 3. Explore, modify, and run checks
 
-1. Review [Architecture overview](../architecture.md) and [Package map](packages.md) to locate the files for your change.
-2. Make your edits and add unit tests covering the new or changed behavior.
-3. If you added a route, Settings section, environment variable, API endpoint, or `internal/` package, update the corresponding Markdown page under `docs/` and run `make docs-build`.
-4. Run `make check` to execute documentation checks, `go vet ./...`, `go test ./...`, and frontend tests.
-5. Run `make build` to verify the production React bundle and embedded Go binary compile cleanly.
-
-## 4. Open a pull request
-
-Push your branch and open a pull request on GitHub describing what changed and how you verified it.
+1. Review [Architecture overview](../architecture.md) and [Package map](packages.md) to locate the files for any area you want to inspect or customize in a fork.
+2. If you add or modify a route, Settings section, environment variable, API endpoint, or `internal/` package, update the corresponding Markdown page under `docs/` and run `make docs-build`.
+3. Run `make check` to execute documentation checks, `go vet ./...`, `go test ./...`, and frontend tests.
+4. Run `make build` to verify the production React bundle and embedded Go binary compile cleanly.

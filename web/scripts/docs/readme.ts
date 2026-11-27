@@ -279,7 +279,7 @@ DEMO_MODE=true DB_PATH=/tmp/itemized-demo.db go run ./cmd/itemized
 docker build -t itemized:local .
 \`\`\`
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, architecture tour, and package map.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for our contribution policy (bug reports & feature ideas welcome; external PRs not accepted), local development setup, architecture tour, and package map.
 
 ---
 
