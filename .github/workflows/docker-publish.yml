@@ -185,3 +185,14 @@ jobs:
             fi
             gh release create "$TAG" itemized-docs.tar.gz "${FLAGS[@]}"
           fi
+
+      - name: Trigger Cloudflare Pages website rebuild
+        if: ${{ !contains(inputs.tag || github.ref_name, '-') }}
+        env:
+          DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "CLOUDFLARE_PAGES_DEPLOY_HOOK secret is not set; skipping website rebuild."
+            exit 0
+          fi
+          curl -fsSL -X POST "$DEPLOY_HOOK"

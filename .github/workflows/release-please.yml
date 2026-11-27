@@ -29,6 +29,7 @@ jobs:
     uses: ./.github/workflows/docker-publish.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
     permissions:
       contents: write
       packages: write
