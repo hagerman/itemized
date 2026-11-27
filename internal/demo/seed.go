@@ -243,9 +243,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return nil
 	}
 
-	// Whole Milk: Due Soon + Opened + Consumed history for rolling-average due date
+	// Milk, Whole: Due Soon + Opened + Consumed history for rolling-average due date
 	milkID, err := insertProduct(productSeed{
-		name: "Whole Milk", categoryID: dairyCatID, defaultLocID: fridgeID,
+		name: "Milk, Whole", categoryID: dairyCatID, defaultLocID: fridgeID,
 		dueDays: intPtr(10), dueDaysOpen: intPtr(5), useAvgDue: true, minValue: intPtr(1),
 		volVal: floatPtr(1), volUnit: strPtr("gal"),
 	})
@@ -270,9 +270,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Baby Spinach: Due Soon
+	// Spinach, Baby: Due Soon
 	spinachID, err := insertProduct(productSeed{
-		name: "Baby Spinach", categoryID: produceCatID, defaultLocID: crisperID,
+		name: "Spinach, Baby", categoryID: produceCatID, defaultLocID: crisperID,
 		dueDays: intPtr(7), wtVal: floatPtr(5), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -285,9 +285,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Greek Yogurt: Due Soon + Opened
+	// Yogurt, Greek: Due Soon + Opened
 	yogurtID, err := insertProduct(productSeed{
-		name: "Greek Yogurt", categoryID: dairyCatID, defaultLocID: fridgeID,
+		name: "Yogurt, Greek", categoryID: dairyCatID, defaultLocID: fridgeID,
 		dueDays: intPtr(14), dueDaysOpen: intPtr(7), wtVal: floatPtr(32), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -307,9 +307,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Chicken Stock: 1 Overdue + Opened in Fridge, 2 In Stock in Pantry
+	// Stock, Chicken: 1 Overdue + Opened in Fridge, 2 In Stock in Pantry
 	stockID, err := insertProduct(productSeed{
-		name: "Chicken Stock", categoryID: pantryCatID, defaultLocID: pantryID,
+		name: "Stock, Chicken", categoryID: pantryCatID, defaultLocID: pantryID,
 		dueDays: intPtr(180), dueDaysOpen: intPtr(4), volVal: floatPtr(32), volUnit: strPtr("fl oz"),
 	})
 	if err != nil {
@@ -332,9 +332,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Fresh Salsa: Overdue + Opened
+	// Salsa, Fresh: Overdue + Opened
 	salsaID, err := insertProduct(productSeed{
-		name: "Fresh Salsa", categoryID: produceCatID, defaultLocID: fridgeID,
+		name: "Salsa, Fresh", categoryID: produceCatID, defaultLocID: fridgeID,
 		dueDays: intPtr(10), dueDaysOpen: intPtr(5), wtVal: floatPtr(16), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -347,9 +347,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Whole Grain Pasta: In Stock with 2 variants & barcodes
+	// Pasta, Whole Grain: In Stock with 2 variants & barcodes
 	pastaID, err := insertProduct(productSeed{
-		name: "Whole Grain Pasta", categoryID: pantryCatID, defaultLocID: pantryID,
+		name: "Pasta, Whole Grain", categoryID: pantryCatID, defaultLocID: pantryID,
 		dueDays: intPtr(365), wtVal: floatPtr(16), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -379,9 +379,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Extra Virgin Olive Oil: In Stock + Opened
+	// Oil, Olive, Extra Virgin: In Stock + Opened
 	oliveOilID, err := insertProduct(productSeed{
-		name: "Extra Virgin Olive Oil", categoryID: pantryCatID, defaultLocID: pantryID,
+		name: "Oil, Olive, Extra Virgin", categoryID: pantryCatID, defaultLocID: pantryID,
 		dueDays: intPtr(365), volVal: floatPtr(750), volUnit: strPtr("ml"),
 	})
 	if err != nil {
@@ -394,9 +394,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Black Beans: In Stock
+	// Beans, Black: In Stock
 	beansID, err := insertProduct(productSeed{
-		name: "Black Beans", categoryID: pantryCatID, defaultLocID: pantryID,
+		name: "Beans, Black", categoryID: pantryCatID, defaultLocID: pantryID,
 		dueDays: intPtr(730), wtVal: floatPtr(15), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -418,9 +418,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Mixed Berries: In Stock in Kitchen Freezer
+	// Berries, Mixed: In Stock in Kitchen Freezer
 	berriesID, err := insertProduct(productSeed{
-		name: "Mixed Berries", categoryID: frozenCatID, defaultLocID: freezerID,
+		name: "Berries, Mixed", categoryID: frozenCatID, defaultLocID: freezerID,
 		dueDays: intPtr(180), dueDaysFreeze: intPtr(180), dueDaysThaw: intPtr(3),
 		wtVal: floatPtr(48), wtUnit: strPtr("oz"),
 	})
@@ -436,9 +436,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Ground Beef: In Stock in Garage Chest Freezer
+	// Beef, Ground: In Stock in Garage Chest Freezer
 	beefID, err := insertProduct(productSeed{
-		name: "Ground Beef", categoryID: frozenCatID, defaultLocID: chestFreezerID,
+		name: "Beef, Ground", categoryID: frozenCatID, defaultLocID: chestFreezerID,
 		dueDays: intPtr(4), dueDaysFreeze: intPtr(120), dueDaysThaw: intPtr(2),
 		wtVal: floatPtr(1), wtUnit: strPtr("lb"),
 	})
@@ -470,9 +470,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Sparkling Water: Low Stock -> Shopping List (with multi-pack barcode)
+	// Water, Sparkling: Low Stock -> Shopping List (with multi-pack barcode)
 	waterID, err := insertProduct(productSeed{
-		name: "Sparkling Water", categoryID: beveragesCatID, defaultLocID: pantryID,
+		name: "Water, Sparkling", categoryID: beveragesCatID, defaultLocID: pantryID,
 		dueDays: intPtr(180), minValue: intPtr(4), volVal: floatPtr(12), volUnit: strPtr("fl oz"),
 	})
 	if err != nil {
@@ -494,9 +494,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		}
 	}
 
-	// Whole Bean Coffee: Manually added to Shopping List
+	// Coffee, Whole Bean: Manually added to Shopping List
 	coffeeID, err := insertProduct(productSeed{
-		name: "Whole Bean Coffee", categoryID: beveragesCatID, defaultLocID: pantryID,
+		name: "Coffee, Whole Bean", categoryID: beveragesCatID, defaultLocID: pantryID,
 		dueDays: intPtr(90), manualShop: true, wtVal: floatPtr(12), wtUnit: strPtr("oz"),
 	})
 	if err != nil {
@@ -509,9 +509,9 @@ func Seed(ctx context.Context, tx *sql.Tx, now time.Time) error {
 		return err
 	}
 
-	// Dish Soap: In Stock
+	// Soap, Dish: In Stock
 	soapID, err := insertProduct(productSeed{
-		name: "Dish Soap", categoryID: cleaningCatID, defaultLocID: kitchenID,
+		name: "Soap, Dish", categoryID: cleaningCatID, defaultLocID: kitchenID,
 		labelPrintMode: "none", volVal: floatPtr(24), volUnit: strPtr("fl oz"),
 	})
 	if err != nil {

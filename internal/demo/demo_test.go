@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -94,10 +95,49 @@ func TestSeedPopulatesExpectedStatesAndFTS(t *testing.T) {
 		t.Fatalf("expected >=1 sample printer, got %d", printerCount)
 	}
 
+	// Verify seeded product names follow the standardized LLM naming convention.
+	rows, err := conn.Query(`SELECT name FROM products ORDER BY name ASC`)
+	if err != nil {
+		t.Fatalf("query seeded products: %v", err)
+	}
+	defer rows.Close()
+	var gotProducts []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan product name: %v", err)
+		}
+		gotProducts = append(gotProducts, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate seeded products: %v", err)
+	}
+	wantProducts := []string{
+		"Beans, Black",
+		"Beef, Ground",
+		"Berries, Mixed",
+		"Coffee, Whole Bean",
+		"Milk, Whole",
+		"Oil, Olive, Extra Virgin",
+		"Paper Towels",
+		"Pasta, Whole Grain",
+		"Salsa, Fresh",
+		"Soap, Dish",
+		"Spinach, Baby",
+		"Stock, Chicken",
+		"Water, Sparkling",
+		"Yogurt, Greek",
+	}
+	if !reflect.DeepEqual(gotProducts, wantProducts) {
+		t.Fatalf("seeded product names = %v, want %v", gotProducts, wantProducts)
+	}
+
 	// Verify FTS5 trigram search matches seeded products.
-	var ftsHits int
-	if err := conn.QueryRow(`SELECT COUNT(1) FROM products_fts WHERE products_fts MATCH '"pasta"'`).Scan(&ftsHits); err != nil || ftsHits < 1 {
-		t.Fatalf("expected FTS5 hit for pasta, got %d (err=%v)", ftsHits, err)
+	for _, query := range []string{`"pasta"`, `"olive"`, `"beans"`} {
+		var ftsHits int
+		if err := conn.QueryRow(`SELECT COUNT(1) FROM products_fts WHERE products_fts MATCH ?`, query).Scan(&ftsHits); err != nil || ftsHits < 1 {
+			t.Fatalf("expected FTS5 hit for %s, got %d (err=%v)", query, ftsHits, err)
+		}
 	}
 }
 
