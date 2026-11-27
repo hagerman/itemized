@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+
 export interface User {
   id: number;
   email: string;
@@ -13,6 +15,7 @@ export interface AuthStatus {
   oidc_enabled: boolean;
   oidc_force: boolean;
   llm_enabled?: boolean;
+  printers_enabled?: boolean;
   demo_mode?: boolean;
   demo_reset_at?: string;
   user: User | null;
@@ -173,4 +176,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new ApiError(res.status, (data.error as string) || res.statusText, data);
   }
   return data as T;
+}
+
+export function usePrintersEnabled(): boolean {
+  const { data } = useQuery({
+    queryKey: ["auth-status"],
+    queryFn: () => apiFetch<AuthStatus>("/api/auth/status"),
+  });
+  return Boolean(data?.printers_enabled);
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsPage } from "./SettingsPage";
-import { User } from "../api";
+import { PrinterRecord, User } from "../api";
 
 const MEMBER_USER: User = {
   id: 2,
@@ -248,5 +248,102 @@ describe("SettingsPage role-based visibility", () => {
     expect(screen.getByPlaceholderText("Client ID")).toBeDisabled();
     expect(screen.getByPlaceholderText("Model name")).toBeDisabled();
     expect(screen.getByPlaceholderText("Base URL (optional)")).toBeDisabled();
+  });
+
+  it("invalidates auth-status when adding or deleting a printer", async () => {
+    let printers: PrinterRecord[] = [
+      {
+        id: 1,
+        name: "Kitchen Zebra",
+        description: null,
+        driver: "raw_tcp_zpl",
+        endpoint: "192.168.1.50:9100",
+        printer_model: null,
+        enabled: true,
+      },
+    ];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/settings") {
+        return new Response(
+          JSON.stringify({
+            base_url: "https://itemized.example.com",
+            due_date_average_count: 3,
+            oidc_issuer: "",
+            oidc_client_id: "",
+            oidc_has_secret: false,
+            oidc_auto_provision: false,
+            oidc_force: false,
+            llm_provider: "",
+            llm_model: "",
+            llm_base_url: "",
+            llm_has_api_key: false,
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/users") {
+        return new Response(JSON.stringify({ users: [ADMIN_USER] }), { status: 200 });
+      }
+      if (url === "/api/printers" && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify({ printers }), { status: 200 });
+      }
+      if (url === "/api/printers" && init?.method === "POST") {
+        printers = [
+          ...printers,
+          {
+            id: 2,
+            name: "Garage Zebra",
+            description: null,
+            driver: "ipp_zpl",
+            endpoint: "http://192.168.1.51:631/ipp/print",
+            printer_model: null,
+            enabled: true,
+          },
+        ];
+        return new Response(JSON.stringify({ printer: printers[printers.length - 1] }), { status: 201 });
+      }
+      if (url === "/api/printers/1" && init?.method === "DELETE") {
+        printers = printers.filter((p) => p.id !== 1);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url === "/api/label-templates") {
+        return new Response(JSON.stringify({ templates: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    render(
+      <QueryClientProvider client={qc}>
+        <SettingsPage user={ADMIN_USER} />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("Kitchen Zebra")).toBeInTheDocument();
+
+    // Add printer -> invalidates auth-status
+    fireEvent.change(screen.getByPlaceholderText("Printer name"), { target: { value: "Garage Zebra" } });
+    fireEvent.change(screen.getByPlaceholderText("http://192.168.1.50:631/ipp/print"), {
+      target: { value: "http://192.168.1.51:631/ipp/print" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Printer" }));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["auth-status"] });
+    });
+
+    invalidateSpy.mockClear();
+
+    // Delete printer -> invalidates auth-status
+    const testPrintBtns = await screen.findAllByRole("button", { name: /Test Print/i });
+    const deleteBtn = testPrintBtns[0].nextElementSibling as HTMLButtonElement | null;
+    expect(deleteBtn).toBeTruthy();
+    fireEvent.click(deleteBtn!);
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["auth-status"] });
+    });
   });
 });

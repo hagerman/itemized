@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiFetch, Category, Location, Product } from "../api";
+import { ApiError, apiFetch, Category, Location, Product, usePrintersEnabled } from "../api";
 import { HierarchySelect } from "../components/HierarchySelect";
 import {
   EMPTY_MEASUREMENT,
@@ -16,6 +16,7 @@ export const ProductFormPage: React.FC = () => {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const printersEnabled = usePrintersEnabled();
 
   const { data: catData } = useQuery({
     queryKey: ["categories"],
@@ -243,19 +244,21 @@ export const ProductFormPage: React.FC = () => {
         </label>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className={`grid grid-cols-1 gap-4 ${printersEnabled ? "sm:grid-cols-2" : ""}`}>
         <label className="block text-xs text-slate-400">
           Minimum Stock (Shopping List threshold)
           <input type="number" value={minVal} onChange={(e) => setMinVal(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         </label>
-        <label className="block text-xs text-slate-400">
-          Label Print Mode
-          <select value={printMode} onChange={(e) => setPrintMode(e.target.value as "per_item" | "single" | "none")} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
-            <option value="per_item">One label per item</option>
-            <option value="single">Single product label</option>
-            <option value="none">No label</option>
-          </select>
-        </label>
+        {printersEnabled && (
+          <label className="block text-xs text-slate-400">
+            Label Print Mode
+            <select value={printMode} onChange={(e) => setPrintMode(e.target.value as "per_item" | "single" | "none")} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+              <option value="per_item">One label per item</option>
+              <option value="single">Single product label</option>
+              <option value="none">No label</option>
+            </select>
+          </label>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-sm text-slate-300">

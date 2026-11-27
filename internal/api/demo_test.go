@@ -60,13 +60,14 @@ func TestDemoModeAuthBypassSandboxingAndReset(t *testing.T) {
 		t.Fatalf("GET /api/auth/status expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	var statusResp struct {
-		Initialized bool   `json:"initialized"`
-		DemoMode    bool   `json:"demo_mode"`
-		DemoResetAt string `json:"demo_reset_at"`
-		OIDCEnabled bool   `json:"oidc_enabled"`
-		OIDCForce   bool   `json:"oidc_force"`
-		LLMEnabled  bool   `json:"llm_enabled"`
-		User        *struct {
+		Initialized     bool   `json:"initialized"`
+		DemoMode        bool   `json:"demo_mode"`
+		DemoResetAt     string `json:"demo_reset_at"`
+		OIDCEnabled     bool   `json:"oidc_enabled"`
+		OIDCForce       bool   `json:"oidc_force"`
+		LLMEnabled      bool   `json:"llm_enabled"`
+		PrintersEnabled bool   `json:"printers_enabled"`
+		User            *struct {
 			ID    int64  `json:"id"`
 			Email string `json:"email"`
 			Role  string `json:"role"`
@@ -75,7 +76,7 @@ func TestDemoModeAuthBypassSandboxingAndReset(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&statusResp); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
-	if !statusResp.DemoMode || !statusResp.Initialized || statusResp.OIDCEnabled || statusResp.OIDCForce || statusResp.LLMEnabled {
+	if !statusResp.DemoMode || !statusResp.Initialized || statusResp.OIDCEnabled || statusResp.OIDCForce || statusResp.LLMEnabled || !statusResp.PrintersEnabled {
 		t.Fatalf("unexpected demo status flags: %+v", statusResp)
 	}
 	if statusResp.DemoResetAt != "2026-11-25T18:00:00Z" {
@@ -157,6 +158,16 @@ func TestDemoModeAuthBypassSandboxingAndReset(t *testing.T) {
 	}
 	if len(drv.jobs) != 0 {
 		t.Fatalf("expected 0 printer driver jobs in demo mode, got %d", len(drv.jobs))
+	}
+
+	// Deleting the sample printer flips printers_enabled to false until reset.
+	rec = doReq(t, h, http.MethodDelete, fmt.Sprintf("/api/printers/%d", printersResp.Printers[0].ID), nil, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DELETE sample printer expected 200 in demo mode, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodGet, "/api/auth/status", nil, "")
+	if !strings.Contains(rec.Body.String(), `"printers_enabled":false`) {
+		t.Fatalf("expected printers_enabled:false after deleting sample printer, got %s", rec.Body.String())
 	}
 
 	// Label templates remain editable in demo mode.

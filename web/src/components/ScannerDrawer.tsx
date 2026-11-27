@@ -8,6 +8,7 @@ import {
   Location,
   Product,
   ScanResolution,
+  usePrintersEnabled,
 } from "../api";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { useHelp } from "./HelpContext";
@@ -144,6 +145,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   locations,
 }) => {
   const qc = useQueryClient();
+  const printersEnabled = usePrintersEnabled();
   const { openHelpForScreen } = useHelp();
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1216,7 +1218,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className={`grid grid-cols-2 gap-3 ${printersEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                     <label className="block min-w-0 text-xs text-slate-400">
                       Quantity
                       <input
@@ -1249,18 +1251,20 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         className="mt-1 block h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
                       />
                     </label>
-                    <label className="block min-w-0 text-xs text-slate-400">
-                      Label Mode
-                      <select
-                        value={purchasePrintMode}
-                        onChange={(e) => setPurchasePrintMode(e.target.value)}
-                        className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
-                      >
-                        <option value="per_item">Per Item</option>
-                        <option value="single">Single Label</option>
-                        <option value="none">No Label</option>
-                      </select>
-                    </label>
+                    {printersEnabled && (
+                      <label className="block min-w-0 text-xs text-slate-400">
+                        Label Mode
+                        <select
+                          value={purchasePrintMode}
+                          onChange={(e) => setPurchasePrintMode(e.target.value)}
+                          className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                        >
+                          <option value="per_item">Per Item</option>
+                          <option value="single">Single Label</option>
+                          <option value="none">No Label</option>
+                        </select>
+                      </label>
+                    )}
                   </div>
 
                   {/* Expandable Variant & Pack Details */}

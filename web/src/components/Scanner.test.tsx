@@ -631,6 +631,12 @@ describe("BarcodeScanner and ScannerDrawer", () => {
 
   it("constrains Purchase form grid cells and Due Date input to prevent iOS column overlap", async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/auth/status") {
+        return new Response(
+          JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: true, user: { id: 1, email: "a@b.c", role: "admin" } }),
+          { status: 200 }
+        );
+      }
       if (url === "/api/scan/resolve") {
         return new Response(JSON.stringify({ kind: "unknown", barcode: "7272" }), { status: 200 });
       }
@@ -660,7 +666,7 @@ describe("BarcodeScanner and ScannerDrawer", () => {
 
     const dueDateInput = await screen.findByLabelText("Due Date");
     const qtyInput = screen.getByLabelText("Quantity");
-    const labelModeSelect = screen.getByLabelText("Label Mode");
+    const labelModeSelect = await screen.findByLabelText("Label Mode");
     const locationBtn = screen.getByRole("button", { name: "Purchase location" });
 
     // Verify Due Date input is constrained against iOS WebKit intrinsic-width overflow
@@ -676,6 +682,91 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     for (const cell of Array.from(grid!.children)) {
       expect(cell).toHaveClass("min-w-0");
     }
+  });
+
+  it("omits Purchase Label Mode when no printers are configured while preserving label_print_mode on submit", async () => {
+    const purchasePayloads: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/status") {
+        return new Response(
+          JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "member" } }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/scan/resolve") {
+        return new Response(
+          JSON.stringify({
+            kind: "product",
+            product: {
+              id: 7,
+              name: "Milk, Whole",
+              category_id: 1,
+              category_name: "Drinks",
+              default_location_id: 1,
+              default_location_name: "Refrigerator",
+              default_due_days: 7,
+              default_due_days_on_open: null,
+              default_due_days_on_freeze: null,
+              default_due_days_on_thaw: null,
+              use_average_for_due_date: false,
+              label_print_mode: "single",
+              minimum_value: null,
+              manually_added_to_shopping_list: false,
+              volume_value: null,
+              volume_unit: null,
+              weight_value: null,
+              weight_unit: null,
+              length_value: null,
+              length_unit: null,
+              in_stock_count: 1,
+              next_due_on_date: null,
+              on_shopping_list: false,
+              low_stock: false,
+              low_stock_amount: null,
+              due_soon: false,
+              overdue: false,
+            },
+            items: [],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/workflows/purchase" && init?.method === "POST") {
+        purchasePayloads.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({ items: [{ id: 99 }], print_warnings: [] }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ products: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Drinks", parent_id: null, hierarchy_name: "Drinks" }]}
+          locations={[{ id: 1, name: "Refrigerator", parent_id: null, is_freezer: false, hierarchy_name: "Refrigerator" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const mainInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(mainInput, { target: { value: "https://itemized.local/go/p/7" } });
+    fireEvent.submit(mainInput.closest("form")!);
+
+    const dueDateInput = await screen.findByLabelText("Due Date");
+    expect(screen.queryByLabelText("Label Mode")).not.toBeInTheDocument();
+
+    const grid = dueDateInput.closest(".grid");
+    expect(grid).not.toBeNull();
+    expect(grid!.children.length).toBe(3);
+    expect(grid).toHaveClass("sm:grid-cols-3");
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm & Add/i }));
+    await waitFor(() => expect(purchasePayloads).toHaveLength(1));
+    expect(purchasePayloads[0].label_print_mode).toBe("single");
   });
 
   it("resets transient workflow state when closed and reopened while retaining the selected mode", async () => {

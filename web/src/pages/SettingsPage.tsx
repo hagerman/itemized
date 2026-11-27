@@ -402,6 +402,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
               setPName("");
               setPEndpoint("");
               void qc.invalidateQueries({ queryKey: ["printers"] });
+              void qc.invalidateQueries({ queryKey: ["auth-status"] });
               flash("Printer added.");
             } catch (err) {
               setError(err instanceof Error ? err.message : "Failed to add printer");
@@ -451,6 +452,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
                   onClick={async () => {
                     await apiFetch(`/api/printers/${pr.id}`, { method: "DELETE" });
                     void qc.invalidateQueries({ queryKey: ["printers"] });
+                    void qc.invalidateQueries({ queryKey: ["auth-status"] });
                   }}
                   className="rounded p-1.5 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
                 >

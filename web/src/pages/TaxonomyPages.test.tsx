@@ -250,4 +250,60 @@ describe("LocationsPage and LocationDetailPage inline editing", () => {
     expect(await screen.findByText("Garage > Deep Freeze")).toBeInTheDocument();
     expect(screen.getByText("Freezer location")).toBeInTheDocument();
   });
+
+  it("shows location print buttons only when printers are enabled", async () => {
+    const locations: Location[] = [
+      { id: 1, name: "Kitchen", parent_id: null, is_freezer: false, hierarchy_name: "Kitchen" },
+    ];
+    let printersEnabled = false;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: printersEnabled, user: { id: 1, email: "a@b.c", role: "member" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations }), { status: 200 });
+        }
+        if (url === "/api/locations/1") {
+          return new Response(JSON.stringify({ location: locations[0], items: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    // 1. Printers disabled -> omit print buttons on LocationsPage and LocationDetailPage
+    const { unmount: unmountList1 } = renderWithProviders(<LocationsPage />);
+    expect(await screen.findByText("Kitchen")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Print location label" })).not.toBeInTheDocument();
+    unmountList1();
+
+    const { unmount: unmountDetail1 } = renderWithProviders(
+      <Routes>
+        <Route path="/locations/:id" element={<LocationDetailPage />} />
+      </Routes>,
+      ["/locations/1"]
+    );
+    expect(await screen.findByRole("heading", { name: "Kitchen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Print Location Label/i })).not.toBeInTheDocument();
+    unmountDetail1();
+
+    // 2. Printers enabled -> show print buttons on both views
+    printersEnabled = true;
+    const { unmount: unmountList2 } = renderWithProviders(<LocationsPage />);
+    expect(await screen.findByRole("button", { name: "Print location label" })).toBeInTheDocument();
+    unmountList2();
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/locations/:id" element={<LocationDetailPage />} />
+      </Routes>,
+      ["/locations/1"]
+    );
+    expect(await screen.findByRole("button", { name: /Print Location Label/i })).toBeInTheDocument();
+  });
 });

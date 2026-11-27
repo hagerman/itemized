@@ -86,6 +86,9 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
 
   it("renders accessible header actions, mobile item cards, and supports inline variant & barcode management", async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/status") {
+        return new Response(JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: true, user: { id: 1, email: "a@b.c", role: "admin" } }), { status: 200 });
+      }
       if (url === "/api/products/1" && !init?.method) {
         return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
       }
@@ -305,6 +308,9 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
+        if (url === "/api/auth/status") {
+          return new Response(JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: true, user: { id: 1, email: "a@b.c", role: "admin" } }), { status: 200 });
+        }
         if (url === "/api/products/1") {
           return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
         }
@@ -358,5 +364,52 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     for (const control of controls) {
       expect(control).toHaveClass("h-8");
     }
+  });
+
+  it("omits print buttons and Label Mode when no printers are configured", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "member" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText("Coca-Cola Original Taste Soda")).toBeInTheDocument());
+
+    // Header Print Label button and Label Mode metadata tile are omitted
+    expect(screen.queryByRole("button", { name: "Print Product Label" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Label Mode")).not.toBeInTheDocument();
+    expect(screen.queryByText("One label per item")).not.toBeInTheDocument();
+
+    // Per-item Print buttons (mobile and desktop) are omitted
+    expect(screen.queryByRole("button", { name: "Print" })).not.toBeInTheDocument();
+
+    // Bulk action bar omits Reprint Labels
+    fireEvent.click(screen.getByLabelText("Select item #5"));
+    expect(screen.getByText("1 selected:")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reprint Labels" })).not.toBeInTheDocument();
   });
 });

@@ -350,9 +350,26 @@ func (s *Server) llmConfig(ctx context.Context) llm.Config {
 	}
 }
 
+func (s *Server) hasPrinters(ctx context.Context) (bool, error) {
+	q := `SELECT COUNT(1) FROM printers WHERE enabled = 1`
+	if s.DemoMode {
+		q = `SELECT COUNT(1) FROM printers`
+	}
+	var n int
+	if err := s.DB.QueryRowContext(ctx, q).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // --- Auth & User Handlers ---
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	printersEnabled, err := s.hasPrinters(r.Context())
+	if err != nil {
+		writeInternalError(w, "auth status printers", err)
+		return
+	}
 	if s.DemoMode {
 		u, err := s.demoUser(r.Context())
 		if err != nil {
@@ -360,12 +377,13 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp := map[string]any{
-			"initialized":  true,
-			"oidc_enabled": false,
-			"oidc_force":   false,
-			"llm_enabled":  false,
-			"demo_mode":    true,
-			"user":         u,
+			"initialized":      true,
+			"oidc_enabled":     false,
+			"oidc_force":       false,
+			"llm_enabled":      false,
+			"printers_enabled": printersEnabled,
+			"demo_mode":        true,
+			"user":             u,
 		}
 		if s.DemoManager != nil {
 			resp["demo_reset_at"] = s.DemoManager.NextResetAt().UTC().Format(time.RFC3339)
@@ -387,12 +405,13 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	oidcCfg := s.oidcConfig(r.Context(), r)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"initialized":  count > 0,
-		"oidc_enabled": oidcCfg.Enabled(),
-		"oidc_force":   oidcCfg.ForceActive(),
-		"llm_enabled":  s.llmConfig(r.Context()).Enabled(),
-		"demo_mode":    false,
-		"user":         currentUser,
+		"initialized":      count > 0,
+		"oidc_enabled":     oidcCfg.Enabled(),
+		"oidc_force":       oidcCfg.ForceActive(),
+		"llm_enabled":      s.llmConfig(r.Context()).Enabled(),
+		"printers_enabled": printersEnabled,
+		"demo_mode":        false,
+		"user":             currentUser,
 	})
 }
 

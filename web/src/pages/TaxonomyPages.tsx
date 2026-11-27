@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Printer, Snowflake, Trash2 } from "lucide-react";
-import { apiFetch, Category, Item, Location } from "../api";
+import { apiFetch, Category, Item, Location, usePrintersEnabled } from "../api";
 import {
   buildHierarchyTree,
   collectDescendantIds,
@@ -173,6 +173,7 @@ export const CategoriesPage: React.FC = () => {
 
 export const LocationsPage: React.FC = () => {
   const qc = useQueryClient();
+  const printersEnabled = usePrintersEnabled();
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState<string>("");
   const [isFreezer, setIsFreezer] = useState(false);
@@ -338,14 +339,16 @@ export const LocationsPage: React.FC = () => {
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => apiFetch(`/api/locations/${l.id}/print-label`, { method: "POST" })}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
-                  aria-label="Print location label"
-                >
-                  <Printer className="h-4 w-4" />
-                </button>
+                {printersEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => apiFetch(`/api/locations/${l.id}/print-label`, { method: "POST" })}
+                    className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                    aria-label="Print location label"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={async () => {
@@ -369,6 +372,7 @@ export const LocationsPage: React.FC = () => {
 export const LocationDetailPage: React.FC = () => {
   const { id } = useParams();
   const qc = useQueryClient();
+  const printersEnabled = usePrintersEnabled();
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -445,16 +449,18 @@ export const LocationDetailPage: React.FC = () => {
           >
             <Pencil className="h-4 w-4" /> Edit
           </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const res = await apiFetch<{ print_warnings?: string[] }>(`/api/locations/${data.location.id}/print-label`, { method: "POST" });
-              setNotice(res.print_warnings?.length ? `Warning: ${res.print_warnings.join("; ")}` : "Location label sent to printer.");
-            }}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white"
-          >
-            <Printer className="h-4 w-4" /> Print Location Label
-          </button>
+          {printersEnabled && (
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await apiFetch<{ print_warnings?: string[] }>(`/api/locations/${data.location.id}/print-label`, { method: "POST" });
+                setNotice(res.print_warnings?.length ? `Warning: ${res.print_warnings.join("; ")}` : "Location label sent to printer.");
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white"
+            >
+              <Printer className="h-4 w-4" /> Print Location Label
+            </button>
+          )}
         </div>
       </div>
 

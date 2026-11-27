@@ -2464,3 +2464,115 @@ func TestReclassifySuggestPrefixAwareAndCategoryContext(t *testing.T) {
 		t.Fatalf("expected redundant variant name equal to current_name to be omitted, got: %s", promptText)
 	}
 }
+
+func TestAuthStatusPrintersEnabled(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup admin expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+		"mode":     "bearer",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin login expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	adminTok := loginResp.Token
+
+	// Create a non-admin member user.
+	rec = doReq(t, h, http.MethodPost, "/api/users", map[string]string{
+		"email":    "member@example.com",
+		"password": "memberpassword123",
+		"role":     "member",
+	}, adminTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create member expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "member@example.com",
+		"password": "memberpassword123",
+		"mode":     "bearer",
+	}, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("member login expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	memberTok := loginResp.Token
+
+	checkPrintersEnabled := func(tok string, want bool) {
+		t.Helper()
+		r := doReq(t, h, http.MethodGet, "/api/auth/status", nil, tok)
+		if r.Code != http.StatusOK {
+			t.Fatalf("GET /api/auth/status expected 200, got %d: %s", r.Code, r.Body.String())
+		}
+		var resp struct {
+			PrintersEnabled bool `json:"printers_enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode auth status: %v", err)
+		}
+		if resp.PrintersEnabled != want {
+			t.Fatalf("printers_enabled = %v, want %v", resp.PrintersEnabled, want)
+		}
+	}
+
+	// 1. No printers configured -> false for both admin and member.
+	checkPrintersEnabled(adminTok, false)
+	checkPrintersEnabled(memberTok, false)
+
+	// 2. Disabled printer only -> still false in standard mode.
+	disabled := false
+	rec = doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+		"name":     "Disabled Printer",
+		"driver":   "raw_tcp_zpl",
+		"endpoint": "192.168.1.50:9100",
+		"enabled":  disabled,
+	}, adminTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create disabled printer expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	checkPrintersEnabled(adminTok, false)
+	checkPrintersEnabled(memberTok, false)
+
+	// 3. Enabled printer added -> true for both admin and member.
+	rec = doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+		"name":     "Kitchen Zebra",
+		"driver":   "raw_tcp_zpl",
+		"endpoint": "192.168.1.51:9100",
+		"enabled":  true,
+	}, adminTok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create enabled printer expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Printer PrinterRecord `json:"printer"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&created)
+	checkPrintersEnabled(adminTok, true)
+	checkPrintersEnabled(memberTok, true)
+
+	// 4. Delete enabled printer -> false again.
+	rec = doReq(t, h, http.MethodDelete, fmt.Sprintf("/api/printers/%d", created.Printer.ID), nil, adminTok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete printer expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	checkPrintersEnabled(adminTok, false)
+	checkPrintersEnabled(memberTok, false)
+}

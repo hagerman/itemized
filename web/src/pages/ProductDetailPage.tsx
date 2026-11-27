@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Pencil, Plus, Printer, ScanBarcode, ShoppingCart, Trash2, X } from "lucide-react";
-import { apiFetch, Item, Location, Product, Variant } from "../api";
+import { apiFetch, Item, Location, Product, usePrintersEnabled, Variant } from "../api";
 import { BarcodeScanModal } from "../components/BarcodeScanModal";
 import { HierarchySelect } from "../components/HierarchySelect";
 import {
@@ -25,6 +25,7 @@ export const ProductDetailPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const printersEnabled = usePrintersEnabled();
   const backTo = (location.state as { from?: string } | null)?.from || "/";
   const backLabel = backTo.startsWith("/search") ? "Back to search results" : "Back to inventory";
 
@@ -256,19 +257,21 @@ export const ProductDetailPage: React.FC = () => {
             <ShoppingCart className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">{product.manually_added_to_shopping_list ? "On List" : "Add to List"}</span>
           </button>
-          <button
-            type="button"
-            aria-label="Print Product Label"
-            title="Print Product Label"
-            onClick={async () => {
-              const res = await apiFetch<{ print_warnings?: string[] }>(`/api/products/${product.id}/print-label`, { method: "POST" });
-              setNotice(res.print_warnings?.length ? `Print warning: ${res.print_warnings.join("; ")}` : "Product label sent to printer.");
-            }}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 p-2 text-xs font-medium text-slate-200 hover:bg-slate-700 sm:px-3 sm:py-2"
-          >
-            <Printer className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline">Print Label</span>
-          </button>
+          {printersEnabled && (
+            <button
+              type="button"
+              aria-label="Print Product Label"
+              title="Print Product Label"
+              onClick={async () => {
+                const res = await apiFetch<{ print_warnings?: string[] }>(`/api/products/${product.id}/print-label`, { method: "POST" });
+                setNotice(res.print_warnings?.length ? `Print warning: ${res.print_warnings.join("; ")}` : "Product label sent to printer.");
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 p-2 text-xs font-medium text-slate-200 hover:bg-slate-700 sm:px-3 sm:py-2"
+            >
+              <Printer className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Print Label</span>
+            </button>
+          )}
           <Link
             to={`/products/${product.id}/edit`}
             aria-label="Edit Product"
@@ -302,8 +305,11 @@ export const ProductDetailPage: React.FC = () => {
       {/* Metadata Summary */}
       {(() => {
         const productMeas = formatMeasurement(product);
+        const tileCount = 3 + (printersEnabled ? 1 : 0) + (productMeas ? 1 : 0);
+        const gridCols =
+          tileCount === 5 ? "sm:grid-cols-5" : tileCount === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3";
         return (
-          <div className={`grid grid-cols-2 gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 ${productMeas ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+          <div className={`grid grid-cols-2 gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 ${gridCols}`}>
             <div><div className="text-xs text-slate-400">In Stock</div><div className="text-lg font-semibold text-white">{product.in_stock_count}</div></div>
             <div><div className="text-xs text-slate-400">Min Stock</div><div className="text-lg font-semibold text-white">{product.minimum_value ?? "—"}</div></div>
             <div>
@@ -316,12 +322,14 @@ export const ProductDetailPage: React.FC = () => {
                   : (product.default_due_days ?? "—")}
               </div>
             </div>
-            <div>
-              <div className="text-xs text-slate-400">Label Mode</div>
-              <div className="text-sm font-semibold text-white">
-                {LABEL_MODE_LABELS[product.label_print_mode] ?? product.label_print_mode}
+            {printersEnabled && (
+              <div>
+                <div className="text-xs text-slate-400">Label Mode</div>
+                <div className="text-sm font-semibold text-white">
+                  {LABEL_MODE_LABELS[product.label_print_mode] ?? product.label_print_mode}
+                </div>
               </div>
-            </div>
+            )}
             {productMeas && (
               <div><div className="text-xs text-slate-400">Measurement</div><div className="text-sm font-semibold text-white">{productMeas}</div></div>
             )}
@@ -355,7 +363,9 @@ export const ProductDetailPage: React.FC = () => {
             <span className="font-semibold text-indigo-200">{selectedIds.length} selected:</span>
             <button type="button" onClick={() => runBulk("consume")} className="inline-flex h-8 items-center rounded-lg bg-rose-600 px-2.5 font-medium text-white">Consume</button>
             <button type="button" onClick={() => runBulk("open")} className="inline-flex h-8 items-center rounded-lg bg-amber-600 px-2.5 font-medium text-white">Open</button>
-            <button type="button" onClick={() => runBulk("print_label")} className="inline-flex h-8 items-center rounded-lg bg-slate-700 px-2.5 font-medium text-white">Reprint Labels</button>
+            {printersEnabled && (
+              <button type="button" onClick={() => runBulk("print_label")} className="inline-flex h-8 items-center rounded-lg bg-slate-700 px-2.5 font-medium text-white">Reprint Labels</button>
+            )}
             <div className="min-w-[180px]">
               <HierarchySelect
                 items={locations}
@@ -453,7 +463,7 @@ export const ProductDetailPage: React.FC = () => {
                         <div className="font-medium text-slate-100">{it.due_on_date || "—"}</div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className={`grid ${printersEnabled ? "grid-cols-3" : "grid-cols-2"} gap-2 pt-1`}>
                       <button
                         type="button"
                         onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }}
@@ -468,13 +478,15 @@ export const ProductDetailPage: React.FC = () => {
                       >
                         Consume
                       </button>
-                      <button
-                        type="button"
-                        onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }}
-                        className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-                      >
-                        Print
-                      </button>
+                      {printersEnabled && (
+                        <button
+                          type="button"
+                          onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }}
+                          className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                        >
+                          Print
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -523,7 +535,9 @@ export const ProductDetailPage: React.FC = () => {
                         <td className="whitespace-nowrap py-2.5 text-right space-x-1.5">
                           <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Open</button>
                           <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/consume`, { method: "POST" }); refresh(); }} className="rounded bg-rose-500/20 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/30">Consume</button>
-                          <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Print</button>
+                          {printersEnabled && (
+                            <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Print</button>
+                          )}
                         </td>
                       </tr>
                     );

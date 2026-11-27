@@ -135,7 +135,7 @@ The Products view SHALL display matching products with stock counts, next-due it
 - **THEN** the product entry (table row on desktop and card on mobile) displays `"Fridge"` instead of `"Pantry"`
 
 ### Requirement: Product detail view and bulk item management
-The Product detail view SHALL display product metadata (default measurement when set, next-due item location in the header, `~X` rolling-average due days, and human-readable `Label Mode`), variants, and barcodes, provide header actions, and list individual `Item` records showing Variant first then Location (omitting `#id`) with single-item and bulk actions including bulk variant updates, where all interactive controls in the bulk item actions bar render at a uniform height.
+The Product detail view SHALL display product metadata (default measurement when set, next-due item location in the header, `~X` rolling-average due days, and human-readable `Label Mode` when a printer is configured), variants, barcodes, and header actions, and SHALL list `Item` records (Variant then Location, omitting `#id`) with single-item and uniform-height bulk actions (omitting `Reprint Labels` when no printers are configured).
 
 #### Scenario: Bulk transfer of selected items
 - **WHEN** a user selects multiple unconsumed items on a Product detail page and applies a bulk Transfer to a target location
@@ -143,7 +143,7 @@ The Product detail view SHALL display product metadata (default measurement when
 
 #### Scenario: Bulk item action controls render at uniform height
 - **WHEN** a user selects one or more unconsumed items on a Product detail page so the bulk item actions bar is displayed
-- **THEN** all visible interactive controls in the bulk actions bar (`Consume`, `Open`, `Reprint Labels`, the `Transfer to...` location selector, the bulk due-date input, the `Set variant...` selector, and any revealed confirmation buttons `Move`, `Set Due`, and `Set Variant`) render with the same uniform control height and aligned vertical centers
+- **THEN** all visible interactive controls in the bulk actions bar (`Consume`, `Open`, `Reprint Labels` when a printer is configured, the `Transfer to...` location selector, the bulk due-date input, the `Set variant...` selector, and any revealed confirmation buttons `Move`, `Set Due`, and `Set Variant`) render with the same uniform control height and aligned vertical centers
 
 #### Scenario: Displaying product default measurement
 - **WHEN** a product has a volume, weight, or length measurement configured
@@ -162,8 +162,12 @@ The Product detail view SHALL display product metadata (default measurement when
 - **THEN** the `Default Due Days` metadata tile displays `~14` (and displays `—` when no qualifying purchase history exists yet)
 
 #### Scenario: Displaying human-readable Label Mode on Product detail page
-- **WHEN** a user views `/products/:id` for a product with `label_print_mode = "per_item"`
+- **WHEN** `printers_enabled` is `true` and a user views `/products/:id` for a product with `label_print_mode = "per_item"`
 - **THEN** the `Label Mode` metadata tile displays `One label per item` instead of `per_item`
+
+#### Scenario: Omitting Label Mode tile and Reprint Labels action when no printers are configured
+- **WHEN** `printers_enabled` is `false` and a user views `/products/:id` (and selects one or more items)
+- **THEN** the `Label Mode` metadata tile is omitted from the metadata summary grid and the `Reprint Labels` button is omitted from the bulk item actions bar
 
 ### Requirement: Collapsible optional measurement editor on product form
 The Product create and edit form SHALL provide a tucked-away, expandable `Measurement (Optional)` section allowing users to set, adjust, or clear a product's unit type (`volume`, `weight`, `length`), numeric value, and unit without cluttering the default form layout.
@@ -188,11 +192,15 @@ When creating a new product (in the Product form or the Purchase scanner workflo
 - **THEN** the `Due Days` input becomes enabled and its entered value is saved as `default_due_days`
 
 ### Requirement: Categories and locations management views
-The web application SHALL provide views to create, edit, nest, and delete `Category` and `Location` trees, including renaming categories and locations, changing or clearing their parent via the hierarchical drill-down selector (excluding the edited node and its descendants from valid parent choices), toggling `is_freezer` on locations, and triggering a location QR label print from a location view.
+The web application SHALL provide views to create, edit, nest, and delete `Category` and `Location` trees, including renaming categories and locations, changing or clearing their parent via the hierarchical drill-down selector (excluding the edited node and its descendants from valid parent choices), toggling `is_freezer` on locations, and—when at least one printer is configured—triggering a location QR label print from the Locations list or Location detail view.
 
 #### Scenario: Printing a location label from the UI
-- **WHEN** a user clicks Print Label on a Location detail view
+- **WHEN** `printers_enabled` is `true` and a user clicks Print Label on a Location detail view (or the print icon on a location row)
 - **THEN** the application triggers a `location` label print and displays confirmation or any printer warning
+
+#### Scenario: Omitting location print buttons when no printers are configured
+- **WHEN** `printers_enabled` is `false` and a user views `/locations` or `/locations/:id`
+- **THEN** the per-location `Print location label` icon buttons on `/locations` and the `Print Location Label` header button on `/locations/:id` are not rendered
 
 #### Scenario: Editing a category inline on the Categories page
 - **WHEN** a user clicks Edit on a category row on `/categories`, updates its name and/or changes its parent (including selecting `Top-level` to clear the parent), and saves
@@ -269,15 +277,19 @@ Every modal dialog in the web application (including the Scanner modal, Barcode 
 - **THEN** the modal dialog remains open
 
 ### Requirement: iOS and mobile form control layout and dark-mode styling
-Form controls in multi-column responsive grids—including native `<input type="date">` and `<select>` controls—SHALL stay within their assigned column bounds without overflowing adjacent controls on iOS, maintain consistent heights across adjacent fields, and declare dark `color-scheme` styling for legible native chrome.
+Form controls in multi-column responsive grids—including native `<input type="date">` and `<select>` controls—SHALL stay within their assigned column bounds on iOS, maintain consistent heights across adjacent fields, and declare dark `color-scheme` styling. In the Purchase form, `Label Mode` SHALL be shown only when `printers_enabled` is `true` and omitted otherwise without empty trailing columns.
 
 #### Scenario: Due Date does not overlap Label Mode in the Purchase form on iOS
-- **WHEN** a user opens the `Scan & Action` Purchase form on an iOS mobile viewport (whether `Due Date` is empty or populated)
+- **WHEN** `printers_enabled` is `true` and a user opens the `Scan & Action` Purchase form on an iOS mobile viewport (whether `Due Date` is empty or populated)
 - **THEN** the `Due Date` input stays strictly within its left grid column (`min-width: 0`, `max-width: 100%`) without extending behind the adjacent `Label Mode` selector
 
 #### Scenario: Adjacent Purchase form controls align vertically with consistent height
-- **WHEN** a user views the `Quantity`, `Location`, `Due Date`, and `Label Mode` grid in the `Scan & Action` Purchase form on iOS or desktop
-- **THEN** all four controls render with uniform height and aligned baselines without vertical collapse when `Due Date` is empty
+- **WHEN** a user views the `Quantity`, `Location`, `Due Date`, and (when `printers_enabled` is `true`) `Label Mode` grid in the `Scan & Action` Purchase form on iOS or desktop
+- **THEN** all visible controls render with uniform height and aligned baselines without vertical collapse when `Due Date` is empty
+
+#### Scenario: Purchase form omits Label Mode when no printers are configured
+- **WHEN** `printers_enabled` is `false` and a user opens the `Scan & Action` Purchase form
+- **THEN** the `Label Mode` selector is not rendered and the remaining `Quantity`, `Location`, and `Due Date` controls render cleanly without an empty trailing column on desktop
 
 #### Scenario: Native form chrome respects dark theme contrast
 - **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop
@@ -319,3 +331,14 @@ The navigation sidebar footer (in both the desktop sidebar and mobile slide-out 
 #### Scenario: Active route state highlighted for both Help and Settings links
 - **WHEN** a user navigates to `/help` or `/settings`
 - **THEN** the corresponding sidebar footer link displays the active highlight style while maintaining identical horizontal alignment with the other footer link
+
+### Requirement: Conditional Label Print Mode field on product form
+On `/products/new` and `/products/:id/edit`, the Product form SHALL display the `Label Print Mode` selector only when at least one printer is configured (`printers_enabled` is `true`). When no printers are configured, the form SHALL omit the `Label Print Mode` selector and submit the existing product's `label_print_mode` (or default `"per_item"` when creating a new product) unchanged.
+
+#### Scenario: Product form omits Label Print Mode when no printers are configured
+- **WHEN** `printers_enabled` is `false` and a user opens `/products/new` or `/products/:id/edit`
+- **THEN** the `Label Print Mode` select field is not rendered and saving the form succeeds while preserving the product's stored or default `label_print_mode`
+
+#### Scenario: Product form shows Label Print Mode when a printer is configured
+- **WHEN** `printers_enabled` is `true` and a user opens `/products/new` or `/products/:id/edit`
+- **THEN** the `Label Print Mode` select field (`One label per item`, `Single product label`, `No label`) is displayed and editable
