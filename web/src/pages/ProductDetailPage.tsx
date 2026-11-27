@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Pencil, Plus, Printer, ScanBarcode, ShoppingCart, Trash2, X } from "lucide-react";
-import { apiFetch, Item, Location, Product, usePrintersEnabled, Variant } from "../api";
+import { apiFetch, invalidateInventoryQueries, Item, Location, Product, usePrintersEnabled, Variant } from "../api";
 import { BarcodeScanModal } from "../components/BarcodeScanModal";
 import { HierarchySelect } from "../components/HierarchySelect";
 import {
@@ -66,8 +66,7 @@ export const ProductDetailPage: React.FC = () => {
   });
 
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["product", id] });
-    void qc.invalidateQueries({ queryKey: ["products"] });
+    invalidateInventoryQueries(qc);
   };
 
   if (isLoading || !data) {
@@ -288,7 +287,8 @@ export const ProductDetailPage: React.FC = () => {
             onClick={async () => {
               if (!window.confirm("Delete this product and all its items?")) return;
               await apiFetch(`/api/products/${product.id}`, { method: "DELETE" });
-              void qc.invalidateQueries({ queryKey: ["products"] });
+              qc.removeQueries({ queryKey: ["product", id] });
+              invalidateInventoryQueries(qc);
               navigate("/");
             }}
             className="flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-500/15 p-2 text-xs font-medium text-rose-200 hover:bg-rose-500/25 sm:px-3 sm:py-2"

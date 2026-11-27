@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 
 export interface User {
   id: number;
@@ -176,6 +176,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new ApiError(res.status, (data.error as string) || res.statusText, data);
   }
   return data as T;
+}
+
+export function invalidateInventoryQueries(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: ["products"] });
+  void qc.invalidateQueries({ queryKey: ["product"] });
+  void qc.invalidateQueries({ queryKey: ["quick-search"] });
+  void qc.invalidateQueries({ queryKey: ["location"] });
 }
 
 export function usePrintersEnabled(): boolean {

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductFormPage } from "./ProductFormPage";
+import { ProductDetailPage } from "./ProductDetailPage";
 
 describe("ProductFormPage rolling-average due days default", () => {
   beforeEach(() => {
@@ -267,5 +268,178 @@ describe("ProductFormPage rolling-average due days default", () => {
     fireEvent.change(screen.getByLabelText("Search Default Location"), { target: { value: "Chest Freezer" } });
     fireEvent.click(screen.getByRole("button", { name: /Create Freezer “Chest Freezer”/ }));
     expect(await screen.findByRole("button", { name: "Default Location" })).toHaveTextContent("Chest Freezer");
+  });
+
+  it("refreshes ProductDetailPage immediately after editing a product even with staleTime: 15_000", async () => {
+    let currentName = "Milk, Whole";
+    const makeProduct = (name: string) => ({
+      id: 5,
+      name,
+      category_id: 1,
+      category_name: "Dairy",
+      default_location_id: 1,
+      default_location_name: "Fridge",
+      default_due_days: 7,
+      default_due_days_on_open: null,
+      default_due_days_on_freeze: null,
+      default_due_days_on_thaw: null,
+      use_average_for_due_date: false,
+      label_print_mode: "per_item",
+      minimum_value: 1,
+      manually_added_to_shopping_list: false,
+      volume_value: null,
+      volume_unit: null,
+      weight_value: null,
+      weight_unit: null,
+      length_value: null,
+      length_unit: null,
+      in_stock_count: 1,
+      next_due_on_date: null,
+      next_location_name: "Fridge",
+      on_shopping_list: false,
+      low_stock: false,
+      low_stock_amount: null,
+      due_soon: false,
+      overdue: false,
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [{ id: 1, name: "Dairy", parent_id: null, hierarchy_name: "Dairy" }] }), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }] }), { status: 200 });
+        }
+        if (url === "/api/products/5" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify({ product: makeProduct(currentName), variants: [], items: [] }), { status: 200 });
+        }
+        if (url === "/api/products/5" && init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body));
+          currentName = body.name;
+          return new Response(JSON.stringify({ product: makeProduct(currentName) }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/5"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+            <Route path="/products/:id/edit" element={<ProductFormPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // 1. Load ProductDetailPage so ["product", "5"] is cached and fresh for 15s
+    expect(await screen.findByRole("heading", { name: "Milk, Whole" })).toBeInTheDocument();
+
+    // 2. Navigate to Edit page and rename the product
+    fireEvent.click(screen.getByRole("link", { name: "Edit Product" }));
+    const nameInput = await screen.findByDisplayValue("Milk, Whole");
+    fireEvent.change(nameInput, { target: { value: "Milk, Organic Whole" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // 3. Returning to ProductDetailPage immediately shows the new name without reload
+    expect(await screen.findByRole("heading", { name: "Milk, Organic Whole" })).toBeInTheDocument();
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["products"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["product"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["quick-search"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
+  });
+
+  it("invalidates product, list, search, and location caches when creating a new product with staleTime: 15_000", async () => {
+    const createdProduct = {
+      id: 42,
+      name: "Oat Milk, Unsweetened",
+      category_id: 1,
+      category_name: "Dairy",
+      default_location_id: 1,
+      default_location_name: "Fridge",
+      default_due_days: null,
+      default_due_days_on_open: null,
+      default_due_days_on_freeze: null,
+      default_due_days_on_thaw: null,
+      use_average_for_due_date: true,
+      label_print_mode: "per_item",
+      minimum_value: null,
+      manually_added_to_shopping_list: false,
+      volume_value: null,
+      volume_unit: null,
+      weight_value: null,
+      weight_unit: null,
+      length_value: null,
+      length_unit: null,
+      in_stock_count: 0,
+      next_due_on_date: null,
+      on_shopping_list: false,
+      low_stock: false,
+      low_stock_amount: null,
+      due_soon: false,
+      overdue: false,
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories: [{ id: 1, name: "Dairy", parent_id: null, hierarchy_name: "Dairy" }] }), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }] }), { status: 200 });
+        }
+        if (url === "/api/products" && init?.method === "POST") {
+          return new Response(JSON.stringify({ product: createdProduct }), { status: 201 });
+        }
+        if (url === "/api/products/42" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify({ product: createdProduct, variants: [], items: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/new"]}>
+          <Routes>
+            <Route path="/products/new" element={<ProductFormPage />} />
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.change(screen.getByLabelText("Product Name"), { target: { value: "Oat Milk, Unsweetened" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("heading", { name: "Oat Milk, Unsweetened" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["products"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["product"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["quick-search"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
+    });
   });
 });

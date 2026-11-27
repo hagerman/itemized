@@ -679,4 +679,50 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
       Object.defineProperty(window, "isSecureContext", originalSecureContext);
     }
   });
+
+  it("invalidates product, list, search, and location caches on bulk delete", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, llm_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1" && init?.method === "DELETE") {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (url.startsWith("/api/products?")) {
+          return new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ categories: [], locations: [] }), { status: 200 });
+      })
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/?status=in_stock"]}>
+          <Routes>
+            <Route path="/" element={<ProductsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId("products-table")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Select Milk"));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete$/i }));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["products"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["product"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["quick-search"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
+    });
+  });
 });

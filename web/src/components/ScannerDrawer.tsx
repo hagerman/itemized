@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronRight, HelpCircle, Loader2, RotateCcw, ScanB
 import {
   apiFetch,
   Category,
+  invalidateInventoryQueries,
   Item,
   Location,
   Product,
@@ -362,8 +363,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   };
 
   const invalidateInventory = () => {
-    void qc.invalidateQueries({ queryKey: ["products"] });
-    void qc.invalidateQueries({ queryKey: ["product"] });
+    invalidateInventoryQueries(qc);
   };
 
   const handleUndo = async () => {

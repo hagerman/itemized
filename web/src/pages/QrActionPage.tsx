@@ -19,7 +19,7 @@ import {
   Snowflake,
   Undo2,
 } from "lucide-react";
-import { apiFetch, Item, Location, Product, ScanResolution } from "../api";
+import { apiFetch, invalidateInventoryQueries, Item, Location, Product, ScanResolution } from "../api";
 import { HierarchySelect } from "../components/HierarchySelect";
 
 interface UndoAction {
@@ -93,9 +93,7 @@ export const QrActionPage: React.FC = () => {
 
   const invalidateAll = async () => {
     await refetch();
-    void qc.invalidateQueries({ queryKey: ["products"] });
-    void qc.invalidateQueries({ queryKey: ["product"] });
-    void qc.invalidateQueries({ queryKey: ["location"] });
+    invalidateInventoryQueries(qc);
   };
 
   const handleConsume = async (item: Item) => {

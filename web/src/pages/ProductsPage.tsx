@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpDown, Check, CheckCircle2, Clock, GitMerge, HelpCircle, Loader2, Plus, ScanBarcode, Search, ShieldAlert, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
-import { apiFetch, AuthStatus, Category, Location, Product } from "../api";
+import { apiFetch, AuthStatus, Category, invalidateInventoryQueries, Location, Product } from "../api";
 import { useHelp } from "../components/HelpContext";
 import { useScannerControl } from "../components/Layout";
 import { ModalBackdrop } from "../components/ModalBackdrop";
@@ -242,7 +242,7 @@ export const ProductsPage: React.FC = () => {
       if (failedIds.length > 0) {
         setBulkError(`Failed to delete ${failedIds.length} of ${idsToDelete.length} product(s).`);
       }
-      void qc.invalidateQueries({ queryKey: ["products"] });
+      invalidateInventoryQueries(qc);
     } finally {
       setBulkDeleting(false);
     }
@@ -278,7 +278,7 @@ export const ProductsPage: React.FC = () => {
       setMergeModalOpen(false);
       setMergeTargetId(null);
       setSelectedIds([]);
-      void qc.invalidateQueries({ queryKey: ["products"] });
+      invalidateInventoryQueries(qc);
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : "Failed to merge products.");
     } finally {
@@ -464,7 +464,7 @@ export const ProductsPage: React.FC = () => {
       setReclassifyModalOpen(false);
       setReclassifyRows([]);
       setSelectedIds([]);
-      void qc.invalidateQueries({ queryKey: ["products"] });
+      invalidateInventoryQueries(qc);
     } catch (err) {
       setReclassifyError(err instanceof Error ? err.message : "Failed to apply reclassification.");
     } finally {

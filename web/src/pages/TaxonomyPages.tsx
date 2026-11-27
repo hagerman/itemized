@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Printer, Snowflake, Sparkles, Trash2 } from "lucide-react";
-import { apiFetch, Category, Item, Location, usePrintersEnabled } from "../api";
+import { apiFetch, Category, invalidateInventoryQueries, Item, Location, usePrintersEnabled } from "../api";
 import {
   buildHierarchyTree,
   collectDescendantIds,
@@ -80,8 +80,7 @@ export const CategoriesPage: React.FC = () => {
       });
       setEditingId(null);
       void qc.invalidateQueries({ queryKey: ["categories"] });
-      void qc.invalidateQueries({ queryKey: ["products"] });
-      void qc.invalidateQueries({ queryKey: ["product"] });
+      invalidateInventoryQueries(qc);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Failed to update category");
     } finally {
@@ -288,12 +287,9 @@ export const LocationsPage: React.FC = () => {
           is_freezer: editIsFreezer,
         }),
       });
-      const updatedId = editingId;
       setEditingId(null);
       void qc.invalidateQueries({ queryKey: ["locations"] });
-      void qc.invalidateQueries({ queryKey: ["location", String(updatedId)] });
-      void qc.invalidateQueries({ queryKey: ["products"] });
-      void qc.invalidateQueries({ queryKey: ["product"] });
+      invalidateInventoryQueries(qc);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Failed to update location");
     } finally {
@@ -503,10 +499,8 @@ export const LocationDetailPage: React.FC = () => {
         }),
       });
       setEditing(false);
-      void qc.invalidateQueries({ queryKey: ["location", id] });
       void qc.invalidateQueries({ queryKey: ["locations"] });
-      void qc.invalidateQueries({ queryKey: ["products"] });
-      void qc.invalidateQueries({ queryKey: ["product"] });
+      invalidateInventoryQueries(qc);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Failed to update location");
     } finally {

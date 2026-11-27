@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiFetch, Category, Location, Product, usePrintersEnabled } from "../api";
+import { ApiError, apiFetch, Category, invalidateInventoryQueries, Location, Product, usePrintersEnabled } from "../api";
 import { HierarchyCreateInput, HierarchySelect } from "../components/HierarchySelect";
 import {
   EMPTY_MEASUREMENT,
@@ -149,7 +149,13 @@ export const ProductFormPage: React.FC = () => {
         method: isEdit ? "PATCH" : "POST",
         body: JSON.stringify(body),
       });
-      void qc.invalidateQueries({ queryKey: ["products"] });
+      if (isEdit && res.product) {
+        qc.setQueryData<{ product: Product; variants?: unknown[]; items?: unknown[] }>(
+          ["product", String(res.product.id)],
+          (prev) => (prev ? { ...prev, product: res.product } : prev)
+        );
+      }
+      invalidateInventoryQueries(qc);
       navigate(`/products/${res.product.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.data?.existing_product) {

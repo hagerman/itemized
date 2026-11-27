@@ -412,4 +412,54 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     expect(screen.getByText("1 selected:")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reprint Labels" })).not.toBeInTheDocument();
   });
+
+  it("removes product detail cache and invalidates inventory caches when deleting a product", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        if (url === "/api/products/1" && init?.method === "DELETE") {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      })
+    );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+    const removeSpy = vi.spyOn(qc, "removeQueries");
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+            <Route path="/" element={<div>Inventory Home</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText("Coca-Cola Original Taste Soda")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Delete Product" }));
+
+    expect(await screen.findByText("Inventory Home")).toBeInTheDocument();
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: ["product", "1"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["products"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["product"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["quick-search"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
+  });
 });
