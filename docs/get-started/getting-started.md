@@ -18,9 +18,9 @@ Get from a fresh itemized instance to tracking your pantry, fridge, and freezer 
 
 When you open itemized for the first time, the setup screen prompts you to create the initial **Admin** account with an email address and password (at least 8 characters). You can add other household members or configure OIDC later in [Accounts and SSO](../configure/accounts-and-sso.md).
 
-## Set up a few locations and categories
+## Set up locations and categories
 
-Open **Locations** or **Categories** from the sidebar to create your main storage areas—for example, *Kitchen → Pantry*, *Kitchen → Fridge*, and *Garage → Chest Freezer* (mark freezer locations with the **Freezer** toggle so automatic freeze/thaw due dates work).
+On a fresh instance, the home page displays a **Get Started** card with a 1-click **Load Starter Setup** button that adds a ready-to-use grocery-store category list and common household locations (with freezers pre-flagged). You can also customize or build your own tree anytime in **Locations** and **Categories**, or type a new name directly inside the Category or Location dropdowns while adding or scanning a product to create it on the spot.
 
 ## Add your first product
 

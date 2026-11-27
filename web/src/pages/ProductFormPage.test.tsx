@@ -209,4 +209,63 @@ describe("ProductFormPage rolling-average due days default", () => {
     expect(await screen.findByText("Product Detail")).toBeInTheDocument();
     expect(submittedBodies[0]?.label_print_mode).toBe("single");
   });
+
+  it("allows creating a category and freezer location inline from the Product form dropdowns", async () => {
+    const categories = [{ id: 1, name: "Dairy", parent_id: null, hierarchy_name: "Dairy" }];
+    const locations = [{ id: 1, name: "Fridge", parent_id: null, is_freezer: false, hierarchy_name: "Fridge" }];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/categories" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify({ categories }), { status: 200 });
+        }
+        if (url === "/api/locations" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify({ locations }), { status: 200 });
+        }
+        if (url === "/api/categories" && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          const created = { id: 2, name: body.name, parent_id: body.parent_id ?? null, hierarchy_name: body.name };
+          categories.push(created);
+          return new Response(JSON.stringify({ category: created }), { status: 201 });
+        }
+        if (url === "/api/locations" && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          const created = {
+            id: 2,
+            name: body.name,
+            parent_id: body.parent_id ?? null,
+            is_freezer: Boolean(body.is_freezer),
+            hierarchy_name: body.name,
+          };
+          locations.push(created);
+          return new Response(JSON.stringify({ location: created }), { status: 201 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/new"]}>
+          <Routes>
+            <Route path="/products/new" element={<ProductFormPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Create category inline
+    fireEvent.click(screen.getByRole("button", { name: "Category" }));
+    fireEvent.change(screen.getByLabelText("Search Category"), { target: { value: "Spices" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create “Spices”/ }));
+    expect(await screen.findByRole("button", { name: "Category" })).toHaveTextContent("Spices");
+
+    // Create freezer location inline
+    fireEvent.click(screen.getByRole("button", { name: "Default Location" }));
+    fireEvent.change(screen.getByLabelText("Search Default Location"), { target: { value: "Chest Freezer" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create Freezer “Chest Freezer”/ }));
+    expect(await screen.findByRole("button", { name: "Default Location" })).toHaveTextContent("Chest Freezer");
+  });
 });

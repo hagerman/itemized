@@ -166,3 +166,15 @@ GET /api/settings
 # expect-status: 200
 # expect-keys: base_url, due_date_average_count
 ```
+
+### Onboarding
+
+```http run
+POST /api/onboarding/starter-taxonomy
+Content-Type: application/json
+
+{"categories": true, "locations": true}
+
+# expect-status: 200
+# expect-keys: categories_created, locations_created, categories, locations
+```

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductsPage } from "./ProductsPage";
+import { ScannerControlContext } from "../components/Layout";
 
 const MOCK_PRODUCTS = [
   {
@@ -582,5 +583,100 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Reclassify Products" })).not.toBeInTheDocument());
     await waitFor(() => expect(screen.queryByTestId("products-bulk-bar")).not.toBeInTheDocument());
+  });
+
+  it("renders the Get Started onboarding card on a truly empty catalog, loads starter setup, triggers Scan / Action, and shows conditional HTTPS warning", async () => {
+    let categories: Array<{ id: number; name: string; parent_id: number | null; hierarchy_name: string }> = [];
+    let locations: Array<{ id: number; name: string; parent_id: number | null; is_freezer: boolean; hierarchy_name: string }> = [];
+    const starterPayloads: unknown[] = [];
+    const openScanner = vi.fn();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, llm_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url.startsWith("/api/products?")) {
+          return new Response(
+            JSON.stringify({ products: [], status_counts: { in_stock: 0, shopping_list: 0, due_soon: 0, overdue: 0, all: 0 } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories }), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations }), { status: 200 });
+        }
+        if (url === "/api/onboarding/starter-taxonomy" && init?.method === "POST") {
+          starterPayloads.push(JSON.parse(String(init.body)));
+          categories = [{ id: 1, name: "Groceries", parent_id: null, hierarchy_name: "Groceries" }];
+          locations = [{ id: 1, name: "Kitchen", parent_id: null, is_freezer: false, hierarchy_name: "Kitchen" }];
+          return new Response(
+            JSON.stringify({ categories_created: 1, locations_created: 1, categories, locations }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const originalSecureContext = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <ScannerControlContext.Provider value={{ openScanner }}>
+          <MemoryRouter initialEntries={["/"]}>
+            <ProductsPage />
+          </MemoryRouter>
+        </ScannerControlContext.Provider>
+      </QueryClientProvider>
+    );
+
+    const card = await screen.findByTestId("onboarding-card");
+    expect(card).toHaveTextContent("Welcome to itemized");
+    expect(screen.queryByTestId("onboarding-https-warning")).not.toBeInTheDocument();
+
+    // Load Starter Setup button calls starter-taxonomy and switches step 1 to completed
+    fireEvent.click(screen.getByRole("button", { name: /Load Starter Setup/i }));
+    await waitFor(() => expect(starterPayloads).toEqual([{ categories: true, locations: true }]));
+    await waitFor(() => expect(screen.getByLabelText("Completed")).toBeInTheDocument());
+
+    // Scan / Action button opens scanner in purchase mode
+    fireEvent.click(within(card).getByRole("button", { name: /Scan \/ Action/i }));
+    expect(openScanner).toHaveBeenCalledWith("purchase");
+    unmount();
+
+    // Insecure non-localhost context shows HTTPS warning
+    Object.defineProperty(window, "isSecureContext", { value: false, configurable: true });
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      value: { ...originalLocation, hostname: "192.168.1.50" },
+      configurable: true,
+    });
+
+    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc2}>
+        <ScannerControlContext.Provider value={{ openScanner }}>
+          <MemoryRouter initialEntries={["/"]}>
+            <ProductsPage />
+          </MemoryRouter>
+        </ScannerControlContext.Provider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByTestId("onboarding-https-warning")).toBeInTheDocument();
+
+    Object.defineProperty(window, "location", { value: originalLocation, configurable: true });
+    if (originalSecureContext) {
+      Object.defineProperty(window, "isSecureContext", originalSecureContext);
+    }
   });
 });

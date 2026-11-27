@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,9 +24,21 @@ import { BrandLogo } from "./BrandLogo";
 import { useHelp } from "./HelpContext";
 import { buildHierarchyTree, flattenHierarchyTree } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
-import { ScannerDrawer } from "./ScannerDrawer";
+import { ScanMode, ScannerDrawer } from "./ScannerDrawer";
 import { screenIdForPathname } from "../screens";
 import { KEYBOARD_SHORTCUTS } from "../shortcuts";
+
+interface ScannerControlContextValue {
+  openScanner: (mode?: ScanMode) => void;
+}
+
+export const ScannerControlContext = createContext<ScannerControlContextValue>({
+  openScanner: () => {},
+});
+
+export function useScannerControl(): ScannerControlContextValue {
+  return useContext(ScannerControlContext);
+}
 
 interface LayoutProps {
   user: User;
@@ -74,7 +86,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [treeTab, setTreeTab] = useState<"locations" | "categories">("locations");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerRequestedMode, setScannerRequestedMode] = useState<ScanMode | undefined>(undefined);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const openScanner = (mode?: ScanMode) => {
+    setScannerRequestedMode(mode);
+    setScannerOpen(true);
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -431,7 +449,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
         )}
 
         <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
-          {children}
+          <ScannerControlContext.Provider value={{ openScanner }}>
+            {children}
+          </ScannerControlContext.Provider>
         </main>
       </div>
 
@@ -473,7 +493,11 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
       {/* Unified Scanner Drawer */}
       <ScannerDrawer
         open={scannerOpen}
-        onClose={() => setScannerOpen(false)}
+        requestedMode={scannerRequestedMode}
+        onClose={() => {
+          setScannerOpen(false);
+          setScannerRequestedMode(undefined);
+        }}
         categories={categories}
         locations={locations}
       />

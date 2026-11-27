@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Printer, Snowflake, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Printer, Snowflake, Sparkles, Trash2 } from "lucide-react";
 import { apiFetch, Category, Item, Location, usePrintersEnabled } from "../api";
 import {
   buildHierarchyTree,
@@ -20,12 +20,30 @@ export const CategoriesPage: React.FC = () => {
   const [editParentId, setEditParentId] = useState<number | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [seedingStarter, setSeedingStarter] = useState(false);
+  const [starterError, setStarterError] = useState<string | null>(null);
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["categories"],
     queryFn: () => apiFetch<{ categories: Category[] }>("/api/categories"),
   });
   const categories = data?.categories || [];
+
+  const loadStarterCategories = async () => {
+    setSeedingStarter(true);
+    setStarterError(null);
+    try {
+      await apiFetch("/api/onboarding/starter-taxonomy", {
+        method: "POST",
+        body: JSON.stringify({ categories: true, locations: false }),
+      });
+      void qc.invalidateQueries({ queryKey: ["categories"] });
+    } catch (err) {
+      setStarterError(err instanceof Error ? err.message : "Failed to load starter categories");
+    } finally {
+      setSeedingStarter(false);
+    }
+  };
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +107,28 @@ export const CategoriesPage: React.FC = () => {
       </form>
 
       <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60">
-        {flattenHierarchyTree(buildHierarchyTree(categories)).map(({ item: c, depth }) => {
+        {!isLoading && categories.length === 0 ? (
+          <div className="space-y-3 p-6 text-center">
+            <p className="text-sm text-slate-400">
+              No categories yet. Add one above or load a ready-to-use grocery-store category list.
+            </p>
+            {starterError && (
+              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+                {starterError}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={seedingStarter}
+              onClick={() => void loadStarterCategories()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {seedingStarter ? "Loading..." : "Load Starter Categories"}
+            </button>
+          </div>
+        ) : (
+          flattenHierarchyTree(buildHierarchyTree(categories)).map(({ item: c, depth }) => {
           if (editingId === c.id) {
             const excluded = collectDescendantIds(c.id, categories);
             const parentOptions = categories.filter((item) => !excluded.has(item.id));
@@ -165,7 +204,8 @@ export const CategoriesPage: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
     </div>
   );
@@ -184,12 +224,30 @@ export const LocationsPage: React.FC = () => {
   const [editIsFreezer, setEditIsFreezer] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [seedingStarter, setSeedingStarter] = useState(false);
+  const [starterError, setStarterError] = useState<string | null>(null);
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["locations"],
     queryFn: () => apiFetch<{ locations: Location[] }>("/api/locations"),
   });
   const locations = data?.locations || [];
+
+  const loadStarterLocations = async () => {
+    setSeedingStarter(true);
+    setStarterError(null);
+    try {
+      await apiFetch("/api/onboarding/starter-taxonomy", {
+        method: "POST",
+        body: JSON.stringify({ categories: false, locations: true }),
+      });
+      void qc.invalidateQueries({ queryKey: ["locations"] });
+    } catch (err) {
+      setStarterError(err instanceof Error ? err.message : "Failed to load starter locations");
+    } finally {
+      setSeedingStarter(false);
+    }
+  };
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +323,28 @@ export const LocationsPage: React.FC = () => {
       </form>
 
       <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60">
-        {flattenHierarchyTree(buildHierarchyTree(locations)).map(({ item: l, depth }) => {
+        {!isLoading && locations.length === 0 ? (
+          <div className="space-y-3 p-6 text-center">
+            <p className="text-sm text-slate-400">
+              No locations yet. Add one above or load a starter set of household storage areas.
+            </p>
+            {starterError && (
+              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+                {starterError}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={seedingStarter}
+              onClick={() => void loadStarterLocations()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {seedingStarter ? "Loading..." : "Load Starter Locations"}
+            </button>
+          </div>
+        ) : (
+          flattenHierarchyTree(buildHierarchyTree(locations)).map(({ item: l, depth }) => {
           if (editingId === l.id) {
             const excluded = collectDescendantIds(l.id, locations);
             const parentOptions = locations.filter((item) => !excluded.has(item.id));
@@ -363,7 +442,8 @@ export const LocationsPage: React.FC = () => {
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
     </div>
   );

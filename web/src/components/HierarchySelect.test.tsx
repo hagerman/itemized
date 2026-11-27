@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { collectDescendantIds, HierarchySelect, HierarchyItem } from "./HierarchySelect";
 
 const SAMPLE_LOCATIONS: HierarchyItem[] = [
@@ -159,5 +159,111 @@ describe("HierarchySelect (searchable hierarchical drill-down)", () => {
     const compactBtn = screen.getByRole("button", { name: "Sized Location" });
     expect(compactBtn).toHaveClass("h-8", "px-2.5", "text-xs");
     expect(compactBtn).not.toHaveClass("h-10");
+  });
+
+  it("supports inline creation at root and drilled-in levels, optional freezer flag, and inline errors", async () => {
+    const onChange = vi.fn();
+    const onCreate = vi.fn().mockResolvedValue({
+      id: 99,
+      name: "Spice Rack",
+      parent_id: 1,
+      hierarchy_name: "Kitchen > Spice Rack",
+      is_freezer: false,
+    });
+
+    render(
+      <HierarchySelect
+        items={SAMPLE_LOCATIONS}
+        value={null}
+        onChange={onChange}
+        ariaLabel="Location"
+        onCreate={onCreate}
+        createEntityLabel="location"
+        showFreezerOption
+      />
+    );
+
+    // Drill into Kitchen, type new child name, create inline
+    fireEvent.click(screen.getByRole("button", { name: "Location" }));
+    fireEvent.click(screen.getByText("Kitchen"));
+    const searchInput = screen.getByLabelText("Search Location");
+    fireEvent.change(searchInput, { target: { value: "Spice Rack" } });
+
+    const createBtn = screen.getByRole("button", { name: /Create “Spice Rack” in Kitchen/ });
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith({
+        name: "Spice Rack",
+        parent_id: 1,
+        is_freezer: false,
+      });
+      expect(onChange).toHaveBeenCalledWith(99);
+    });
+  });
+
+  it("creates a freezer location inline and keeps dropdown open with error on failure", async () => {
+    const onChange = vi.fn();
+    const onCreate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("duplicate location"))
+      .mockResolvedValueOnce({
+        id: 100,
+        name: "Deep Freeze",
+        parent_id: null,
+        hierarchy_name: "Deep Freeze",
+        is_freezer: true,
+      });
+
+    render(
+      <HierarchySelect
+        items={[]}
+        value={null}
+        onChange={onChange}
+        ariaLabel="Location"
+        onCreate={onCreate}
+        createEntityLabel="location"
+        showFreezerOption
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Location" }));
+    expect(screen.getByText(/Type a name above to create a location/)).toBeInTheDocument();
+
+    const searchInput = screen.getByLabelText("Search Location");
+    fireEvent.change(searchInput, { target: { value: "Deep Freeze" } });
+    expect(screen.queryByRole("checkbox", { name: /Freezer/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Create Freezer “Deep Freeze”/ }));
+
+    // Error keeps menu open and preserves typed text
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("duplicate location");
+    });
+    expect(screen.getByLabelText("Search Location")).toHaveValue("Deep Freeze");
+
+    // Retry succeeds
+    fireEvent.click(screen.getByRole("button", { name: /Create Freezer “Deep Freeze”/ }));
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenLastCalledWith({
+        name: "Deep Freeze",
+        parent_id: null,
+        is_freezer: true,
+      });
+      expect(onChange).toHaveBeenCalledWith(100);
+    });
+  });
+
+  it("does not render inline creation when onCreate is omitted", () => {
+    render(
+      <HierarchySelect
+        items={SAMPLE_LOCATIONS}
+        value={null}
+        onChange={vi.fn()}
+        ariaLabel="Location"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Location" }));
+    fireEvent.change(screen.getByLabelText("Search Location"), { target: { value: "Nonexistent" } });
+    expect(screen.queryByRole("button", { name: /Create / })).not.toBeInTheDocument();
   });
 });

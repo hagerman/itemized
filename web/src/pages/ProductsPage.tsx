@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, Clock, GitMerge, HelpCircle, Loader2, Plus, Search, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
-import { apiFetch, AuthStatus, Product } from "../api";
+import { AlertTriangle, ArrowUpDown, Check, CheckCircle2, Clock, GitMerge, HelpCircle, Loader2, Plus, ScanBarcode, Search, ShieldAlert, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
+import { apiFetch, AuthStatus, Category, Location, Product } from "../api";
 import { useHelp } from "../components/HelpContext";
+import { useScannerControl } from "../components/Layout";
 import { ModalBackdrop } from "../components/ModalBackdrop";
 
 interface ReclassifyRow {
@@ -37,7 +38,10 @@ export const ProductsPage: React.FC = () => {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { openHelpForScreen } = useHelp();
+  const { openScanner } = useScannerControl();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [seedingStarter, setSeedingStarter] = useState(false);
+  const [starterError, setStarterError] = useState<string | null>(null);
   const status = searchParams.get("status") || "in_stock";
   const categoryId = searchParams.get("category_id") || "";
   const locationId = searchParams.get("location_id") || "";
@@ -140,12 +144,49 @@ export const ProductsPage: React.FC = () => {
 
   const { data, isLoading } = useQuery({
     queryKey: ["products", queryStr],
-    queryFn: () => apiFetch<{ products: Product[] }>(`/api/products?${queryStr}`),
+    queryFn: () =>
+      apiFetch<{ products: Product[]; status_counts?: Record<string, number> }>(`/api/products?${queryStr}`),
+  });
+
+  const { data: catData } = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => apiFetch<{ categories: Category[] }>("/api/categories"),
+  });
+  const { data: locData } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => apiFetch<{ locations: Location[] }>("/api/locations"),
   });
 
   const products = data?.products || [];
+  const categories = catData?.categories || [];
+  const locations = locData?.locations || [];
   const activeSortLabel = SORT_OPTIONS.find((opt) => opt.value === sort)?.label || "Name";
   const hasActiveFilters = Boolean(categoryId || locationId || q);
+  const isEmptyCatalog = data?.status_counts?.all === 0 && !hasActiveFilters;
+  const hasTaxonomySetup = categories.length > 0 && locations.length > 0;
+  const isInsecureNonLocal =
+    typeof window !== "undefined" &&
+    window.isSecureContext === false &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1" &&
+    window.location.hostname !== "[::1]";
+
+  const handleLoadStarterSetup = async () => {
+    setSeedingStarter(true);
+    setStarterError(null);
+    try {
+      await apiFetch("/api/onboarding/starter-taxonomy", {
+        method: "POST",
+        body: JSON.stringify({ categories: true, locations: true }),
+      });
+      void qc.invalidateQueries({ queryKey: ["categories"] });
+      void qc.invalidateQueries({ queryKey: ["locations"] });
+    } catch (err) {
+      setStarterError(err instanceof Error ? err.message : "Failed to load starter setup");
+    } finally {
+      setSeedingStarter(false);
+    }
+  };
 
   const visibleIdSet = new Set(products.map((p) => p.id));
   const activeSelectedIds = selectedIds.filter((id) => visibleIdSet.has(id));
@@ -556,9 +597,115 @@ export const ProductsPage: React.FC = () => {
       {isLoading ? (
         <div className="py-12 text-center text-sm text-slate-400">Loading inventory...</div>
       ) : products.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center text-sm text-slate-400">
-          No products match this view.
-        </div>
+        isEmptyCatalog ? (
+          <div
+            data-testid="onboarding-card"
+            className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl"
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-white">Welcome to itemized</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Get your household inventory up and running in two quick steps.
+              </p>
+            </div>
+
+            {starterError && (
+              <div role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
+                {starterError}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  {hasTaxonomySetup ? (
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" aria-label="Completed" />
+                  ) : (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 text-xs font-semibold text-indigo-300">
+                      1
+                    </span>
+                  )}
+                  <div>
+                    <div className="text-sm font-medium text-white">Set up locations &amp; categories</div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {hasTaxonomySetup
+                        ? `${locations.length} location${locations.length === 1 ? "" : "s"} and ${categories.length} categor${categories.length === 1 ? "y" : "ies"} ready. Customize anytime in `
+                        : "Load a ready-to-use grocery-store category list and household locations, or create your own in "}
+                      <Link to="/locations" className="text-indigo-300 hover:underline">
+                        Locations
+                      </Link>{" "}
+                      &amp;{" "}
+                      <Link to="/categories" className="text-indigo-300 hover:underline">
+                        Categories
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </div>
+                {!hasTaxonomySetup && (
+                  <button
+                    type="button"
+                    disabled={seedingStarter}
+                    onClick={() => void handleLoadStarterSetup()}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {seedingStarter ? "Loading..." : "Load Starter Setup"}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 text-xs font-semibold text-indigo-300">
+                    2
+                  </span>
+                  <div>
+                    <div className="text-sm font-medium text-white">Add your first item</div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Scan a retail barcode with Purchase mode or create a product manually. You can also create new categories and locations inline as you go.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openScanner("purchase")}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+                  >
+                    <ScanBarcode className="h-3.5 w-3.5" /> Scan / Action
+                  </button>
+                  <Link
+                    to="/products/new"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> New Product
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {isInsecureNonLocal && (
+              <div
+                data-testid="onboarding-https-warning"
+                className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs text-amber-200"
+              >
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <div>
+                  <span className="font-semibold">Camera scanning requires HTTPS on mobile browsers.</span>{" "}
+                  You are currently viewing itemized over plain HTTP. Serve it behind a reverse proxy with TLS to use phone camera scanning.{" "}
+                  <Link to="/help/use/barcode-scanning" className="font-semibold underline hover:text-white">
+                    Learn how to set up HTTPS
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center text-sm text-slate-400">
+            No products match this view.
+          </div>
+        )
       ) : (
         <>
           {/* Mobile single-column card list (no selection checkboxes) */}

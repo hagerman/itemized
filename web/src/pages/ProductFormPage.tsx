@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch, Category, Location, Product, usePrintersEnabled } from "../api";
-import { HierarchySelect } from "../components/HierarchySelect";
+import { HierarchyCreateInput, HierarchySelect } from "../components/HierarchySelect";
 import {
   EMPTY_MEASUREMENT,
   MeasurementDraft,
@@ -98,6 +98,34 @@ export const ProductFormPage: React.FC = () => {
       if (!locationId && locData?.locations?.[0]) setLocationId(locData.locations[0].id);
     }
   }, [isEdit, categoryId, locationId, catData, locData]);
+
+  const handleCreateCategory = async (input: HierarchyCreateInput): Promise<Category> => {
+    const res = await apiFetch<{ category: Category }>("/api/categories", {
+      method: "POST",
+      body: JSON.stringify({ name: input.name, parent_id: input.parent_id }),
+    });
+    qc.setQueryData<{ categories: Category[] }>(["categories"], (prev) => ({
+      categories: [...(prev?.categories || []), res.category],
+    }));
+    void qc.invalidateQueries({ queryKey: ["categories"] });
+    return res.category;
+  };
+
+  const handleCreateLocation = async (input: HierarchyCreateInput): Promise<Location> => {
+    const res = await apiFetch<{ location: Location }>("/api/locations", {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name,
+        parent_id: input.parent_id,
+        is_freezer: Boolean(input.is_freezer),
+      }),
+    });
+    qc.setQueryData<{ locations: Location[] }>(["locations"], (prev) => ({
+      locations: [...(prev?.locations || []), res.location],
+    }));
+    void qc.invalidateQueries({ queryKey: ["locations"] });
+    return res.location;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +232,8 @@ export const ProductFormPage: React.FC = () => {
             onChange={(v) => setCategoryId(v || 0)}
             placeholder="Select category"
             ariaLabel="Category"
+            onCreate={handleCreateCategory}
+            createEntityLabel="category"
           />
         </div>
         <div className="block text-xs text-slate-400">
@@ -214,6 +244,9 @@ export const ProductFormPage: React.FC = () => {
             onChange={(v) => setLocationId(v || 0)}
             placeholder="Select location"
             ariaLabel="Default Location"
+            onCreate={handleCreateLocation}
+            createEntityLabel="location"
+            showFreezerOption
           />
         </div>
       </div>

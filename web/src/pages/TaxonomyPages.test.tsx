@@ -306,4 +306,48 @@ describe("LocationsPage and LocationDetailPage inline editing", () => {
     );
     expect(await screen.findByRole("button", { name: /Print Location Label/i })).toBeInTheDocument();
   });
+
+  it("offers 1-click starter load buttons on empty Categories and Locations pages", async () => {
+    let categories: Category[] = [];
+    let locations: Location[] = [];
+    const payloads: unknown[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/categories") {
+          return new Response(JSON.stringify({ categories }), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations }), { status: 200 });
+        }
+        if (url === "/api/onboarding/starter-taxonomy" && init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { categories?: boolean; locations?: boolean };
+          payloads.push(body);
+          if (body.categories) {
+            categories = [{ id: 1, name: "Groceries", parent_id: null, hierarchy_name: "Groceries" }];
+          }
+          if (body.locations) {
+            locations = [{ id: 1, name: "Kitchen", parent_id: null, is_freezer: false, hierarchy_name: "Kitchen" }];
+          }
+          return new Response(JSON.stringify({ categories_created: 1, locations_created: 1, categories, locations }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const { unmount } = renderWithProviders(<CategoriesPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Load Starter Categories/i }));
+    expect(await screen.findByText("Groceries")).toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<LocationsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Load Starter Locations/i }));
+    expect(await screen.findByText("Kitchen")).toBeInTheDocument();
+
+    expect(payloads).toEqual([
+      { categories: true, locations: false },
+      { categories: false, locations: true },
+    ]);
+  });
 });

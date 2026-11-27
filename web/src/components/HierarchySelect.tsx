@@ -1,6 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Search, Snowflake, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, Search, Snowflake, X } from "lucide-react";
+
+export interface HierarchyCreateInput {
+  name: string;
+  parent_id: number | null;
+  is_freezer?: boolean;
+}
 
 export interface HierarchyItem {
   id: number;
@@ -90,6 +96,9 @@ interface HierarchySelectProps<T extends HierarchyItem> {
   className?: string;
   inlineMenu?: boolean;
   size?: "default" | "sm";
+  onCreate?: (input: HierarchyCreateInput) => Promise<T>;
+  createEntityLabel?: string;
+  showFreezerOption?: boolean;
 }
 
 export function HierarchySelect<T extends HierarchyItem>({
@@ -103,10 +112,15 @@ export function HierarchySelect<T extends HierarchyItem>({
   className = "",
   inlineMenu = false,
   size = "default",
+  onCreate,
+  createEntityLabel = "item",
+  showFreezerOption = false,
 }: HierarchySelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [drillStack, setDrillStack] = useState<number[]>([]);
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -148,6 +162,7 @@ export function HierarchySelect<T extends HierarchyItem>({
     setOpen(false);
     setDrillStack([]);
     setQuery("");
+    setCreateError(null);
   };
 
   useEffect(() => {
@@ -219,11 +234,34 @@ export function HierarchySelect<T extends HierarchyItem>({
   const currentParentId = drillStack.length > 0 ? drillStack[drillStack.length - 1] : null;
   const currentParent = currentParentId != null ? byId.get(currentParentId) || null : null;
   const visibleItems = childrenMap.get(currentParentId) || [];
-  const isSearching = query.trim().length > 0;
+  const trimmedQuery = query.trim();
+  const isSearching = trimmedQuery.length > 0;
+  const hasExactSiblingMatch =
+    trimmedQuery.length > 0 &&
+    visibleItems.some((item) => item.name.trim().toLowerCase() === trimmedQuery.toLowerCase());
+  const canCreateInline = Boolean(onCreate && trimmedQuery.length > 0 && !hasExactSiblingMatch);
 
   const selectAndClose = (id: number | null) => {
     onChange(id);
     closeMenu();
+  };
+
+  const handleCreateInline = async (isFreezer = false) => {
+    if (!onCreate || !trimmedQuery || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await onCreate({
+        name: trimmedQuery,
+        parent_id: currentParentId,
+        ...(showFreezerOption ? { is_freezer: isFreezer } : {}),
+      });
+      selectAndClose(created.id);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : `Failed to create ${createEntityLabel}`);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleItemClick = (item: T) => {
@@ -254,14 +292,26 @@ export function HierarchySelect<T extends HierarchyItem>({
             ref={searchInputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (createError) setCreateError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.stopPropagation();
                 closeMenu();
+              } else if (e.key === "Enter" && canCreateInline && searchResults.length === 0) {
+                e.preventDefault();
+                void handleCreateInline();
               }
             }}
-            placeholder="Search all..."
+            placeholder={
+              onCreate
+                ? items.length === 0
+                  ? `Type to create ${createEntityLabel}...`
+                  : "Search or create..."
+                : "Search all..."
+            }
             aria-label={`Search ${ariaLabel || "options"}`}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 py-1.5 pl-8 pr-7 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
@@ -348,7 +398,9 @@ export function HierarchySelect<T extends HierarchyItem>({
             )}
 
             {visibleItems.length === 0 ? (
-              <div className="px-3 py-3 text-center text-xs text-slate-500">No items available</div>
+              <div className="px-3 py-3 text-center text-xs text-slate-500">
+                {onCreate ? `Type a name above to create a ${createEntityLabel}.` : "No items available"}
+              </div>
             ) : (
               visibleItems.map((item) => {
                 const hasChildren = (childrenMap.get(item.id)?.length || 0) > 0;
@@ -378,6 +430,55 @@ export function HierarchySelect<T extends HierarchyItem>({
           </>
         )}
       </div>
+
+      {(canCreateInline || createError) && (
+        <div className="border-t border-slate-800 bg-slate-900/95 p-2 space-y-1.5">
+          {createError && (
+            <div role="alert" className="rounded-md bg-rose-500/15 px-2.5 py-1.5 text-xs text-rose-300">
+              {createError}
+            </div>
+          )}
+          {canCreateInline && (
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => void handleCreateInline(false)}
+                className="flex w-full items-center gap-1.5 rounded-lg bg-indigo-600/20 px-2.5 py-2 text-left text-xs font-semibold text-indigo-200 hover:bg-indigo-600/30 disabled:opacity-50"
+              >
+                {creating ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="truncate">
+                  Create &ldquo;{trimmedQuery}&rdquo;
+                  {currentParent ? ` in ${currentParent.name}` : ""}
+                </span>
+              </button>
+              {showFreezerOption && (
+                <button
+                  type="button"
+                  disabled={creating}
+                  onClick={() => void handleCreateInline(true)}
+                  className="flex w-full items-center gap-1.5 rounded-lg bg-sky-500/15 px-2.5 py-2 text-left text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                >
+                  {creating ? (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                  <span className="truncate">
+                    Create Freezer &ldquo;{trimmedQuery}&rdquo;
+                    {currentParent ? ` in ${currentParent.name}` : ""}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   ) : null;
 

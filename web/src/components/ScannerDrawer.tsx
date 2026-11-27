@@ -12,7 +12,7 @@ import {
 } from "../api";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { useHelp } from "./HelpContext";
-import { HierarchySelect } from "./HierarchySelect";
+import { HierarchyCreateInput, HierarchySelect } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
 import {
   EMPTY_MEASUREMENT,
@@ -28,6 +28,7 @@ export type ScanMode = "purchase" | "consume" | "open" | "transfer" | "inventory
 interface ScannerDrawerProps {
   open: boolean;
   initialMode?: ScanMode;
+  requestedMode?: ScanMode;
   onClose: () => void;
   categories: Category[];
   locations: Location[];
@@ -105,11 +106,18 @@ function computeDefaultDueDateStr(p: Product): string {
 export const ScannerDrawer: React.FC<ScannerDrawerProps> = ({
   open,
   initialMode,
+  requestedMode,
   onClose,
   categories,
   locations,
 }) => {
-  const [mode, setMode] = useState<ScanMode>(() => readSavedScanMode() ?? initialMode ?? "purchase");
+  const [mode, setMode] = useState<ScanMode>(() => requestedMode ?? readSavedScanMode() ?? initialMode ?? "purchase");
+
+  useEffect(() => {
+    if (open && requestedMode) {
+      setMode(requestedMode);
+    }
+  }, [open, requestedMode]);
 
   const handleModeChange = (next: ScanMode) => {
     setMode(next);
@@ -150,6 +158,46 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toast, setToast] = useState<UndoToast | null>(null);
+  const [createdCategories, setCreatedCategories] = useState<Category[]>([]);
+  const [createdLocations, setCreatedLocations] = useState<Location[]>([]);
+
+  const effectiveCategories = React.useMemo(() => {
+    const map = new Map<number, Category>();
+    for (const c of categories) map.set(c.id, c);
+    for (const c of createdCategories) if (!map.has(c.id)) map.set(c.id, c);
+    return Array.from(map.values());
+  }, [categories, createdCategories]);
+
+  const effectiveLocations = React.useMemo(() => {
+    const map = new Map<number, Location>();
+    for (const l of locations) map.set(l.id, l);
+    for (const l of createdLocations) if (!map.has(l.id)) map.set(l.id, l);
+    return Array.from(map.values());
+  }, [locations, createdLocations]);
+
+  const handleCreateCategory = async (input: HierarchyCreateInput): Promise<Category> => {
+    const res = await apiFetch<{ category: Category }>("/api/categories", {
+      method: "POST",
+      body: JSON.stringify({ name: input.name, parent_id: input.parent_id }),
+    });
+    setCreatedCategories((prev) => [...prev, res.category]);
+    void qc.invalidateQueries({ queryKey: ["categories"] });
+    return res.category;
+  };
+
+  const handleCreateLocation = async (input: HierarchyCreateInput): Promise<Location> => {
+    const res = await apiFetch<{ location: Location }>("/api/locations", {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name,
+        parent_id: input.parent_id,
+        is_freezer: Boolean(input.is_freezer),
+      }),
+    });
+    setCreatedLocations((prev) => [...prev, res.location]);
+    void qc.invalidateQueries({ queryKey: ["locations"] });
+    return res.location;
+  };
 
   // Purchase state (flattened: Confirm & Add + expandable variant/barcode section)
   const [purchaseProduct, setPurchaseProduct] = useState<Product | null>(null);
@@ -1179,7 +1227,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         )}
                       </div>
                       <HierarchySelect
-                        items={categories}
+                        items={effectiveCategories}
                         value={newProdCatId || null}
                         onChange={(v) => {
                           userEditedCatRef.current = true;
@@ -1187,6 +1235,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         }}
                         placeholder="Select category"
                         ariaLabel="New product category"
+                        onCreate={handleCreateCategory}
+                        createEntityLabel="category"
                       />
                       <input
                         type="number"
@@ -1232,7 +1282,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     <div className="block min-w-0 text-xs text-slate-400">
                       <div className="mb-1">Location</div>
                       <HierarchySelect
-                        items={locations}
+                        items={effectiveLocations}
                         value={purchaseLocId || null}
                         onChange={(v) => {
                           setPurchaseLocId(v || 0);
@@ -1240,6 +1290,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         }}
                         placeholder="Select location"
                         ariaLabel="Purchase location"
+                        onCreate={handleCreateLocation}
+                        createEntityLabel="location"
+                        showFreezerOption
                       />
                     </div>
                     <label className="block min-w-0 text-xs text-slate-400">

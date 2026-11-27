@@ -103,6 +103,9 @@ func (s *Server) Handler() http.Handler {
 	authed.Handle("GET /api/settings", adminOnly(s.handleGetSettings))
 	authed.Handle("PATCH /api/settings", adminOnly(s.handleUpdateSettings))
 
+	// Onboarding
+	authed.HandleFunc("POST /api/onboarding/starter-taxonomy", s.handleStarterTaxonomy)
+
 	// Categories
 	authed.HandleFunc("GET /api/categories", s.handleListCategories)
 	authed.HandleFunc("POST /api/categories", s.handleCreateCategory)

@@ -2159,4 +2159,77 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Select location");
     expect(screen.getByRole("button", { name: /Confirm & Add/i })).toBeDisabled();
   });
+
+  it("allows creating categories and locations inline inside the Purchase workflow dropdowns", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(JSON.stringify({ kind: "unknown", barcode: "Dragonfruit" }), { status: 200 });
+      }
+      if (url.startsWith("/api/products?status=all&q=")) {
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      }
+      if (url === "/api/categories" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        return new Response(
+          JSON.stringify({ category: { id: 10, name: body.name, parent_id: null, hierarchy_name: body.name } }),
+          { status: 201 }
+        );
+      }
+      if (url === "/api/locations" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        return new Response(
+          JSON.stringify({
+            location: {
+              id: 20,
+              name: body.name,
+              parent_id: null,
+              is_freezer: Boolean(body.is_freezer),
+              hierarchy_name: body.name,
+            },
+          }),
+          { status: 201 }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[]}
+          locations={[]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "Dragonfruit" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(screen.getByText("Create Product & Add Items")).toBeInTheDocument());
+
+    // Inline create category from empty picker
+    fireEvent.click(screen.getByRole("button", { name: "New product category" }));
+    fireEvent.change(screen.getByLabelText("Search New product category"), { target: { value: "Produce" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create “Produce”/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "New product category" })).toHaveTextContent("Produce")
+    );
+
+    // Inline create location from empty picker
+    fireEvent.click(screen.getByRole("button", { name: "Purchase location" }));
+    fireEvent.change(screen.getByLabelText("Search Purchase location"), { target: { value: "Fridge" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create “Fridge”/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Purchase location" })).toHaveTextContent("Fridge")
+    );
+
+    // Confirm & Add becomes enabled now that both category and location are selected
+    expect(screen.getByRole("button", { name: /Confirm & Add/i })).not.toBeDisabled();
+  });
 });
