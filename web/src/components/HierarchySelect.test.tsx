@@ -233,7 +233,16 @@ describe("HierarchySelect (searchable hierarchical drill-down)", () => {
     const searchInput = screen.getByLabelText("Search Location");
     fireEvent.change(searchInput, { target: { value: "Deep Freeze" } });
     expect(screen.queryByRole("checkbox", { name: /Freezer/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Create Freezer “Deep Freeze”/ }));
+    const freezerButton = screen.getByRole("button", { name: /Create Freezer “Deep Freeze”/ });
+    const freezerButtonChildren = Array.from(freezerButton.children);
+    expect(freezerButtonChildren).toHaveLength(2);
+    expect(freezerButtonChildren[0].tagName.toLowerCase()).toBe("svg");
+    const labelChildren = Array.from(freezerButtonChildren[1].children);
+    expect(labelChildren).toHaveLength(3);
+    expect(labelChildren[0].textContent).toBe("Create Freezer");
+    expect(labelChildren[1].tagName.toLowerCase()).toBe("svg");
+    expect(labelChildren[2].textContent).toBe("“Deep Freeze”");
+    fireEvent.click(freezerButton);
 
     // Error keeps menu open and preserves typed text
     await waitFor(() => {

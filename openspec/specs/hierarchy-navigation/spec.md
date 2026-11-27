@@ -50,7 +50,7 @@ The hierarchical drill-down dropdown SHALL display a search input at the top of 
 - **THEN** the dropdown returns to showing the current drill-down level's options
 
 ### Requirement: Optional inline node creation in hierarchical drill-down selector
-When enabled by its host form or workflow, the hierarchical drill-down selector SHALL offer `+ Create "<name>"` when a typed name does not exactly match a sibling under the current parent (case-insensitively). When freezer creation is enabled, it SHALL also offer `+ Create Freezer "<name>"` instead of a freezer checkbox. Activating either action SHALL create the node (`is_freezer: false` or `true`), refresh the hierarchy, select it, and close the dropdown.
+When enabled by its host form or workflow, the hierarchical drill-down selector SHALL offer `+ Create "<name>"` when a typed name does not match a sibling under the current parent (case-insensitively). When freezer creation is enabled, it SHALL also offer `+ Create Freezer "<name>"` with the snowflake icon placed immediately after `Freezer` so both `Create` labels align horizontally, instead of a freezer checkbox. Activating either action SHALL create the node (`is_freezer: false` or `true`), refresh the hierarchy, select it, and close the dropdown.
 
 #### Scenario: Creating a new category inline from an empty or non-matching picker
 - **WHEN** a user opens an inline-create-enabled category selector, types `"Spices"` (which does not exist at the current level), and activates `+ Create "Spices"`
@@ -63,7 +63,8 @@ When enabled by its host form or workflow, the hierarchical drill-down selector 
 
 #### Scenario: Creating a freezer location inline
 - **WHEN** a user opens an inline-create-enabled location selector, types `"Deep Freeze"`, and activates `+ Create Freezer "Deep Freeze"`
-- **THEN** the selector creates `"Deep Freeze"` with `is_freezer: true` and selects it immediately
+- **THEN** the freezer create button renders the leading `+` icon followed by `Create Freezer`, the snowflake icon, and `"Deep Freeze"` (so `Create` aligns horizontally with the `+ Create "Deep Freeze"` button above it)
+- **AND** the selector creates `"Deep Freeze"` with `is_freezer: true` and selects it immediately
 - **AND** no separate `Freezer` checkbox is rendered in the dropdown footer
 
 #### Scenario: Inline creation failure keeps dropdown open and shows error

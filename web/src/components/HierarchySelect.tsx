@@ -468,10 +468,14 @@ export function HierarchySelect<T extends HierarchyItem>({
                   ) : (
                     <Plus className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-                  <span className="truncate">
-                    Create Freezer &ldquo;{trimmedQuery}&rdquo;
-                    {currentParent ? ` in ${currentParent.name}` : ""}
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="shrink-0">Create Freezer</span>
+                    {" "}
+                    <Snowflake aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                    <span className="truncate">
+                      &ldquo;{trimmedQuery}&rdquo;
+                      {currentParent ? ` in ${currentParent.name}` : ""}
+                    </span>
                   </span>
                 </button>
               )}
