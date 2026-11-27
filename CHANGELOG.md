@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/itemizedapp/itemized/compare/v0.10.1...v0.11.0) (2026-11-27)
+
+
+### Features
+
+* omit label printing UI elements when no enabled printers exist ([4f8ddca](https://github.com/itemizedapp/itemized/commit/4f8ddca39ae301c623a62d52eb72a35a32c15f80))
+
 ## [0.10.1](https://github.com/itemizedapp/itemized/compare/v0.10.0...v0.10.1) (2026-11-27)
 
 
