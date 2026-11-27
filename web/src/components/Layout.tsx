@@ -328,28 +328,39 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
         </div>
       </nav>
 
-      <div className="border-t border-slate-800 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3">
-        <div className="mb-2">
+      <div className="space-y-1 border-t border-slate-800 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3">
+        <Link
+          to="/help"
+          onClick={() => setMobileMenuOpen(false)}
+          className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+            loc.pathname.startsWith("/help")
+              ? "bg-indigo-600/20 text-indigo-300"
+              : "text-slate-300 hover:bg-slate-800 hover:text-white"
+          }`}
+        >
+          <HelpCircle className="h-4 w-4 shrink-0" />
+          <span>Help</span>
+        </Link>
+        <div className="flex items-center justify-between gap-1 text-xs">
           <Link
-            to="/help"
+            to="/settings"
             onClick={() => setMobileMenuOpen(false)}
-            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
-              loc.pathname.startsWith("/help")
+            className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+              loc.pathname.startsWith("/settings")
                 ? "bg-indigo-600/20 text-indigo-300"
-                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                : "text-slate-400 hover:bg-slate-800 hover:text-white"
             }`}
           >
-            <HelpCircle className="h-4 w-4" />
-            <span>Help</span>
-          </Link>
-        </div>
-        <div className="flex items-center justify-between text-xs text-slate-400">
-          <Link to="/settings" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2 truncate hover:text-white">
-            <Settings className="h-4 w-4" />
+            <Settings className="h-4 w-4 shrink-0" />
             <span className="truncate">{user.email}</span>
           </Link>
           {!demoMode && (
-            <button type="button" onClick={onLogout} aria-label="Logout" className="rounded p-1.5 hover:bg-slate-800 hover:text-white">
+            <button
+              type="button"
+              onClick={onLogout}
+              aria-label="Logout"
+              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+            >
               <LogOut className="h-4 w-4" />
             </button>
           )}

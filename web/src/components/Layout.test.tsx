@@ -385,4 +385,74 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     fireEvent.keyDown(window, { key: "?" });
     expect(screen.getByTestId("current-url").textContent).toBe("/help");
   });
+
+  it("aligns sidebar footer Help and account settings links with matching padding, icons, and active states", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        if (url === "/api/categories") return new Response(JSON.stringify({ categories: [] }), { status: 200 });
+        return new Response(JSON.stringify({ status_counts: {} }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/help"]}>
+          <Layout
+            user={{ id: 1, email: "very.long.user.email@example.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Help"
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const helpLink = screen.getByRole("link", { name: "Help" });
+    const settingsLink = screen.getByRole("link", { name: "very.long.user.email@example.com" });
+    const logoutBtn = screen.getByRole("button", { name: "Logout" });
+    const sidebarFooter = settingsLink.closest("div.border-t");
+
+    for (const cls of ["px-2", "py-1.5", "rounded-lg", "gap-2"]) {
+      expect(helpLink.className).toContain(cls);
+      expect(settingsLink.className).toContain(cls);
+    }
+    expect(settingsLink.className).toContain("min-w-0");
+    expect(settingsLink.className).toContain("flex-1");
+    expect(helpLink.querySelector("svg")?.getAttribute("class")).toContain("shrink-0");
+    expect(settingsLink.querySelector("svg")?.getAttribute("class")).toContain("shrink-0");
+    expect(logoutBtn.className).toContain("shrink-0");
+    expect(sidebarFooter?.className).toContain("pb-[calc(0.75rem+env(safe-area-inset-bottom))]");
+
+    // On /help: Help is active, Settings is inactive
+    expect(helpLink.className).toContain("bg-indigo-600/20");
+    expect(helpLink.className).toContain("text-indigo-300");
+    expect(settingsLink.className).not.toContain("bg-indigo-600/20");
+
+    unmount();
+
+    // On /settings: Settings is active, Help is inactive
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/settings"]}>
+          <Layout
+            user={{ id: 1, email: "very.long.user.email@example.com", role: "admin", created_at: "", updated_at: "" }}
+            onLogout={() => {}}
+            title="Settings"
+          >
+            <div>Main Content</div>
+          </Layout>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const helpLinkOnSettings = screen.getByRole("link", { name: "Help" });
+    const settingsLinkOnSettings = screen.getByRole("link", { name: "very.long.user.email@example.com" });
+    expect(settingsLinkOnSettings.className).toContain("bg-indigo-600/20");
+    expect(settingsLinkOnSettings.className).toContain("text-indigo-300");
+    expect(helpLinkOnSettings.className).not.toContain("bg-indigo-600/20");
+  });
 });
