@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.13.0](https://github.com/itemizedapp/itemized/compare/v0.12.0...v0.13.0) (2026-11-27)
+
+
+### Features
+
+* add QR quick action screen and update SPA routing for QR links ([38bd216](https://github.com/itemizedapp/itemized/commit/38bd216101332f06d21efc7dbc4812283085478a))
+
+
+### Bug Fixes
+
+* added guard to a11y targetPath ([a6bdceb](https://github.com/itemizedapp/itemized/commit/a6bdcebbb0bdfc65fad4cfe79d35c6733238f23c))
+* align inline freezer create icon and label in HierarchySelect ([7c46d84](https://github.com/itemizedapp/itemized/commit/7c46d84e4ba9a868b3c44debea3c1ee5ed220ab8))
+* implement shared inventory cache invalidation to fix stale product data on update ([19d1a87](https://github.com/itemizedapp/itemized/commit/19d1a87e9b8446cb2e88715b91eafd962475ca9b))
+
+
+### Code Refactoring
+
+* use jsdom for html parsing in doc utilities and add security checks to static server ([fdbd319](https://github.com/itemizedapp/itemized/commit/fdbd3197705f9cdf3014b66cc9dd4d35a7910dc7))
+
 ## [0.12.0](https://github.com/itemizedapp/itemized/compare/v0.11.0...v0.12.0) (2026-11-27)
 
 
