@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/itemizedapp/itemized/compare/v0.11.0...v0.12.0) (2026-11-27)
+
+
+### Features
+
+* add onboarding starter taxonomy endpoint and reduce new user friction ([30eeb93](https://github.com/itemizedapp/itemized/commit/30eeb937fe6780f6240d29b2a755c10ce1576678))
+
 ## [0.11.0](https://github.com/itemizedapp/itemized/compare/v0.10.1...v0.11.0) (2026-11-27)
 
 
