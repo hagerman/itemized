@@ -320,7 +320,7 @@ export function checkDocs(opts: CheckOptions = {}): string[] {
     const expectedHelp = generateHelpFilesContent(docs, version);
     const helpDir = path.join(root, "web/src/generated/help");
     const stripVersion = (s: string) =>
-      s.replace(/^export const HELP_VERSION = .*;$/m, "export const HELP_VERSION = <version>;");
+      s.replace(/^export const HELP_VERSION = .*;(?:\s*\/\/.*)?$/m, "export const HELP_VERSION = <version>;");
     for (const [name, expectedContent] of expectedHelp) {
       const actualPath = path.join(helpDir, name);
       if (!fs.existsSync(actualPath)) {

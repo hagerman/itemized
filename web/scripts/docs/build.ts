@@ -647,7 +647,7 @@ export interface HelpTaskEntry {
   external: boolean;
 }
 
-export const HELP_VERSION = ${JSON.stringify(version)};
+export const HELP_VERSION = ${JSON.stringify(version)}; // x-release-please-version
 export const HELP_DOCS_BASE_URL = ${JSON.stringify(PUBLIC_DOCS_BASE)};
 export const HELP_TASK_ENTRIES: HelpTaskEntry[] = ${JSON.stringify(taskEntries, null, 2)};
 export const HELP_SCREEN_MAP: Record<string, string> = ${JSON.stringify(screenMap, null, 2)};

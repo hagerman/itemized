@@ -19,7 +19,10 @@
   ],
   "packages": {
     ".": {
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "web/src/generated/help/index.ts"
+      ]
     }
   }
 }
