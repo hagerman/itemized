@@ -579,6 +579,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		Email           string `json:"email"`
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
+		Theme           string `json:"theme"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -588,9 +589,13 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	if sess := auth.SessionFromContext(r.Context()); sess != nil {
 		sessID = sess.ID
 	}
-	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, sessID, req.Email, req.CurrentPassword, req.NewPassword)
+	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, sessID, req.Email, req.CurrentPassword, req.NewPassword, req.Theme)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
 		writeError(w, http.StatusUnprocessableEntity, "current password is incorrect")
+		return
+	}
+	if errors.Is(err, auth.ErrInvalidTheme) {
+		writeError(w, http.StatusUnprocessableEntity, "theme must be one of system, light, or dark")
 		return
 	}
 	if errors.Is(err, auth.ErrDuplicateEmail) {

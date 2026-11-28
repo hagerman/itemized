@@ -42,17 +42,17 @@ function todayISO(): string {
 
 function dueBadge(dueDate: string | null): { label: string; className: string } {
   if (!dueDate) {
-    return { label: "No due date", className: "bg-slate-800 text-slate-400" };
+    return { label: "No due date", className: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400" };
   }
   const today = todayISO();
   if (dueDate < today) {
-    return { label: `Overdue (${dueDate})`, className: "bg-rose-500/20 text-rose-300 border border-rose-500/40" };
+    return { label: `Overdue (${dueDate})`, className: "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40" };
   }
   const soonCutoff = addDaysISO(7);
   if (dueDate <= soonCutoff) {
-    return { label: `Due ${dueDate}`, className: "bg-amber-500/20 text-amber-200 border border-amber-500/40" };
+    return { label: `Due ${dueDate}`, className: "bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-500/40" };
   }
-  return { label: `Due ${dueDate}`, className: "bg-slate-800 text-slate-300" };
+  return { label: `Due ${dueDate}`, className: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" };
 }
 
 export const QrActionPage: React.FC = () => {
@@ -314,15 +314,15 @@ export const QrActionPage: React.FC = () => {
   if (!validKind || !token) {
     return (
       <div className="mx-auto max-w-xl py-8">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-center">
-          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-400" />
-          <h2 className="text-lg font-bold text-white">Invalid QR link</h2>
-          <p className="mt-1 text-sm text-slate-400">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 text-center">
+          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-700 dark:text-amber-400" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Invalid QR link</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             This QR link is not a recognized item, product, or location address.
           </p>
           <Link
             to="/"
-            className="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
           >
             Back to Inventory
           </Link>
@@ -333,7 +333,7 @@ export const QrActionPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-xl py-12 text-center text-sm text-slate-400">
+      <div className="mx-auto max-w-xl py-12 text-center text-sm text-slate-600 dark:text-slate-400">
         Loading QR quick actions...
       </div>
     );
@@ -344,17 +344,17 @@ export const QrActionPage: React.FC = () => {
       normalizedKind === "i" ? "Item" : normalizedKind === "p" ? "Product" : "Location";
     return (
       <div className="mx-auto max-w-xl py-8">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-center">
-          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-400" />
-          <h2 className="text-lg font-bold text-white">{entityLabel} not found</h2>
-          <p className="mt-1 text-sm text-slate-400">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 text-center">
+          <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-amber-700 dark:text-amber-400" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{entityLabel} not found</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             {isError && error instanceof Error
               ? error.message
               : `We couldn't find a matching ${entityLabel.toLowerCase()} for this QR code. It may have been deleted.`}
           </p>
           <Link
             to="/"
-            className="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="mt-5 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
           >
             Back to Inventory
           </Link>
@@ -364,8 +364,8 @@ export const QrActionPage: React.FC = () => {
   }
 
   const renderTransferPanel = (item: Item) => (
-    <div className="mt-3 space-y-2.5 rounded-xl border border-indigo-500/30 bg-slate-950/80 p-3">
-      <div className="text-xs font-medium text-slate-300">Move to location</div>
+    <div className="mt-3 space-y-2.5 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-slate-50/90 dark:bg-slate-950/80 p-3">
+      <div className="text-xs font-medium text-slate-700 dark:text-slate-300">Move to location</div>
       <HierarchySelect
         items={allLocations}
         value={transferDestId}
@@ -378,7 +378,7 @@ export const QrActionPage: React.FC = () => {
           type="button"
           disabled={!transferDestId || busyKey === `transfer-${item.id}`}
           onClick={() => void handleConfirmTransfer(item)}
-          className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+          className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
         >
           <ArrowLeftRight className="h-3.5 w-3.5" />
           {busyKey === `transfer-${item.id}` ? "Moving..." : "Confirm Transfer"}
@@ -389,7 +389,7 @@ export const QrActionPage: React.FC = () => {
             setTransferItemId(null);
             setTransferDestId(null);
           }}
-          className="min-h-[40px] rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+          className="min-h-[40px] rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
         >
           Cancel
         </button>
@@ -402,10 +402,10 @@ export const QrActionPage: React.FC = () => {
       {undo && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100"
+          className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/15 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100"
         >
           <span className="flex items-center gap-2 font-medium">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
             {undo.message}
           </span>
           <button
@@ -419,12 +419,12 @@ export const QrActionPage: React.FC = () => {
         </div>
       )}
       {notice && (
-        <div role="status" className="rounded-xl border border-indigo-500/30 bg-indigo-500/15 px-4 py-3 text-sm text-indigo-100">
+        <div role="status" className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/15 px-4 py-3 text-sm text-indigo-900 dark:text-indigo-100">
           {notice}
         </div>
       )}
       {errorMsg && (
-        <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-200">
+        <div role="alert" className="rounded-xl border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-4 py-3 text-sm text-rose-800 dark:text-rose-200">
           {errorMsg}
         </div>
       )}
@@ -442,27 +442,27 @@ export const QrActionPage: React.FC = () => {
       <div className="mx-auto max-w-xl space-y-4">
         {renderBanners()}
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 shadow-lg">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-400">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
                 <Package className="h-3.5 w-3.5" /> Item Quick Action
               </div>
-              <h2 className="mt-1 text-xl font-bold text-white">{item.product_name}</h2>
-              {item.variant_name && <p className="text-sm text-slate-400">{item.variant_name}</p>}
+              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{item.product_name}</h2>
+              {item.variant_name && <p className="text-sm text-slate-600 dark:text-slate-400">{item.variant_name}</p>}
             </div>
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${badge.className}`}>
               {badge.label}
             </span>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-300">
-            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-800/80 px-2.5 py-1">
-              <MapPin className="h-3.5 w-3.5 text-slate-400" />
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1">
+              <MapPin className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
               {item.location_name || "No location"}
             </span>
             {isOpened && (
-              <span className="inline-flex items-center gap-1 rounded-lg bg-sky-500/15 px-2.5 py-1 text-sky-300">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 px-2.5 py-1 text-sky-700 dark:text-sky-300">
                 <PackageOpen className="h-3.5 w-3.5" />
                 Opened {item.opened_on_date}
               </span>
@@ -470,14 +470,14 @@ export const QrActionPage: React.FC = () => {
           </div>
 
           {editingNote ? (
-            <div className="mt-3 space-y-2 rounded-lg border border-slate-700 bg-slate-950/80 p-3">
+            <div className="mt-3 space-y-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-950/80 p-3">
               <textarea
                 rows={2}
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value)}
                 placeholder="Add a note for this item..."
                 aria-label="Item notes"
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -487,7 +487,7 @@ export const QrActionPage: React.FC = () => {
                     setEditingNote(false);
                     setNoteDraft("");
                   }}
-                  className="rounded px-2.5 py-1 text-xs text-slate-400 hover:text-white disabled:opacity-50"
+                  className="rounded px-2.5 py-1 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -495,7 +495,7 @@ export const QrActionPage: React.FC = () => {
                   type="button"
                   disabled={busyKey === `note-${item.id}`}
                   onClick={() => void handleSaveNote(item)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                 >
                   <Check className="h-3.5 w-3.5" />
                   {busyKey === `note-${item.id}` ? "Saving..." : "Save Note"}
@@ -503,14 +503,14 @@ export const QrActionPage: React.FC = () => {
               </div>
             </div>
           ) : item.notes ? (
-            <div className="mt-3 flex items-start justify-between gap-2 rounded-lg bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
+            <div className="mt-3 flex items-start justify-between gap-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 px-3 py-2 text-xs text-slate-700 dark:text-slate-300">
               <p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{item.notes}</p>
               <button
                 type="button"
                 aria-label="Edit note"
                 title="Edit note"
                 onClick={() => startEditNote(item)}
-                className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="shrink-0 rounded p-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -519,7 +519,7 @@ export const QrActionPage: React.FC = () => {
             <button
               type="button"
               onClick={() => startEditNote(item)}
-              className="mt-3 inline-flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-300"
+              className="mt-3 inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 hover:text-indigo-800 dark:hover:text-indigo-300"
             >
               <Plus className="h-3.5 w-3.5" /> Add note
             </button>
@@ -527,14 +527,14 @@ export const QrActionPage: React.FC = () => {
 
           {isConsumed ? (
             <div className="mt-5 space-y-3">
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
                 Already consumed on <span className="font-semibold">{item.consumed_on_date}</span>.
               </div>
               <button
                 type="button"
                 disabled={busyKey === `restore-${item.id}`}
                 onClick={() => void handleRestore(item)}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
               >
                 <RotateCcw className="h-4 w-4" />
                 {busyKey === `restore-${item.id}` ? "Restoring..." : "Restore / Unconsume"}
@@ -558,7 +558,7 @@ export const QrActionPage: React.FC = () => {
                     type="button"
                     disabled={busyKey === `open-${item.id}`}
                     onClick={() => void handleOpen(item)}
-                    className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                    className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-500/25 disabled:opacity-50"
                   >
                     <PackageOpen className="h-4 w-4" />
                     {busyKey === `open-${item.id}` ? "Opening..." : "Open"}
@@ -569,7 +569,7 @@ export const QrActionPage: React.FC = () => {
                   onClick={() =>
                     transferItemId === item.id ? setTransferItemId(null) : startTransfer(item)
                   }
-                  className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+                  className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700"
                 >
                   <ArrowLeftRight className="h-4 w-4" /> Transfer
                 </button>
@@ -580,15 +580,15 @@ export const QrActionPage: React.FC = () => {
           )}
 
           {product && (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-4">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
               <button
                 type="button"
                 disabled={busyKey === `shop-${product.id}`}
                 onClick={() => void handleToggleShoppingList(product)}
                 className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${
                   product.on_shopping_list
-                    ? "border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
-                    : "border border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-800"
+                    ? "border border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-500/25"
+                    : "border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
                 <ShoppingCart className="h-3.5 w-3.5" />
@@ -597,7 +597,7 @@ export const QrActionPage: React.FC = () => {
 
               <Link
                 to={`/products/${product.id}`}
-                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-slate-800/80 hover:text-indigo-200"
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-indigo-800 dark:hover:text-indigo-200"
               >
                 View Full Product <ExternalLink className="h-3.5 w-3.5" />
               </Link>
@@ -617,16 +617,16 @@ export const QrActionPage: React.FC = () => {
       <div className="mx-auto max-w-xl space-y-4">
         {renderBanners()}
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 shadow-lg">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-400">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
                 <Package className="h-3.5 w-3.5" /> Product Quick Action
               </div>
-              <h2 className="mt-1 text-xl font-bold text-white">{product.name}</h2>
-              {product.category_name && <p className="text-xs text-slate-400">{product.category_name}</p>}
+              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{product.name}</h2>
+              {product.category_name && <p className="text-xs text-slate-600 dark:text-slate-400">{product.category_name}</p>}
             </div>
-            <span className="shrink-0 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200">
+            <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
               {items.length} in stock
             </span>
           </div>
@@ -643,14 +643,14 @@ export const QrActionPage: React.FC = () => {
                   <PackageCheck className="h-5 w-5" />
                   {busyKey === `consume-${nextItem.id}` ? "Consuming..." : "Consume Next"}
                 </span>
-                <span className="text-xs text-emerald-100">
+                <span className="text-xs text-emerald-900 dark:text-emerald-100">
                   {nextItem.location_name || "No location"}
                   {nextItem.due_on_date ? ` · Due ${nextItem.due_on_date}` : ""}
                 </span>
               </button>
             </div>
           ) : (
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-center text-sm text-slate-400">
+            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 text-center text-sm text-slate-600 dark:text-slate-400">
               Out of stock — add a unit below or put this on your shopping list.
             </div>
           )}
@@ -660,7 +660,7 @@ export const QrActionPage: React.FC = () => {
               type="button"
               disabled={busyKey === `restock-${product.id}`}
               onClick={() => void handleQuickAdd(product)}
-              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-indigo-500/40 bg-indigo-500/15 px-3 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-500/25 disabled:opacity-50"
+              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-indigo-200 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/15 px-3 py-2 text-sm font-semibold text-indigo-800 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-500/25 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
               {busyKey === `restock-${product.id}` ? "Adding..." : "Quick Add (+1)"}
@@ -671,8 +671,8 @@ export const QrActionPage: React.FC = () => {
               onClick={() => void handleToggleShoppingList(product)}
               className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold ${
                 product.on_shopping_list
-                  ? "border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
-                  : "border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700"
+                  ? "border border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-500/25"
+                  : "border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
               <ShoppingCart className="h-4 w-4" />
@@ -682,26 +682,26 @@ export const QrActionPage: React.FC = () => {
 
           {items.length > 0 && (
             <div className="mt-5 space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 In-stock items (soonest due first)
               </div>
-              <div className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/40">
+              <div className="divide-y divide-slate-200 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
                 {items.map((it) => {
                   const badge = dueBadge(it.due_on_date);
                   return (
                     <div key={it.id} className="p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-white">
+                          <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-white">
                             <span>{it.location_name || "No location"}</span>
                             {it.variant_name && (
-                              <span className="text-xs text-slate-400">· {it.variant_name}</span>
+                              <span className="text-xs text-slate-600 dark:text-slate-400">· {it.variant_name}</span>
                             )}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                             <span className={`rounded-full px-2 py-0.5 ${badge.className}`}>{badge.label}</span>
                             {it.opened_on_date && (
-                              <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-sky-300">
+                              <span className="rounded-full bg-sky-50 dark:bg-sky-500/15 px-2 py-0.5 text-sky-700 dark:text-sky-300">
                                 Opened {it.opened_on_date}
                               </span>
                             )}
@@ -721,7 +721,7 @@ export const QrActionPage: React.FC = () => {
                               type="button"
                               disabled={busyKey === `open-${it.id}`}
                               onClick={() => void handleOpen(it)}
-                              className="min-h-[38px] rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                              className="min-h-[38px] rounded-lg border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-500/25 disabled:opacity-50"
                             >
                               Open
                             </button>
@@ -731,7 +731,7 @@ export const QrActionPage: React.FC = () => {
                             onClick={() =>
                               transferItemId === it.id ? setTransferItemId(null) : startTransfer(it)
                             }
-                            className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                            className="min-h-[38px] rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
                           >
                             Transfer
                           </button>
@@ -745,10 +745,10 @@ export const QrActionPage: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-5 flex justify-end border-t border-slate-800 pt-4">
+          <div className="mt-5 flex justify-end border-t border-slate-200 dark:border-slate-800 pt-4">
             <Link
               to={`/products/${product.id}`}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-slate-800/80 hover:text-indigo-200"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-indigo-800 dark:hover:text-indigo-200"
             >
               View Full Product <ExternalLink className="h-3.5 w-3.5" />
             </Link>
@@ -766,27 +766,27 @@ export const QrActionPage: React.FC = () => {
       <div className="mx-auto max-w-xl space-y-4">
         {renderBanners()}
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 shadow-lg">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-400">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
                 <MapPin className="h-3.5 w-3.5" /> Location Quick Action
               </div>
-              <h2 className="mt-1 text-xl font-bold text-white">{location.hierarchy_name}</h2>
+              <h2 className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{location.hierarchy_name}</h2>
               {location.is_freezer && (
-                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2.5 py-0.5 text-xs font-medium text-sky-300">
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-300">
                   <Snowflake className="h-3 w-3" /> Freezer
                 </span>
               )}
             </div>
-            <span className="shrink-0 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200">
+            <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
               {items.length} {items.length === 1 ? "item" : "items"}
             </span>
           </div>
 
           {childLocations.length > 0 && (
             <div className="mt-4">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 <FolderOpen className="h-3.5 w-3.5" /> Sub-locations
               </div>
               <div className="flex flex-wrap gap-2">
@@ -794,11 +794,11 @@ export const QrActionPage: React.FC = () => {
                   <Link
                     key={child.id}
                     to={`/go/l/${child.id}`}
-                    className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-100 hover:border-indigo-500/50 hover:bg-slate-800"
+                    className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-900 dark:text-slate-100 hover:border-indigo-500/50 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
-                    {child.is_freezer && <Snowflake className="h-3 w-3 text-sky-400" />}
+                    {child.is_freezer && <Snowflake className="h-3 w-3 text-slate-400 dark:text-slate-500" />}
                     {child.name}
-                    <ArrowRight className="h-3 w-3 text-slate-400" />
+                    <ArrowRight className="h-3 w-3 text-slate-600 dark:text-slate-400" />
                   </Link>
                 ))}
               </div>
@@ -814,12 +814,12 @@ export const QrActionPage: React.FC = () => {
                 onChange={(e) => setLocationFilter(e.target.value)}
                 placeholder="Filter items in this location..."
                 aria-label="Filter items in location"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-9 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
               />
             </div>
           )}
 
-          <div className="mt-4 divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/40">
+          <div className="mt-4 divide-y divide-slate-200 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
             {filteredLocationItems.map((it) => {
               const badge = dueBadge(it.due_on_date);
               return (
@@ -828,17 +828,17 @@ export const QrActionPage: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <Link
                         to={`/go/i/${it.id}`}
-                        className="block truncate text-sm font-semibold text-white hover:text-indigo-300"
+                        className="block truncate text-sm font-semibold text-slate-900 dark:text-white hover:text-indigo-800 dark:hover:text-indigo-300"
                       >
                         {it.product_name}
                       </Link>
                       {it.variant_name && (
-                        <div className="truncate text-xs text-slate-400">{it.variant_name}</div>
+                        <div className="truncate text-xs text-slate-600 dark:text-slate-400">{it.variant_name}</div>
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                         <span className={`rounded-full px-2 py-0.5 ${badge.className}`}>{badge.label}</span>
                         {it.opened_on_date && (
-                          <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-sky-300">
+                          <span className="rounded-full bg-sky-50 dark:bg-sky-500/15 px-2 py-0.5 text-sky-700 dark:text-sky-300">
                             Opened {it.opened_on_date}
                           </span>
                         )}
@@ -858,7 +858,7 @@ export const QrActionPage: React.FC = () => {
                           type="button"
                           disabled={busyKey === `open-${it.id}`}
                           onClick={() => void handleOpen(it)}
-                          className="min-h-[38px] rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                          className="min-h-[38px] rounded-lg border border-sky-200 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/15 px-2.5 py-1.5 text-xs font-semibold text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-500/25 disabled:opacity-50"
                         >
                           Open
                         </button>
@@ -868,7 +868,7 @@ export const QrActionPage: React.FC = () => {
                         onClick={() =>
                           transferItemId === it.id ? setTransferItemId(null) : startTransfer(it)
                         }
-                        className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                        className="min-h-[38px] rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
                       >
                         Transfer
                       </button>
@@ -879,16 +879,16 @@ export const QrActionPage: React.FC = () => {
               );
             })}
             {filteredLocationItems.length === 0 && (
-              <div className="p-6 text-center text-xs text-slate-400">
+              <div className="p-6 text-center text-xs text-slate-600 dark:text-slate-400">
                 {items.length === 0 ? "No items stored here." : "No items match your filter."}
               </div>
             )}
           </div>
 
-          <div className="mt-5 flex justify-end border-t border-slate-800 pt-4">
+          <div className="mt-5 flex justify-end border-t border-slate-200 dark:border-slate-800 pt-4">
             <Link
               to={`/locations/${location.id}`}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-300 hover:bg-slate-800/80 hover:text-indigo-200"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-indigo-800 dark:hover:text-indigo-200"
             >
               View Full Location <ExternalLink className="h-3.5 w-3.5" />
             </Link>

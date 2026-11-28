@@ -41,6 +41,22 @@ func TestOpenMigrateAndIdempotency(t *testing.T) {
 	if err := conn.QueryRow(`PRAGMA journal_mode`).Scan(&jm); err != nil || jm != "wal" {
 		t.Fatalf("expected journal_mode=wal, got %q (err=%v)", jm, err)
 	}
+
+	// Verify users.theme column defaults to 'system' and enforces valid theme values.
+	now := NowUTC()
+	if _, err := conn.Exec(`
+		INSERT INTO users (email, password_hash, role, created_at, updated_at)
+		VALUES ('theme-check@example.com', 'hash', 'member', ?, ?)
+	`, now, now); err != nil {
+		t.Fatalf("insert user without explicit theme: %v", err)
+	}
+	var theme string
+	if err := conn.QueryRow(`SELECT theme FROM users WHERE email = 'theme-check@example.com'`).Scan(&theme); err != nil || theme != "system" {
+		t.Fatalf("expected default theme 'system', got %q (err=%v)", theme, err)
+	}
+	if _, err := conn.Exec(`UPDATE users SET theme = 'sepia' WHERE email = 'theme-check@example.com'`); err == nil {
+		t.Fatalf("expected CHECK constraint error for invalid theme value")
+	}
 }
 
 func TestForeignKeysAndFTSTriggers(t *testing.T) {

@@ -31,7 +31,7 @@ export const ModalBackdrop: React.FC<ModalBackdropProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 bg-black/70 ${className}`.trim()}
+      className={`fixed inset-0 z-50 bg-slate-950/50 dark:bg-black/70 ${className}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}

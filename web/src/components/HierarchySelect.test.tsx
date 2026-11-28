@@ -241,6 +241,7 @@ describe("HierarchySelect (searchable hierarchical drill-down)", () => {
     expect(labelChildren).toHaveLength(3);
     expect(labelChildren[0].textContent).toBe("Create Freezer");
     expect(labelChildren[1].tagName.toLowerCase()).toBe("svg");
+    expect(labelChildren[1].getAttribute("class")).not.toMatch(/text-(sky|indigo)-/);
     expect(labelChildren[2].textContent).toBe("“Deep Freeze”");
     fireEvent.click(freezerButton);
 

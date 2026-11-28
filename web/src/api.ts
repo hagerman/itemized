@@ -1,9 +1,12 @@
 import { QueryClient, useQuery } from "@tanstack/react-query";
 
+export type ThemePreference = "system" | "light" | "dark";
+
 export interface User {
   id: number;
   email: string;
   role: "admin" | "member";
+  theme?: ThemePreference;
   oidc_issuer?: string;
   oidc_subject?: string;
   created_at: string;

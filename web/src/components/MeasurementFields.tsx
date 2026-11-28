@@ -110,19 +110,19 @@ export const MeasurementFields: React.FC<MeasurementFieldsProps> = ({
   const summary = formatMeasurement(value);
 
   return (
-    <div className="rounded-lg border border-slate-800/80 bg-slate-950/40 px-3 py-2">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800/80 dark:bg-slate-950/40">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between text-left text-xs font-medium text-slate-300 hover:text-white"
+        className="flex w-full items-center justify-between text-left text-xs font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
       >
         <span className="flex items-center gap-1.5">
-          {open ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+          {open ? <ChevronDown className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}
           <span>{label}</span>
         </span>
         {summary && (
-          <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-normal text-indigo-300">
+          <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-normal text-indigo-800 dark:bg-slate-800 dark:text-indigo-300">
             {summary}
           </span>
         )}
@@ -143,7 +143,7 @@ export const MeasurementFields: React.FC<MeasurementFieldsProps> = ({
                 onChange({ type: nextType, value: value.value, unit: nextUnit });
               }
             }}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white"
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           >
             <option value="">None</option>
             <option value="volume">Volume</option>
@@ -158,7 +158,7 @@ export const MeasurementFields: React.FC<MeasurementFieldsProps> = ({
             onChange={(val) => onChange({ ...value, value: val })}
             placeholder="Value"
             aria-label={`${ariaPrefix} value`}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white disabled:opacity-40"
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           />
 
           <select
@@ -166,7 +166,7 @@ export const MeasurementFields: React.FC<MeasurementFieldsProps> = ({
             aria-label={`${ariaPrefix} unit`}
             value={value.unit}
             onChange={(e) => onChange({ ...value, unit: e.target.value })}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white disabled:opacity-40"
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           >
             <option value="">Unit</option>
             {value.type &&

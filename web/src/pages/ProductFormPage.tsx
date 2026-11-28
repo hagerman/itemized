@@ -170,15 +170,15 @@ export const ProductFormPage: React.FC = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-      <h2 className="text-lg font-semibold text-white">{isEdit ? "Edit Product" : "New Product"}</h2>
+    <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-6">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{isEdit ? "Edit Product" : "New Product"}</h2>
       {error && (
-        <div role="alert" className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">
+        <div role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-sm text-rose-800 dark:text-rose-200">
           <span>{error}</span>
           {conflictProduct && (
             <>
               {" "}
-              <Link to={`/products/${conflictProduct.id}`} className="font-semibold underline hover:text-white">
+              <Link to={`/products/${conflictProduct.id}`} className="font-semibold underline hover:text-slate-900 dark:hover:text-white">
                 View {conflictProduct.name}
               </Link>
             </>
@@ -187,40 +187,40 @@ export const ProductFormPage: React.FC = () => {
       )}
 
       <div className="space-y-1.5">
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           Product Name
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Apples, Gala or Mustard, Dijon"
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white"
           />
         </label>
         <p className="text-xs text-slate-500">
-          Use comma-inverted format: <span className="text-slate-400">Item, Variety, Detail</span> (omit brands and category prefixes like Meat or Produce).
+          Use comma-inverted format: <span className="text-slate-600 dark:text-slate-400">Item, Variety, Detail</span> (omit brands and category prefixes like Meat or Produce).
         </p>
         {similarProducts.length > 0 && (
           <div
             data-testid="product-form-similar-products"
-            className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+            className="space-y-1 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2"
           >
-            <div className="text-xs font-medium text-amber-200">Similar existing products</div>
+            <div className="text-xs font-medium text-amber-900 dark:text-amber-200">Similar existing products</div>
             <ul className="space-y-1">
               {similarProducts.map((p) => {
                 const isExact = p.name.trim().toLowerCase() === name.trim().toLowerCase();
                 return (
                   <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                    <Link to={`/products/${p.id}`} className="font-medium text-slate-100 hover:text-indigo-300 hover:underline">
+                    <Link to={`/products/${p.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline">
                       {p.name}
                     </Link>
                     <span className="flex items-center gap-2">
                       {isExact && (
-                        <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-rose-200">
+                        <span className="rounded bg-rose-100 dark:bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-rose-800 dark:text-rose-200">
                           Exact match
                         </span>
                       )}
-                      <span className="text-slate-400">{p.category_name}</span>
+                      <span className="text-slate-600 dark:text-slate-400">{p.category_name}</span>
                     </span>
                   </li>
                 );
@@ -231,7 +231,7 @@ export const ProductFormPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="block text-xs text-slate-400">
+        <div className="block text-xs text-slate-600 dark:text-slate-400">
           <div className="mb-1">Category</div>
           <HierarchySelect
             items={catData?.categories || []}
@@ -243,7 +243,7 @@ export const ProductFormPage: React.FC = () => {
             createEntityLabel="category"
           />
         </div>
-        <div className="block text-xs text-slate-400">
+        <div className="block text-xs text-slate-600 dark:text-slate-400">
           <div className="mb-1">Default Location</div>
           <HierarchySelect
             items={locData?.locations || []}
@@ -259,39 +259,39 @@ export const ProductFormPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           Due Days
           <OptionalNumberInput
             disabled={useAvg}
             value={useAvg ? "" : dueDays}
             placeholder={useAvg ? "Auto" : ""}
             onChange={setDueDays}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           On Open (days)
-          <OptionalNumberInput value={openDays} onChange={setOpenDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={openDays} onChange={setOpenDays} className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         </label>
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           On Freeze (days)
-          <OptionalNumberInput value={freezeDays} onChange={setFreezeDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={freezeDays} onChange={setFreezeDays} className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         </label>
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           On Thaw (days)
-          <OptionalNumberInput value={thawDays} onChange={setThawDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={thawDays} onChange={setThawDays} className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         </label>
       </div>
 
       <div className={`grid grid-cols-1 gap-4 ${printersEnabled ? "sm:grid-cols-2" : ""}`}>
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-slate-600 dark:text-slate-400">
           Minimum Stock (Shopping List threshold)
-          <OptionalNumberInput value={minVal} onChange={setMinVal} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={minVal} onChange={setMinVal} className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         </label>
         {printersEnabled && (
-          <label className="block text-xs text-slate-400">
+          <label className="block text-xs text-slate-600 dark:text-slate-400">
             Label Print Mode
-            <select value={printMode} onChange={(e) => setPrintMode(e.target.value as "per_item" | "single" | "none")} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+            <select value={printMode} onChange={(e) => setPrintMode(e.target.value as "per_item" | "single" | "none")} className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white">
               <option value="per_item">One label per item</option>
               <option value="single">Single product label</option>
               <option value="none">No label</option>
@@ -300,7 +300,7 @@ export const ProductFormPage: React.FC = () => {
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-slate-300">
+      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input type="checkbox" checked={useAvg} onChange={(e) => setUseAvg(e.target.checked)} />
         Calculate due date from rolling average of recent purchases
       </label>
@@ -308,8 +308,8 @@ export const ProductFormPage: React.FC = () => {
       <MeasurementFields value={measurement} onChange={setMeasurement} ariaPrefix="Product measurement" />
 
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={() => navigate(-1)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">Cancel</button>
-        <button type="submit" className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Save</button>
+        <button type="button" onClick={() => navigate(-1)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</button>
+        <button type="submit" className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500">Save</button>
       </div>
     </form>
   );

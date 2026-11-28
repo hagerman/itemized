@@ -25,6 +25,7 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
               locations: [
                 { id: 1, name: "Kitchen", parent_id: null, is_freezer: false, hierarchy_name: "Kitchen" },
                 { id: 2, name: "Fridge", parent_id: 1, is_freezer: false, hierarchy_name: "Kitchen > Fridge" },
+                { id: 3, name: "Chest Freezer", parent_id: null, is_freezer: true, hierarchy_name: "Chest Freezer" },
               ],
             }),
             { status: 200 }
@@ -59,6 +60,14 @@ describe("Layout sidebar hierarchy & filter toggle", () => {
     const fridgeLink = await waitFor(() => screen.getByRole("link", { name: "Fridge" }));
     expect(screen.queryByText("Kitchen > Fridge")).not.toBeInTheDocument();
     expect(fridgeLink.style.paddingLeft).toBe("24px");
+
+    // Verify freezer icon matches the muted location pin icon color (not sky blue)
+    const freezerLink = screen.getByRole("link", { name: "Chest Freezer" });
+    const snowflake = freezerLink.querySelector("svg.lucide-snowflake");
+    expect(snowflake).not.toBeNull();
+    expect(snowflake?.getAttribute("class")).toContain("text-slate-400");
+    expect(snowflake?.getAttribute("class")).toContain("dark:text-slate-500");
+    expect(snowflake?.getAttribute("class")).not.toContain("text-sky-400");
 
     // First click selects location_id=2
     fireEvent.click(fridgeLink);

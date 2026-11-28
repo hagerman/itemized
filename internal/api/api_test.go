@@ -3126,3 +3126,91 @@ func TestProductListSortingAllColumns(t *testing.T) {
 	// Milk (need 3), Beans (need 1), Coffee (manual, need 0), Yogurt (off list)
 	assertOrder("shopping_list", []string{"Milk", "Beans", "Coffee", "Yogurt"})
 }
+
+func TestUserThemeAPI(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	// Setup admin -> defaults to "system"
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]any{
+		"email":    "admin@home.local",
+		"password": "password123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var setupResp struct {
+		User struct {
+			Email string `json:"email"`
+			Theme string `json:"theme"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &setupResp)
+	if setupResp.User.Theme != "system" {
+		t.Fatalf("expected setup user theme 'system', got %q", setupResp.User.Theme)
+	}
+
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@home.local",
+		"password": "password123",
+		"mode":     "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+	tok := loginResp.Token
+
+	// Theme-only update via PATCH /api/auth/account
+	rec = doReq(t, h, http.MethodPatch, "/api/auth/account", map[string]any{
+		"theme": "light",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("theme update expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &setupResp)
+	if setupResp.User.Theme != "light" || setupResp.User.Email != "admin@home.local" {
+		t.Fatalf("unexpected PATCH /api/auth/account response: %+v", setupResp.User)
+	}
+
+	// Persists across /api/auth/status and /api/auth/me
+	for _, path := range []string{"/api/auth/status", "/api/auth/me"} {
+		rec = doReq(t, h, http.MethodGet, path, nil, tok)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d", path, rec.Code)
+		}
+		var resp struct {
+			User struct {
+				Theme string `json:"theme"`
+			} `json:"user"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		if resp.User.Theme != "light" {
+			t.Fatalf("GET %s expected theme 'light', got %q", path, resp.User.Theme)
+		}
+	}
+
+	// Invalid theme returns HTTP 422 without modifying stored theme
+	rec = doReq(t, h, http.MethodPatch, "/api/auth/account", map[string]any{
+		"theme": "sepia",
+	}, tok)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid theme expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodGet, "/api/auth/me", nil, tok)
+	var meResp struct {
+		User struct {
+			Theme string `json:"theme"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &meResp)
+	if meResp.User.Theme != "light" {
+		t.Fatalf("expected stored theme to remain 'light', got %q", meResp.User.Theme)
+	}
+}

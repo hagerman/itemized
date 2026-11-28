@@ -294,7 +294,11 @@ describe("QrActionPage", () => {
 
     renderQrRoute("/go/l/3");
     expect(await screen.findByRole("heading", { name: "Freezer" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Top Drawer/i })).toHaveAttribute("href", "/go/l/4");
+    const topDrawerLink = screen.getByRole("link", { name: /Top Drawer/i });
+    expect(topDrawerLink).toHaveAttribute("href", "/go/l/4");
+    const childSnowflake = topDrawerLink.querySelector("svg.lucide-snowflake");
+    expect(childSnowflake?.getAttribute("class")).toContain("text-slate-400");
+    expect(childSnowflake?.getAttribute("class")).toContain("dark:text-slate-500");
     expect(screen.getByRole("link", { name: /Bottom Drawer/i })).toHaveAttribute("href", "/go/l/5");
     expect(screen.getByRole("link", { name: /View Full Location/i })).toHaveAttribute("href", "/locations/3");
 

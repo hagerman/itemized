@@ -350,4 +350,29 @@ describe("LocationsPage and LocationDetailPage inline editing", () => {
       { categories: false, locations: true },
     ]);
   });
+
+  it("renders freezer snowflake icons in the primary brand color on LocationsPage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/locations") {
+          return new Response(
+            JSON.stringify({
+              locations: [{ id: 1, name: "Deep Freeze", parent_id: null, is_freezer: true, hierarchy_name: "Deep Freeze" }],
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ printers_enabled: false }), { status: 200 });
+      })
+    );
+
+    const { container } = renderWithProviders(<LocationsPage />);
+    expect(await screen.findByText("Deep Freeze")).toBeInTheDocument();
+    const snowflake = container.querySelector("svg.lucide-snowflake");
+    expect(snowflake).not.toBeNull();
+    expect(snowflake?.getAttribute("class")).toContain("text-slate-400");
+    expect(snowflake?.getAttribute("class")).toContain("dark:text-slate-500");
+    expect(snowflake?.getAttribute("class")).not.toContain("text-sky-400");
+  });
 });

@@ -90,8 +90,8 @@ export const CategoriesPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <form onSubmit={create} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name" className="min-w-[180px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+      <form onSubmit={create} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-4">
+        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name" className="min-w-[180px] flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         <div className="min-w-[200px]">
           <HierarchySelect
             items={categories}
@@ -105,14 +105,14 @@ export const CategoriesPage: React.FC = () => {
         <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Add</button>
       </form>
 
-      <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60">
+      <div className="divide-y divide-slate-200 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60">
         {!isLoading && categories.length === 0 ? (
           <div className="space-y-3 p-6 text-center">
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               No categories yet. Add one above or load a ready-to-use grocery-store category list.
             </p>
             {starterError && (
-              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300">
                 {starterError}
               </div>
             )}
@@ -120,7 +120,7 @@ export const CategoriesPage: React.FC = () => {
               type="button"
               disabled={seedingStarter}
               onClick={() => void loadStarterCategories()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
             >
               {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {seedingStarter ? "Loading..." : "Load Starter Categories"}
@@ -132,14 +132,14 @@ export const CategoriesPage: React.FC = () => {
             const excluded = collectDescendantIds(c.id, categories);
             const parentOptions = categories.filter((item) => !excluded.has(item.id));
             return (
-              <form key={c.id} onSubmit={saveEdit} className="space-y-2 bg-slate-900/90 p-3">
+              <form key={c.id} onSubmit={saveEdit} className="space-y-2 bg-white/95 dark:bg-slate-900/90 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     required
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     aria-label="Edit category name"
-                    className="min-w-[160px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    className="min-w-[160px] flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white"
                   />
                   <div className="min-w-[190px]">
                     <HierarchySelect
@@ -155,21 +155,21 @@ export const CategoriesPage: React.FC = () => {
                     <button
                       type="submit"
                       disabled={savingEdit}
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                     >
                       {savingEdit ? "Saving..." : "Save"}
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
                 {editError && (
-                  <div role="alert" className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+                  <div role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300">
                     {editError}
                   </div>
                 )}
@@ -179,13 +179,13 @@ export const CategoriesPage: React.FC = () => {
 
           return (
             <div key={c.id} className="flex items-center justify-between py-3 pr-4 text-sm" style={{ paddingLeft: `${depth * 18 + 16}px` }}>
-              <span className="text-slate-100">{c.name}</span>
+              <span className="text-slate-900 dark:text-slate-100">{c.name}</span>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => startEdit(c)}
                   aria-label={`Edit ${c.name}`}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  className="rounded p-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -196,7 +196,7 @@ export const CategoriesPage: React.FC = () => {
                     void qc.invalidateQueries({ queryKey: ["categories"] });
                   }}
                   aria-label={`Delete ${c.name}`}
-                  className="rounded p-1.5 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
+                  className="rounded p-1.5 text-slate-600 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-700 dark:hover:text-rose-300"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -299,8 +299,8 @@ export const LocationsPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <form onSubmit={create} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="New location name" className="min-w-[180px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+      <form onSubmit={create} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-4">
+        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="New location name" className="min-w-[180px] flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white" />
         <div className="min-w-[200px]">
           <HierarchySelect
             items={locations}
@@ -311,21 +311,21 @@ export const LocationsPage: React.FC = () => {
             ariaLabel="Parent location"
           />
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-slate-300">
+        <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={isFreezer} onChange={(e) => setIsFreezer(e.target.checked)} />
           Freezer
         </label>
         <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">Add</button>
       </form>
 
-      <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60">
+      <div className="divide-y divide-slate-200 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60">
         {!isLoading && locations.length === 0 ? (
           <div className="space-y-3 p-6 text-center">
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               No locations yet. Add one above or load a starter set of household storage areas.
             </p>
             {starterError && (
-              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+              <div role="alert" className="mx-auto max-w-md rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300">
                 {starterError}
               </div>
             )}
@@ -333,7 +333,7 @@ export const LocationsPage: React.FC = () => {
               type="button"
               disabled={seedingStarter}
               onClick={() => void loadStarterLocations()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
             >
               {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {seedingStarter ? "Loading..." : "Load Starter Locations"}
@@ -345,14 +345,14 @@ export const LocationsPage: React.FC = () => {
             const excluded = collectDescendantIds(l.id, locations);
             const parentOptions = locations.filter((item) => !excluded.has(item.id));
             return (
-              <form key={l.id} onSubmit={saveEdit} className="space-y-2 bg-slate-900/90 p-3">
+              <form key={l.id} onSubmit={saveEdit} className="space-y-2 bg-white/95 dark:bg-slate-900/90 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     required
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     aria-label="Edit location name"
-                    className="min-w-[160px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    className="min-w-[160px] flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white"
                   />
                   <div className="min-w-[190px]">
                     <HierarchySelect
@@ -364,7 +364,7 @@ export const LocationsPage: React.FC = () => {
                       ariaLabel="Edit parent location"
                     />
                   </div>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
                     <input
                       type="checkbox"
                       checked={editIsFreezer}
@@ -377,21 +377,21 @@ export const LocationsPage: React.FC = () => {
                     <button
                       type="submit"
                       disabled={savingEdit}
-                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                     >
                       {savingEdit ? "Saving..." : "Save"}
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
                 {editError && (
-                  <div role="alert" className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+                  <div role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300">
                     {editError}
                   </div>
                 )}
@@ -401,16 +401,16 @@ export const LocationsPage: React.FC = () => {
 
           return (
             <div key={l.id} className="flex items-center justify-between py-3 pr-4 text-sm" style={{ paddingLeft: `${depth * 18 + 16}px` }}>
-              <Link to={`/locations/${l.id}`} className="flex items-center gap-2 text-slate-100 hover:text-indigo-300">
+              <Link to={`/locations/${l.id}`} className="flex items-center gap-2 text-slate-900 dark:text-slate-100 hover:text-indigo-800 dark:hover:text-indigo-300">
                 <span>{l.name}</span>
-                {l.is_freezer && <Snowflake className="h-4 w-4 text-sky-400" />}
+                {l.is_freezer && <Snowflake className="h-4 w-4 text-slate-400 dark:text-slate-500" />}
               </Link>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => startEdit(l)}
                   aria-label={`Edit ${l.name}`}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  className="rounded p-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -418,7 +418,7 @@ export const LocationsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => apiFetch(`/api/locations/${l.id}/print-label`, { method: "POST" })}
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                    className="rounded p-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
                     aria-label="Print location label"
                   >
                     <Printer className="h-4 w-4" />
@@ -431,7 +431,7 @@ export const LocationsPage: React.FC = () => {
                     void qc.invalidateQueries({ queryKey: ["locations"] });
                   }}
                   aria-label={`Delete ${l.name}`}
-                  className="rounded p-1.5 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
+                  className="rounded p-1.5 text-slate-600 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-700 dark:hover:text-rose-300"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -466,7 +466,7 @@ export const LocationDetailPage: React.FC = () => {
     queryFn: () => apiFetch<{ locations: Location[] }>("/api/locations"),
   });
 
-  if (!data) return <div className="py-12 text-center text-sm text-slate-400">Loading location...</div>;
+  if (!data) return <div className="py-12 text-center text-sm text-slate-600 dark:text-slate-400">Loading location...</div>;
 
   const allLocations = allLocationsData?.locations || [];
   const excluded = collectDescendantIds(data.location.id, allLocations);
@@ -512,14 +512,14 @@ export const LocationDetailPage: React.FC = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold text-white">{data.location.hierarchy_name}</h2>
-          {data.location.is_freezer && <span className="text-xs text-sky-400">Freezer location</span>}
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">{data.location.hierarchy_name}</h2>
+          {data.location.is_freezer && <span className="text-xs text-indigo-700 dark:text-indigo-400">Freezer location</span>}
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={startEdit}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             <Pencil className="h-4 w-4" /> Edit
           </button>
@@ -539,14 +539,14 @@ export const LocationDetailPage: React.FC = () => {
       </div>
 
       {editing && (
-        <form onSubmit={saveEdit} className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+        <form onSubmit={saveEdit} className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <input
               required
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               aria-label="Edit location name"
-              className="min-w-[160px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+              className="min-w-[160px] flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white"
             />
             <div className="min-w-[190px]">
               <HierarchySelect
@@ -558,7 +558,7 @@ export const LocationDetailPage: React.FC = () => {
                 ariaLabel="Edit parent location"
               />
             </div>
-            <label className="flex items-center gap-1.5 text-xs text-slate-300">
+            <label className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={editIsFreezer}
@@ -571,36 +571,36 @@ export const LocationDetailPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={savingEdit}
-                className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
               >
                 {savingEdit ? "Saving..." : "Save"}
               </button>
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
             </div>
           </div>
           {editError && (
-            <div role="alert" className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-300">
+            <div role="alert" className="rounded-lg bg-rose-50 dark:bg-rose-500/15 px-3 py-1.5 text-xs text-rose-700 dark:text-rose-300">
               {editError}
             </div>
           )}
         </form>
       )}
 
-      {notice && <div className="rounded-lg bg-indigo-500/15 px-3 py-2 text-sm text-indigo-200">{notice}</div>}
-      <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60">
+      {notice && <div className="rounded-lg bg-indigo-50 dark:bg-indigo-500/15 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-200">{notice}</div>}
+      <div className="divide-y divide-slate-200 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60">
         {data.items.map((it) => (
-          <Link key={it.id} to={`/products/${it.product_id}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-800/50">
+          <Link key={it.id} to={`/products/${it.product_id}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50">
             <span>{it.product_name}</span>
-            <span className="text-xs text-slate-400">{it.due_on_date ? `Due ${it.due_on_date}` : "No due date"}</span>
+            <span className="text-xs text-slate-600 dark:text-slate-400">{it.due_on_date ? `Due ${it.due_on_date}` : "No due date"}</span>
           </Link>
         ))}
-        {data.items.length === 0 && <div className="p-6 text-center text-xs text-slate-400">No items stored here.</div>}
+        {data.items.length === 0 && <div className="p-6 text-center text-xs text-slate-600 dark:text-slate-400">No items stored here.</div>}
       </div>
     </div>
   );

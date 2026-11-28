@@ -75,12 +75,12 @@ export const ContextualHelpDrawer: React.FC<ContextualHelpDrawerProps> = ({
       role="complementary"
       aria-label="Contextual Help"
       data-testid="contextual-help-drawer"
-      className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[82dvh] flex-col rounded-t-2xl border-t border-slate-700 bg-slate-900 text-slate-100 shadow-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
+      className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[82dvh] flex-col rounded-t-2xl border-t border-slate-200 bg-white text-slate-800 shadow-2xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 lg:inset-y-0 lg:left-auto lg:right-0 lg:max-h-none lg:w-[26rem] lg:rounded-none lg:border-l lg:border-t-0"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div className="flex min-w-0 items-center gap-2">
-          <BookOpen className="h-4 w-4 shrink-0 text-indigo-400" />
-          <span className="truncate text-sm font-semibold text-white">
+          <BookOpen className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+          <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
             {page ? page.title : "Help"}
           </span>
         </div>
@@ -89,7 +89,7 @@ export const ContextualHelpDrawer: React.FC<ContextualHelpDrawerProps> = ({
             <Link
               to={`/help/${page.slug}`}
               onClick={onClose}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-slate-100 hover:text-indigo-800 dark:text-indigo-300 dark:hover:bg-slate-800 dark:hover:text-indigo-200"
             >
               Full view <ExternalLink className="h-3 w-3" />
             </Link>
@@ -98,7 +98,7 @@ export const ContextualHelpDrawer: React.FC<ContextualHelpDrawerProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close contextual help"
-            className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -107,10 +107,10 @@ export const ContextualHelpDrawer: React.FC<ContextualHelpDrawerProps> = ({
 
       <div tabIndex={0} className="flex-1 overflow-y-auto px-4 py-4">
         {!bundle || !page ? (
-          <p className="text-sm text-slate-400">Loading help guide...</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Loading help guide...</p>
         ) : (
-          <article className="help-prose space-y-3 text-sm leading-relaxed text-slate-200">
-            <p className="text-xs text-slate-300">{page.summary}</p>
+          <article className="help-prose space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+            <p className="text-xs text-slate-600 dark:text-slate-300">{page.summary}</p>
             <div
               onClick={handleContentClick}
               dangerouslySetInnerHTML={{ __html: page.html }}

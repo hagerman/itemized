@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsPage } from "./SettingsPage";
 import { PrinterRecord, User } from "../api";
+import { ThemeProvider } from "../components/ThemeContext";
 
 const MEMBER_USER: User = {
   id: 2,
@@ -345,5 +346,88 @@ describe("SettingsPage role-based visibility", () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["auth-status"] });
     });
+  });
+});
+
+describe("SettingsPage Appearance theme selector", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+    document.documentElement.classList.remove("dark");
+  });
+
+  it("shows Appearance selector for member users and saves selection to profile via PATCH /api/auth/account", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/account" && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ user: { ...MEMBER_USER, theme: body.theme } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText("Appearance")).toBeInTheDocument();
+    const darkRadio = screen.getByRole("radio", { name: "Dark" });
+    fireEvent.click(darkRadio);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/auth/account",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ theme: "dark" }),
+        })
+      );
+    });
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(await screen.findByText("Theme preference saved.")).toBeInTheDocument();
+  });
+
+  it("rolls back theme and shows an error when saving fails", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: "server error" }), { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+
+    expect(await screen.findByText("server error")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "System" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("applies theme locally in demo mode without calling PATCH /api/auth/account", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} demoMode />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(await screen.findByText("Theme updated locally for this browser.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

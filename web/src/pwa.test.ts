@@ -58,12 +58,14 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
     expect(unlayeredCss).toMatch(/font-size:\s*16px/);
   });
 
-  it("declares dark color-scheme and normalizes iOS date input width in @layer base", async () => {
+  it("declares light and dark color-scheme and normalizes iOS date input width in @layer base", async () => {
     const indexCss = await readWebFile("src/index.css");
+    expect(indexCss).toContain("@custom-variant dark");
     const baseMatch = indexCss.match(/@layer\s+base\s*\{[\s\S]*?\n\}/);
     expect(baseMatch).not.toBeNull();
     const baseCss = baseMatch![0];
 
+    expect(baseCss).toMatch(/color-scheme:\s*light/);
     expect(baseCss).toMatch(/color-scheme:\s*dark/);
     expect(baseCss).toContain('input[type="date"]');
     expect(baseCss).toMatch(/min-width:\s*0/);

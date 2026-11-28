@@ -169,7 +169,7 @@ func TestSessionRevocationOnPasswordResetAndChange(t *testing.T) {
 	}
 
 	// Changing own password keeps current session (sess1) and revokes other sessions (tok2).
-	if _, err := svc.UpdateAccount(ctx, u.ID, sess1.ID, "", "password123", "newpassword456"); err != nil {
+	if _, err := svc.UpdateAccount(ctx, u.ID, sess1.ID, "", "password123", "newpassword456", ""); err != nil {
 		t.Fatalf("UpdateAccount password change: %v", err)
 	}
 	if _, _, err := svc.ValidateToken(ctx, tok1); err != nil {
@@ -263,5 +263,64 @@ func TestSanitizeNextPath(t *testing.T) {
 		if got := SanitizeNextPath(tc.in); got != tc.want {
 			t.Errorf("SanitizeNextPath(%q) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestUserThemePreference(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ctx := context.Background()
+
+	u, err := svc.SetupAdmin(ctx, "admin@example.com", "password123")
+	if err != nil {
+		t.Fatalf("SetupAdmin: %v", err)
+	}
+	if u.Theme != ThemeSystem {
+		t.Fatalf("expected default theme %q, got %q", ThemeSystem, u.Theme)
+	}
+
+	m, err := svc.CreateUser(ctx, "member@example.com", "password123", RoleMember)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if m.Theme != ThemeSystem {
+		t.Fatalf("expected member default theme %q, got %q", ThemeSystem, m.Theme)
+	}
+
+	// Update theme to light without changing email or password.
+	updated, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", ThemeLight)
+	if err != nil {
+		t.Fatalf("UpdateAccount theme=light: %v", err)
+	}
+	if updated.Theme != ThemeLight || updated.Email != "admin@example.com" {
+		t.Fatalf("unexpected updated user: %+v", updated)
+	}
+
+	// Verify persisted across GetUser, ListUsers, Authenticate, and ValidateToken.
+	tok, _, err := svc.CreateSession(ctx, u.ID, SessionKindBearer, "test", "127.0.0.1", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	fromTok, _, err := svc.ValidateToken(ctx, tok)
+	if err != nil || fromTok.Theme != ThemeLight {
+		t.Fatalf("ValidateToken expected theme %q, got %+v err=%v", ThemeLight, fromTok, err)
+	}
+	fromAuth, err := svc.Authenticate(ctx, "admin@example.com", "password123")
+	if err != nil || fromAuth.Theme != ThemeLight {
+		t.Fatalf("Authenticate expected theme %q, got %+v err=%v", ThemeLight, fromAuth, err)
+	}
+
+	// Invalid theme is rejected without changing stored value.
+	if _, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "sepia"); err != ErrInvalidTheme {
+		t.Fatalf("expected ErrInvalidTheme, got %v", err)
+	}
+	reloaded, err := svc.GetUser(ctx, u.ID)
+	if err != nil || reloaded.Theme != ThemeLight {
+		t.Fatalf("expected stored theme to remain %q, got %+v err=%v", ThemeLight, reloaded, err)
 	}
 }

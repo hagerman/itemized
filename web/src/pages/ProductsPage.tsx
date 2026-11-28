@@ -487,12 +487,12 @@ export const ProductsPage: React.FC = () => {
       <div data-testid="products-toolbar" className="@container">
         <div data-testid="products-toolbar-row" className="flex flex-nowrap items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Filter products..."
-              className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
             />
           </div>
 
@@ -501,7 +501,7 @@ export const ProductsPage: React.FC = () => {
               value={sort}
               onChange={(e) => setSort(e.target.value)}
               aria-label="Sort products"
-              className="hidden shrink-0 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 @[540px]:block"
+              className="hidden shrink-0 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 @[540px]:block"
             >
               {SORT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -518,7 +518,7 @@ export const ProductsPage: React.FC = () => {
                 aria-haspopup="listbox"
                 aria-expanded={sortMenuOpen}
                 title={`Sort: ${activeSortLabel}`}
-                className="flex h-full min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-800 bg-slate-900 px-2.5 text-slate-200 hover:bg-slate-800"
+                className="flex h-full min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 <ArrowUpDown className="h-4 w-4" />
               </button>
@@ -526,7 +526,7 @@ export const ProductsPage: React.FC = () => {
                 <div
                   role="listbox"
                   aria-label="Sort options"
-                  className="absolute right-0 z-20 mt-1.5 w-44 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1.5 w-44 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 shadow-xl"
                 >
                   {SORT_OPTIONS.map((opt) => {
                     const active = sort === opt.value;
@@ -542,12 +542,12 @@ export const ProductsPage: React.FC = () => {
                         }}
                         className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition ${
                           active
-                            ? "bg-indigo-600/20 font-medium text-indigo-200"
-                            : "text-slate-200 hover:bg-slate-800"
+                            ? "bg-indigo-50 dark:bg-indigo-600/20 font-medium text-indigo-800 dark:text-indigo-200"
+                            : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                         }`}
                       >
                         <span>{opt.label}</span>
-                        {active && <Check className="h-4 w-4 text-indigo-400" />}
+                        {active && <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />}
                       </button>
                     );
                   })}
@@ -560,7 +560,7 @@ export const ProductsPage: React.FC = () => {
             <button
               type="button"
               onClick={clearFilters}
-              className="hidden shrink-0 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700 @[640px]:flex"
+              className="hidden shrink-0 items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 @[640px]:flex"
             >
               <X className="h-3.5 w-3.5" /> Clear Filters
             </button>
@@ -570,7 +570,7 @@ export const ProductsPage: React.FC = () => {
             to="/products/new"
             aria-label="New Product"
             title="New Product"
-            className="flex min-h-[38px] min-w-[38px] shrink-0 self-stretch items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-2.5 text-sm font-semibold text-white hover:bg-indigo-500 @[540px]:min-w-0 @[540px]:self-auto @[540px]:px-3.5 @[540px]:py-2"
+            className="flex min-h-[38px] min-w-[38px] shrink-0 self-stretch items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-2.5 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 @[540px]:min-w-0 @[540px]:self-auto @[540px]:px-3.5 @[540px]:py-2"
           >
             <Plus className="h-4 w-4 shrink-0" />
             <span className="hidden @[540px]:inline">New Product</span>
@@ -582,7 +582,7 @@ export const ProductsPage: React.FC = () => {
             <button
               type="button"
               onClick={clearFilters}
-              className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+              className="flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               <X className="h-3.5 w-3.5" /> Clear Filters
             </button>
@@ -593,54 +593,54 @@ export const ProductsPage: React.FC = () => {
       {bulkError && (
         <div
           role="alert"
-          className="hidden rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-sm text-rose-200 md:block"
+          className="hidden rounded-xl border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-4 py-2.5 text-sm text-rose-800 dark:text-rose-200 md:block"
         >
           {bulkError}
         </div>
       )}
 
       {isLoading ? (
-        <div className="py-12 text-center text-sm text-slate-400">Loading inventory...</div>
+        <div className="py-12 text-center text-sm text-slate-600 dark:text-slate-400">Loading inventory...</div>
       ) : products.length === 0 ? (
         isEmptyCatalog ? (
           <div
             data-testid="onboarding-card"
-            className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl"
+            className="mx-auto max-w-2xl space-y-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl"
           >
             <div>
-              <h2 className="text-lg font-semibold text-white">Welcome to itemized</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Welcome to itemized</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Get your household inventory up and running in two quick steps.
               </p>
             </div>
 
             {starterError && (
-              <div role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
+              <div role="alert" className="rounded-lg border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-xs text-rose-800 dark:text-rose-200">
                 {starterError}
               </div>
             )}
 
             <div className="space-y-3">
-              <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
                   {hasTaxonomySetup ? (
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" aria-label="Completed" />
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-400" aria-label="Completed" />
                   ) : (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 text-xs font-semibold text-indigo-300">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-600/20 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
                       1
                     </span>
                   )}
                   <div>
-                    <div className="text-sm font-medium text-white">Set up locations &amp; categories</div>
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">Set up locations &amp; categories</div>
+                    <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
                       {hasTaxonomySetup
                         ? `${locations.length} location${locations.length === 1 ? "" : "s"} and ${categories.length} categor${categories.length === 1 ? "y" : "ies"} ready. Customize anytime in `
                         : "Load a ready-to-use grocery-store category list and household locations, or create your own in "}
-                      <Link to="/locations" className="text-indigo-300 hover:underline">
+                      <Link to="/locations" className="text-indigo-700 dark:text-indigo-300 hover:underline">
                         Locations
                       </Link>{" "}
                       &amp;{" "}
-                      <Link to="/categories" className="text-indigo-300 hover:underline">
+                      <Link to="/categories" className="text-indigo-700 dark:text-indigo-300 hover:underline">
                         Categories
                       </Link>
                       .
@@ -652,7 +652,7 @@ export const ProductsPage: React.FC = () => {
                     type="button"
                     disabled={seedingStarter}
                     onClick={() => void handleLoadStarterSetup()}
-                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                   >
                     {seedingStarter ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                     {seedingStarter ? "Loading..." : "Load Starter Setup"}
@@ -660,14 +660,14 @@ export const ProductsPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600/20 text-xs font-semibold text-indigo-300">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-600/20 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
                     2
                   </span>
                   <div>
-                    <div className="text-sm font-medium text-white">Add your first item</div>
-                    <p className="mt-0.5 text-xs text-slate-400">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">Add your first item</div>
+                    <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
                       Scan a retail barcode with Purchase mode or create a product manually. You can also create new categories and locations inline as you go.
                     </p>
                   </div>
@@ -676,13 +676,13 @@ export const ProductsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => openScanner("purchase")}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
                   >
                     <ScanBarcode className="h-3.5 w-3.5" /> Scan / Action
                   </button>
                   <Link
                     to="/products/new"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
                   >
                     <Plus className="h-3.5 w-3.5" /> New Product
                   </Link>
@@ -693,13 +693,13 @@ export const ProductsPage: React.FC = () => {
             {isInsecureNonLocal && (
               <div
                 data-testid="onboarding-https-warning"
-                className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs text-amber-200"
+                className="flex items-start gap-2.5 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-3 text-xs text-amber-900 dark:text-amber-200"
               >
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-800 dark:text-amber-300" />
                 <div>
                   <span className="font-semibold">Camera scanning requires HTTPS on mobile browsers.</span>{" "}
                   You are currently viewing itemized over plain HTTP. Serve it behind a reverse proxy with TLS to use phone camera scanning.{" "}
-                  <Link to="/help/use/barcode-scanning" className="font-semibold underline hover:text-white">
+                  <Link to="/help/use/barcode-scanning" className="font-semibold underline hover:text-slate-900 dark:hover:text-white">
                     Learn how to set up HTTPS
                   </Link>
                 </div>
@@ -707,7 +707,7 @@ export const ProductsPage: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-800 py-16 text-center text-sm text-slate-400">
+          <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 py-16 text-center text-sm text-slate-600 dark:text-slate-400">
             No products match this view.
           </div>
         )
@@ -719,16 +719,16 @@ export const ProductsPage: React.FC = () => {
               <Link
                 key={p.id}
                 to={`/products/${p.id}`}
-                className="group flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-indigo-500/60 hover:bg-slate-900"
+                className="group flex flex-col justify-between rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/70 p-4 transition hover:border-indigo-500/60 hover:bg-slate-100 dark:hover:bg-slate-900"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h2 className="font-semibold text-white group-hover:text-indigo-300">{p.name}</h2>
-                    <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-200">
+                    <h2 className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-300">{p.name}</h2>
+                    <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
                       {p.in_stock_count} in stock
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">
+                  <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
                     {p.category_name}
                     {p.next_location_name ? <> &bull; {p.next_location_name}</> : null}
                   </div>
@@ -736,12 +736,12 @@ export const ProductsPage: React.FC = () => {
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   {p.overdue && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300">
                       <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
                     </span>
                   )}
                   {!p.overdue && p.due_soon && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
                       <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
                     </span>
                   )}
@@ -749,7 +749,7 @@ export const ProductsPage: React.FC = () => {
                     <span className="text-xs text-slate-500">Next due: {p.next_due_on_date}</span>
                   )}
                   {p.on_shopping_list && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
                       <ShoppingCart className="h-3 w-3" />
                       {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
                     </span>
@@ -762,10 +762,10 @@ export const ProductsPage: React.FC = () => {
           {/* Desktop compact table view with selection checkboxes */}
           <div
             data-testid="products-table"
-            className="hidden overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 md:block"
+            className="hidden overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 md:block"
           >
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-800 text-xs font-semibold uppercase text-slate-400">
+              <thead className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase text-slate-600 dark:text-slate-400">
                 <tr>
                   <th className="w-10 whitespace-nowrap py-2.5 pl-4 pr-2 font-semibold">
                     <input
@@ -774,7 +774,7 @@ export const ProductsPage: React.FC = () => {
                       aria-label="Select all products"
                       checked={allSelected}
                       onChange={toggleSelectAll}
-                      className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                      className="cursor-pointer rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950"
                     />
                   </th>
                   <th
@@ -785,7 +785,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("name")}
                       className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "name" ? "text-indigo-300" : "text-slate-400"
+                        sort === "name" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Product</span>
@@ -800,7 +800,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("category")}
                       className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "category" ? "text-indigo-300" : "text-slate-400"
+                        sort === "category" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Category</span>
@@ -815,7 +815,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("location")}
                       className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "location" ? "text-indigo-300" : "text-slate-400"
+                        sort === "location" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Location</span>
@@ -830,7 +830,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("stock")}
                       className={`inline-flex items-center justify-end gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "stock" ? "text-indigo-300" : "text-slate-400"
+                        sort === "stock" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Stock</span>
@@ -845,7 +845,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("due_date")}
                       className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "due_date" ? "text-indigo-300" : "text-slate-400"
+                        sort === "due_date" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Next Due</span>
@@ -860,7 +860,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       onClick={() => setSort("shopping_list")}
                       className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
-                        sort === "shopping_list" ? "text-indigo-300" : "text-slate-400"
+                        sort === "shopping_list" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       <span>Shopping List</span>
@@ -869,15 +869,15 @@ export const ProductsPage: React.FC = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
                 {products.map((p) => {
                   const checked = activeSelectedIds.includes(p.id);
                   return (
                     <tr
                       key={p.id}
                       onClick={(e) => handleRowClick(e, p.id)}
-                      className={`group cursor-pointer transition hover:bg-slate-800/50 ${
-                        checked ? "bg-indigo-500/10" : ""
+                      className={`group cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+                        checked ? "bg-indigo-50/70 dark:bg-indigo-500/10" : ""
                       }`}
                     >
                       <td
@@ -889,44 +889,44 @@ export const ProductsPage: React.FC = () => {
                           checked={checked}
                           aria-label={`Select ${p.name}`}
                           onChange={() => toggleSelectProduct(p.id)}
-                          className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                          className="cursor-pointer rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950"
                         />
                       </td>
-                      <td className="py-2.5 pr-3 font-medium text-white">
+                      <td className="py-2.5 pr-3 font-medium text-slate-900 dark:text-white">
                         <Link
                           to={`/products/${p.id}`}
-                          className="text-white transition group-hover:text-indigo-300"
+                          className="text-slate-900 dark:text-white transition group-hover:text-indigo-700 dark:group-hover:text-indigo-300"
                         >
                           {p.name}
                         </Link>
                       </td>
-                      <td className="py-2.5 pr-3 text-slate-300">{p.category_name}</td>
-                      <td className="py-2.5 pr-3 text-slate-400">
+                      <td className="py-2.5 pr-3 text-slate-700 dark:text-slate-300">{p.category_name}</td>
+                      <td className="py-2.5 pr-3 text-slate-600 dark:text-slate-400">
                         {p.next_location_name || <span className="text-slate-500">—</span>}
                       </td>
                       <td className="whitespace-nowrap py-2.5 pr-3 text-right">
-                        <span className="inline-block rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-200">
+                        <span className="inline-block rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-800 dark:text-slate-200">
                           {p.in_stock_count}
                         </span>
                       </td>
                       <td className="whitespace-nowrap py-2.5 pr-3">
                         {p.overdue ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300">
                             <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
                           </span>
                         ) : p.due_soon ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
                             <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
                           </span>
                         ) : p.next_due_on_date ? (
-                          <span className="text-xs text-slate-400">{p.next_due_on_date}</span>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">{p.next_due_on_date}</span>
                         ) : (
                           <span className="text-slate-500">—</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap py-2.5 pr-4">
                         {p.on_shopping_list ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
                             <ShoppingCart className="h-3 w-3" />
                             {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
                           </span>
@@ -944,9 +944,9 @@ export const ProductsPage: React.FC = () => {
           {activeSelectedIds.length > 0 && (
             <div
               data-testid="products-bulk-bar"
-              className="sticky bottom-4 z-20 mx-auto hidden w-fit items-center gap-3 rounded-xl border border-indigo-500/40 bg-slate-900/95 px-4 py-2.5 text-xs shadow-2xl backdrop-blur md:flex"
+              className="sticky bottom-4 z-20 mx-auto hidden w-fit items-center gap-3 rounded-xl border border-indigo-200 dark:border-indigo-500/40 bg-white/95 dark:bg-slate-900/95 px-4 py-2.5 text-xs shadow-2xl backdrop-blur md:flex"
             >
-              <span className="font-semibold text-indigo-200">{activeSelectedIds.length} selected:</span>
+              <span className="font-semibold text-indigo-800 dark:text-indigo-200">{activeSelectedIds.length} selected:</span>
               {llmEnabled && (
                 <button
                   type="button"
@@ -963,7 +963,7 @@ export const ProductsPage: React.FC = () => {
                   type="button"
                   disabled={bulkDeleting || merging || reclassifyApplying}
                   onClick={openMergeModal}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 font-medium text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                 >
                   <GitMerge className="h-3.5 w-3.5" />
                   Merge
@@ -987,18 +987,18 @@ export const ProductsPage: React.FC = () => {
               ariaLabel="Merge Products"
               className="flex items-center justify-center p-4"
             >
-              <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <div className="w-full max-w-lg rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-4">
                   <div className="flex items-center gap-2">
-                    <GitMerge className="h-4 w-4 text-indigo-400" />
-                    <h2 className="text-base font-semibold text-white">Merge Products</h2>
+                    <GitMerge className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-white">Merge Products</h2>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => openHelpForScreen("dialog/merge-products")}
                       aria-label="Help for Merge Products"
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-800 dark:hover:text-indigo-200"
                     >
                       <HelpCircle className="h-4 w-4" /> Help
                     </button>
@@ -1007,7 +1007,7 @@ export const ProductsPage: React.FC = () => {
                       aria-label="Close merge dialog"
                       disabled={merging}
                       onClick={closeMergeModal}
-                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                      className="rounded-lg p-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1015,7 +1015,7 @@ export const ProductsPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-4 px-5 py-4">
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
                     Choose the destination product to keep. All variants, retail barcodes, and items from the other{" "}
                     {activeSelectedProducts.length - 1} selected product{activeSelectedProducts.length - 1 === 1 ? "" : "s"}{" "}
                     will be moved into it, and old product QR codes will redirect to it.
@@ -1024,7 +1024,7 @@ export const ProductsPage: React.FC = () => {
                   {mergeError && (
                     <div
                       role="alert"
-                      className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-200"
+                      className="rounded-xl border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-800 dark:text-rose-200"
                     >
                       {mergeError}
                     </div>
@@ -1038,8 +1038,8 @@ export const ProductsPage: React.FC = () => {
                           key={p.id}
                           className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition ${
                             selected
-                              ? "border-indigo-500 bg-indigo-500/15"
-                              : "border-slate-800 bg-slate-950/60 hover:border-slate-700"
+                              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15"
+                              : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 hover:border-slate-300 dark:hover:border-slate-700"
                           }`}
                         >
                           <div className="flex min-w-0 items-center gap-3">
@@ -1053,11 +1053,11 @@ export const ProductsPage: React.FC = () => {
                               className="cursor-pointer accent-indigo-500"
                             />
                             <div className="min-w-0">
-                              <div className="truncate text-sm font-medium text-white">{p.name}</div>
-                              <div className="truncate text-xs text-slate-400">{p.category_name}</div>
+                              <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{p.name}</div>
+                              <div className="truncate text-xs text-slate-600 dark:text-slate-400">{p.category_name}</div>
                             </div>
                           </div>
-                          <span className="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-200">
+                          <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-slate-800 dark:text-slate-200">
                             {p.in_stock_count} in stock
                           </span>
                         </label>
@@ -1066,12 +1066,12 @@ export const ProductsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-5 py-3.5">
+                <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-5 py-3.5">
                   <button
                     type="button"
                     disabled={merging}
                     onClick={closeMergeModal}
-                    className="rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                    className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -1079,7 +1079,7 @@ export const ProductsPage: React.FC = () => {
                     type="button"
                     disabled={merging || !mergeTargetId}
                     onClick={() => void handleConfirmMerge()}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
                   >
                     <GitMerge className="h-4 w-4" />
                     {merging ? "Merging..." : "Confirm Merge"}
@@ -1095,18 +1095,18 @@ export const ProductsPage: React.FC = () => {
               ariaLabel="Reclassify Products"
               className="flex items-center justify-center p-4"
             >
-              <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
+              <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-4">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-400" />
-                    <h2 className="text-base font-semibold text-white">Reclassify Products</h2>
+                    <Sparkles className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                    <h2 className="text-base font-semibold text-slate-900 dark:text-white">Reclassify Products</h2>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => openHelpForScreen("dialog/reclassify-products")}
                       aria-label="Help for Reclassify Products"
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-800 dark:hover:text-indigo-200"
                     >
                       <HelpCircle className="h-4 w-4" /> Help
                     </button>
@@ -1115,7 +1115,7 @@ export const ProductsPage: React.FC = () => {
                       aria-label="Close reclassify dialog"
                       disabled={reclassifyApplying}
                       onClick={closeReclassifyModal}
-                      className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white disabled:opacity-50"
+                      className="rounded-lg p-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1123,16 +1123,16 @@ export const ProductsPage: React.FC = () => {
                 </div>
 
                 <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
                     Review standardized names below. Tweak any name or uncheck rows to exclude them. Products resolving to the same name (or matching an existing product) will be merged automatically.
                   </p>
 
                   {reclassifyLoading && (
                     <div
                       role="status"
-                      className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-200"
+                      className="flex items-center gap-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-900 dark:text-amber-200"
                     >
-                      <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-700 dark:text-amber-400" />
                       <span>
                         Classifying {reclassifyProgress.done} / {reclassifyProgress.total} products...
                       </span>
@@ -1142,16 +1142,16 @@ export const ProductsPage: React.FC = () => {
                   {reclassifyError && (
                     <div
                       role="alert"
-                      className="rounded-xl border border-rose-500/40 bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-200"
+                      className="rounded-xl border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-3.5 py-2.5 text-sm text-rose-800 dark:text-rose-200"
                     >
                       {reclassifyError}
                     </div>
                   )}
 
                   {reclassifyRows.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
                       <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-800 bg-slate-950/60 text-xs font-semibold uppercase text-slate-400">
+                        <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-xs font-semibold uppercase text-slate-600 dark:text-slate-400">
                           <tr>
                             <th className="w-10 py-2.5 pl-3 pr-2">Use</th>
                             <th className="py-2.5 pr-3">Current Name</th>
@@ -1159,7 +1159,7 @@ export const ProductsPage: React.FC = () => {
                             <th className="py-2.5 pr-3">Action</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-800/70">
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
                           {reclassifyRows.map((row) => {
                             const action = reclassifyPreview.actions.get(row.productId) || { kind: "excluded" };
                             return (
@@ -1178,13 +1178,13 @@ export const ProductsPage: React.FC = () => {
                                         )
                                       );
                                     }}
-                                    className="cursor-pointer rounded border-slate-600 bg-slate-950"
+                                    className="cursor-pointer rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950"
                                   />
                                 </td>
-                                <td className="py-2.5 pr-3 text-slate-300">
+                                <td className="py-2.5 pr-3 text-slate-700 dark:text-slate-300">
                                   <div>{row.currentName}</div>
                                   {row.error && (
-                                    <div className="text-xs text-amber-300">{row.error}</div>
+                                    <div className="text-xs text-amber-800 dark:text-amber-300">{row.error}</div>
                                   )}
                                 </td>
                                 <td className="py-2.5 pr-3">
@@ -1203,38 +1203,38 @@ export const ProductsPage: React.FC = () => {
                                         )
                                       );
                                     }}
-                                    className="w-full min-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                                    className="w-full min-w-[180px] rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-sm text-slate-900 dark:text-white focus:border-indigo-500 focus:outline-none"
                                   />
                                 </td>
                                 <td className="whitespace-nowrap py-2.5 pr-3 text-xs">
                                   {action.kind === "rename" && (
-                                    <span className="inline-flex rounded-md bg-indigo-500/15 px-2 py-0.5 font-medium text-indigo-300">
+                                    <span className="inline-flex rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 font-medium text-indigo-700 dark:text-indigo-300">
                                       Rename
                                     </span>
                                   )}
                                   {action.kind === "merge_existing" && (
-                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                    <span className="inline-flex rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 font-medium text-amber-900 dark:text-amber-200">
                                       Merge into existing: {action.targetName}
                                     </span>
                                   )}
                                   {action.kind === "merge_survivor" && (
-                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                    <span className="inline-flex rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 font-medium text-amber-900 dark:text-amber-200">
                                       {action.renamed ? "Rename" : "Keep"} &amp; merge (+{action.mergeCount})
                                     </span>
                                   )}
                                   {action.kind === "merge_batch" && (
-                                    <span className="inline-flex rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-200">
+                                    <span className="inline-flex rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 font-medium text-amber-900 dark:text-amber-200">
                                       Merge into {action.targetName}
                                     </span>
                                   )}
                                   {action.kind === "no_change" && (
-                                    <span className="text-slate-400">No change</span>
+                                    <span className="text-slate-600 dark:text-slate-400">No change</span>
                                   )}
                                   {action.kind === "excluded" && (
                                     <span className="text-slate-500">Excluded</span>
                                   )}
                                   {action.kind === "invalid" && (
-                                    <span className="text-rose-300">Name required</span>
+                                    <span className="text-rose-700 dark:text-rose-300">Name required</span>
                                   )}
                                 </td>
                               </tr>
@@ -1246,8 +1246,8 @@ export const ProductsPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-5 py-3.5">
-                  <div className="text-xs text-slate-400">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-800 px-5 py-3.5">
+                  <div className="text-xs text-slate-600 dark:text-slate-400">
                     {reclassifyPreview.renameCount} rename{reclassifyPreview.renameCount === 1 ? "" : "s"},{" "}
                     {reclassifyPreview.mergeCount} merge{reclassifyPreview.mergeCount === 1 ? "" : "s"}
                   </div>
@@ -1256,7 +1256,7 @@ export const ProductsPage: React.FC = () => {
                       type="button"
                       disabled={reclassifyApplying}
                       onClick={closeReclassifyModal}
-                      className="rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+                      className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
                     >
                       Cancel
                     </button>

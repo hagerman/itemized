@@ -23,7 +23,7 @@ The web application SHALL provide a responsive layout with a persistent desktop 
 
 #### Scenario: Top header renders without backdrop blur on iOS
 - **WHEN** a user views any page of the application on iOS Safari or in standalone PWA mode
-- **THEN** the top `<header>` renders with a solid opaque background (`bg-slate-900`) and no `backdrop-blur` (`backdrop-filter`) so the navigation menu icon and page title remain crisp without iOS top-edge blur artifacts
+- **THEN** the top `<header>` renders with a solid opaque background matching the active theme (`bg-white` in light mode, `dark:bg-slate-900` in dark mode) and no `backdrop-blur` (`backdrop-filter`) so the navigation menu icon and page title remain crisp without iOS top-edge blur artifacts
 
 #### Scenario: Desktop viewport displays persistent sidebar
 - **WHEN** a user opens the application on a desktop viewport
@@ -282,7 +282,7 @@ Every modal dialog in the web application (including the Scanner modal, Barcode 
 - **THEN** the modal dialog remains open
 
 ### Requirement: iOS and mobile form control layout and dark-mode styling
-Form controls in multi-column responsive grids—including native `<input type="date">` and `<select>` controls—SHALL stay within their assigned column bounds on iOS, maintain consistent heights across adjacent fields, and declare dark `color-scheme` styling. In the Purchase form, `Label Mode` SHALL be shown only when `printers_enabled` is `true` and omitted otherwise without empty trailing columns.
+Form controls in multi-column responsive grids—including native `<input type="date">` and `<select>` controls—SHALL stay within their assigned column bounds on iOS, maintain consistent heights across adjacent fields, and declare `color-scheme` matching the active theme (`light` in light mode, `dark` in dark mode). In the Purchase form, `Label Mode` SHALL be shown only when `printers_enabled` is `true` and omitted otherwise without empty trailing columns.
 
 #### Scenario: Due Date does not overlap Label Mode in the Purchase form on iOS
 - **WHEN** `printers_enabled` is `true` and a user opens the `Scan & Action` Purchase form on an iOS mobile viewport (whether `Due Date` is empty or populated)
@@ -297,8 +297,12 @@ Form controls in multi-column responsive grids—including native `<input type="
 - **THEN** the `Label Mode` selector is not rendered and the remaining `Quantity`, `Location`, and `Due Date` controls render cleanly without an empty trailing column on desktop
 
 #### Scenario: Native form chrome respects dark theme contrast
-- **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop
+- **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop while dark mode is active
 - **THEN** the root document declares `color-scheme: dark` so native select chevrons, calendar icons, and picker sheets render with dark-theme contrast
+
+#### Scenario: Native form chrome respects light theme contrast
+- **WHEN** a user views native `<select>` or `<input type="date">` controls across the web application on iOS or desktop while light mode is active
+- **THEN** the root document declares `color-scheme: light` so native select chevrons, calendar icons, and picker sheets render with light-theme contrast
 
 ### Requirement: Duplicate prevention and similar-product guidance on product form
 On `/products/new` and `/products/:id/edit`, the Product Name field SHALL display a concise naming convention hint (e.g., `Item, Variety, Detail`) and, as the user types, SHALL query and display a live debounced list of similar existing products (excluding the product currently being edited) with links to view them, clearly highlighting any exact case-insensitive duplicate name and surfacing API `409 Conflict` duplicate errors inline.
@@ -444,3 +448,33 @@ Numeric form inputs across the web application SHALL allow users to clear the cu
 #### Scenario: Programmatic resets update displayed numeric value
 - **WHEN** the application programmatically resets or populates a numeric field (such as Purchase `Quantity` resetting to `1` after submitting a purchase or scanning a new unknown barcode, or populating a scanned barcode's `default_quantity`)
 - **THEN** the displayed input value updates immediately to match the new programmatic value
+
+### Requirement: Light and dark theme support with profile-backed preference
+The web application SHALL support both light mode (matching the `itemizedapp.com` light color palette) and dark mode across all views, modals, drawers, forms, auth screens, and help prose. Theme mode SHALL default to `system` (reactively tracking OS `prefers-color-scheme: dark`), allow any authenticated user to select `System`, `Light`, or `Dark` in Settings saved to their profile (or previewed locally in demo mode), prevent flash of wrong theme on initial load, and keep `<meta name="theme-color">` synchronized with the active theme.
+
+#### Scenario: Default system mode follows OS color scheme
+- **WHEN** a user has `theme` set to `"system"` (or is unauthenticated with no stored override)
+- **THEN** the application renders in light mode when the OS prefers light (`prefers-color-scheme: dark` is false) and in dark mode when the OS prefers dark (`prefers-color-scheme: dark` is true), and updates immediately if the OS color scheme changes while the app is open
+
+#### Scenario: User selects Light or Dark mode in Settings and saves to profile
+- **WHEN** an authenticated `member` or `admin` user opens `/settings` and selects `Light` (or `Dark` or `System`) in the Appearance / Theme selector
+- **THEN** the application immediately applies the selected theme across the UI, updates `<meta name="theme-color">` and root `color-scheme`, and persists the preference via `PATCH /api/auth/account` with `{"theme": "<mode>"}` so subsequent sessions and devices load the saved preference
+
+#### Scenario: Demo mode allows local theme preview without failing on disabled account mutations
+- **WHEN** a user in demo mode opens `/settings` and selects `Light`, `Dark`, or `System`
+- **THEN** the application immediately applies the selected theme locally in the browser without calling the disabled `PATCH /api/auth/account` endpoint or displaying an error
+
+#### Scenario: Initial load avoids flash of wrong theme
+- **WHEN** a user whose cached theme preference is `light` (or `system` on a light-mode OS) loads or refreshes the application
+- **THEN** the document root initializes in light mode before React hydrates so the page does not flash dark chrome before switching to light
+
+### Requirement: Neutral location-matched freezer indicator icon
+Freezer location snowflake icons rendered in location lists, trees, and pickers (sidebar location tree, hierarchical location selector options, Locations management list, and Location QR sub-location chips) SHALL match the location pin icon color (`text-slate-400 dark:text-slate-500`, and `text-indigo-600 dark:text-indigo-400` when the location row is selected) instead of sky blue. Inside the inline `Create Freezer` action and `Freezer` pill badges, the snowflake icon SHALL inherit the surrounding control's font color (`currentColor`).
+
+#### Scenario: Freezer snowflake icons in location lists match the location icon color
+- **WHEN** a user views a location marked `is_freezer: true` in the sidebar Locations tree, `HierarchySelect` option list, `/locations` management list, or `/go/l/:id` sub-location chips
+- **THEN** the freezer snowflake icon uses the muted location icon color (`text-slate-400 dark:text-slate-500`, or `text-indigo-600 dark:text-indigo-400` when that location row is selected) rather than sky blue (`text-sky-400`)
+
+#### Scenario: Inline Create Freezer and Freezer badge icons match the label font color
+- **WHEN** a user views the inline `Create Freezer` action in `HierarchySelect` or the `Freezer` badge on `/go/l/:id`
+- **THEN** the snowflake icon inherits the control's text color (`currentColor`) without a separate icon color override

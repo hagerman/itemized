@@ -1,9 +1,10 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, AuthStatus } from "./api";
 import { HelpProvider } from "./components/HelpContext";
 import { Layout } from "./components/Layout";
+import { ThemeProvider, useTheme } from "./components/ThemeContext";
 import { AuthPage } from "./pages/AuthPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { ProductFormPage } from "./pages/ProductFormPage";
@@ -26,13 +27,21 @@ export interface AppRoutesProps {
 export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { setPreference } = useTheme();
   const { data: authStatus, isLoading } = useQuery({
     queryKey: ["auth-status"],
     queryFn: () => apiFetch<AuthStatus>("/api/auth/status"),
   });
 
+  useEffect(() => {
+    const userTheme = authStatus?.user?.theme;
+    if (userTheme && !authStatus?.demo_mode) {
+      setPreference(userTheme);
+    }
+  }, [authStatus?.user?.theme, authStatus?.demo_mode, setPreference]);
+
   if (isLoading || !authStatus) {
-    return <div className="flex h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">Loading itemized...</div>;
+    return <div className="flex h-screen items-center justify-center bg-slate-50 text-sm text-slate-600 dark:bg-slate-950 dark:text-slate-400">Loading itemized...</div>;
   }
 
   if (!authStatus.user) {
@@ -76,8 +85,8 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
       <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location" demoMode={demoMode} demoResetAt={demoResetAt}><LocationDetailPage /></Layout>} />
       <Route path="/go/:kind/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Quick Action" demoMode={demoMode} demoResetAt={demoResetAt}><QrActionPage /></Layout>} />
       <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt}><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
-      <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
-      <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
+      <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
+      <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -85,11 +94,13 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
 
 export const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
-      <HelpProvider>
-        <AppRoutes />
-      </HelpProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <HelpProvider>
+          <AppRoutes />
+        </HelpProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

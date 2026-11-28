@@ -31,22 +31,22 @@ export const SearchPage: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4">
+    <div className="mx-auto w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
       <div className="flex items-center gap-2">
-        <Search className="h-4 w-4 text-slate-400" />
+        <Search className="h-4 w-4 text-slate-600 dark:text-slate-400" />
         <input
           autoFocus
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           placeholder="Search products..."
-          className="flex-1 bg-transparent text-sm text-white outline-none"
+          className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white outline-none"
         />
         {query && (
           <button
             type="button"
             aria-label="Clear search"
             onClick={() => handleQueryChange("")}
-            className="text-slate-400 hover:text-white"
+            className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -54,7 +54,7 @@ export const SearchPage: React.FC = () => {
       </div>
       {showResultsSection && (
         <>
-          <hr className="my-3 border-slate-800" />
+          <hr className="my-3 border-slate-200 dark:border-slate-800" />
           {products.length > 0 ? (
             <div className="space-y-1">
               {products.map((p) => (
@@ -66,15 +66,15 @@ export const SearchPage: React.FC = () => {
                       state: { from: `${location.pathname}${location.search}` },
                     })
                   }
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-800"
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                  <span className="font-medium text-white">{p.name}</span>
-                  <span className="text-xs text-slate-400">{p.in_stock_count} in stock</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{p.name}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{p.in_stock_count} in stock</span>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="py-2 text-center text-sm text-slate-400">No products match this search.</p>
+            <p className="py-2 text-center text-sm text-slate-600 dark:text-slate-400">No products match this search.</p>
           )}
         </>
       )}

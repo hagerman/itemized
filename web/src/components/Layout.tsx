@@ -208,13 +208,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
   };
 
   const sidebarContent = (
-    <div className="flex h-full flex-col bg-slate-900 border-r border-slate-800">
-      <div className="flex h-[calc(4rem+env(safe-area-inset-top))] items-center justify-between border-b border-slate-800 px-4 pt-[env(safe-area-inset-top)]">
-        <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white">
+    <div className="flex h-full flex-col bg-white border-r border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+      <div className="flex h-[calc(4rem+env(safe-area-inset-top))] items-center justify-between border-b border-slate-200 px-4 pt-[env(safe-area-inset-top)] dark:border-slate-800">
+        <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-slate-900 dark:text-white">
           <BrandLogo className="h-8 w-8 shrink-0" />
           <span>itemized</span>
         </Link>
-        <button type="button" onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-1 text-slate-400 lg:hidden">
+        <button type="button" onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden">
           <X className="h-5 w-5" />
         </button>
       </div>
@@ -236,7 +236,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
                 to={buildFilterUrl({ status: item.id })}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? "bg-indigo-600/20 text-indigo-300" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  active
+                    ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-300"
+                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                 }`}
               >
                 <span className="flex items-center gap-2.5">
@@ -244,7 +246,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
                   {item.label}
                 </span>
                 {item.badge ? (
-                  <span className="rounded-full bg-indigo-600/30 px-2 py-0.5 text-xs font-semibold text-indigo-200">
+                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800 dark:bg-indigo-600/30 dark:text-indigo-200">
                     {item.badge}
                   </span>
                 ) : null}
@@ -253,37 +255,37 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           })}
         </div>
 
-        <div className="hidden space-y-1 border-t border-slate-800 pt-3 lg:block">
+        <div className="hidden space-y-1 border-t border-slate-200 pt-3 dark:border-slate-800 lg:block">
           <button
             type="button"
             onClick={() => setScannerOpen(true)}
-            className="flex w-full items-center gap-2.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="flex w-full items-center gap-2.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
           >
             <ScanBarcode className="h-4 w-4" /> Scan / Action
           </button>
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <Search className="h-4 w-4" /> Quick Search
           </button>
         </div>
 
         {/* Tabbed Locations / Categories Tree */}
-        <div className="border-t border-slate-800 pt-3">
-          <div className="mb-2 grid grid-cols-2 rounded-lg bg-slate-950 p-1 text-xs font-medium">
+        <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
+          <div className="mb-2 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-xs font-medium dark:bg-slate-950">
             <button
               type="button"
               onClick={() => setTreeTab("locations")}
-              className={`rounded-md py-1.5 ${treeTab === "locations" ? "bg-slate-800 text-white" : "text-slate-400"}`}
+              className={`rounded-md py-1.5 ${treeTab === "locations" ? "bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white dark:shadow-none" : "text-slate-600 dark:text-slate-400"}`}
             >
               Locations
             </button>
             <button
               type="button"
               onClick={() => setTreeTab("categories")}
-              className={`rounded-md py-1.5 ${treeTab === "categories" ? "bg-slate-800 text-white" : "text-slate-400"}`}
+              className={`rounded-md py-1.5 ${treeTab === "categories" ? "bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white dark:shadow-none" : "text-slate-600 dark:text-slate-400"}`}
             >
               Categories
             </button>
@@ -291,9 +293,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
 
           {treeTab === "locations" ? (
             <div className="space-y-0.5">
-              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-400">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-600 dark:text-slate-400">
                 <span>Filter by location</span>
-                <Link to="/locations" onClick={() => setMobileMenuOpen(false)} className="text-indigo-300 hover:underline">Manage</Link>
+                <Link to="/locations" onClick={() => setMobileMenuOpen(false)} className="text-indigo-700 hover:underline dark:text-indigo-300">Manage</Link>
               </div>
               {flattenHierarchyTree(buildHierarchyTree(locations)).map(({ item: l, depth }) => {
                 const isSelected = activeLocId === String(l.id);
@@ -305,23 +307,25 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
                     style={{ paddingLeft: `${depth * 14 + 10}px` }}
                     title={isSelected ? "Click to clear filter" : l.hierarchy_name}
                     className={`flex items-center justify-between rounded-lg py-1.5 pr-2.5 text-xs transition ${
-                      isSelected ? "bg-indigo-600/20 font-medium text-indigo-200" : "text-slate-300 hover:bg-slate-800"
+                      isSelected ? "bg-indigo-50 font-medium text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-200" : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`}
                   >
                     <span className="flex items-center gap-1.5 truncate">
-                      <MapPin className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-400" : "text-slate-500"}`} />
+                      <MapPin className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} />
                       <span className="truncate">{l.name}</span>
                     </span>
-                    {l.is_freezer && <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
+                    {l.is_freezer && (
+                      <Snowflake className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} />
+                    )}
                   </Link>
                 );
               })}
             </div>
           ) : (
             <div className="space-y-0.5">
-              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-400">
+              <div className="flex items-center justify-between px-2 py-1 text-xs text-slate-600 dark:text-slate-400">
                 <span>Filter by category</span>
-                <Link to="/categories" onClick={() => setMobileMenuOpen(false)} className="text-indigo-300 hover:underline">Manage</Link>
+                <Link to="/categories" onClick={() => setMobileMenuOpen(false)} className="text-indigo-700 hover:underline dark:text-indigo-300">Manage</Link>
               </div>
               {flattenHierarchyTree(buildHierarchyTree(categories)).map(({ item: c, depth }) => {
                 const isSelected = activeCatId === String(c.id);
@@ -333,10 +337,10 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
                     style={{ paddingLeft: `${depth * 14 + 10}px` }}
                     title={isSelected ? "Click to clear filter" : c.hierarchy_name}
                     className={`flex items-center gap-1.5 rounded-lg py-1.5 pr-2.5 text-xs transition ${
-                      isSelected ? "bg-indigo-600/20 font-medium text-indigo-200" : "text-slate-300 hover:bg-slate-800"
+                      isSelected ? "bg-indigo-50 font-medium text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-200" : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`}
                   >
-                    <FolderTree className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-400" : "text-slate-500"}`} />
+                    <FolderTree className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} />
                     <span className="truncate">{c.name}</span>
                   </Link>
                 );
@@ -346,14 +350,14 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
         </div>
       </nav>
 
-      <div className="space-y-1 border-t border-slate-800 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:pb-3">
+      <div className="space-y-1 border-t border-slate-200 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:border-slate-800 lg:pb-3">
         <Link
           to="/help"
           onClick={() => setMobileMenuOpen(false)}
           className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
             loc.pathname.startsWith("/help")
-              ? "bg-indigo-600/20 text-indigo-300"
-              : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-300"
+              : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           }`}
         >
           <HelpCircle className="h-4 w-4 shrink-0" />
@@ -365,8 +369,8 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
             onClick={() => setMobileMenuOpen(false)}
             className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
               loc.pathname.startsWith("/settings")
-                ? "bg-indigo-600/20 text-indigo-300"
-                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-300"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
             }`}
           >
             <Settings className="h-4 w-4 shrink-0" />
@@ -377,7 +381,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
               type="button"
               onClick={onLogout}
               aria-label="Logout"
-              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -388,7 +392,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
   );
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[80] focus:rounded-lg focus:bg-indigo-600 focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
@@ -402,23 +406,23 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
           <div className="w-72 max-w-[85vw]">{sidebarContent}</div>
-          <div className="flex-1 bg-black/60" onClick={() => setMobileMenuOpen(false)} />
+          <div className="flex-1 bg-slate-950/50 dark:bg-black/60" onClick={() => setMobileMenuOpen(false)} />
         </div>
       )}
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4 pt-[env(safe-area-inset-top)]">
+        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 pt-[env(safe-area-inset-top)] dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Open navigation"
-              className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 lg:hidden"
+              className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden"
             >
               <Menu className="h-5 w-5" />
             </button>
-            <h1 className="truncate text-lg font-semibold text-white">{title}</h1>
+            <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-white">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
             {headerActions}
@@ -427,9 +431,9 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
               onClick={() => openHelpForScreen(screenIdForPathname(loc.pathname))}
               aria-label="Help for this screen"
               title="Help"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-white"
             >
-              <HelpCircle className="h-4 w-4 text-indigo-300" />
+              <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
               <span className="hidden sm:inline">Help</span>
             </button>
           </div>
@@ -439,11 +443,11 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           <div
             role="status"
             data-testid="demo-banner"
-            className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-1.5 text-xs font-medium text-amber-200"
+            className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200"
           >
-            <RefreshCw className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <RefreshCw className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
             <span>
-              <strong className="font-semibold text-amber-100">Demo Mode</strong> — {formatDemoCountdown(demoResetAt, nowMs)}
+              <strong className="font-semibold text-amber-950 dark:text-amber-100">Demo Mode</strong> — {formatDemoCountdown(demoResetAt, nowMs)}
             </span>
           </div>
         )}
@@ -458,13 +462,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
       {/* Mobile Bottom Dock */}
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-40 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-3 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-3 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:hidden"
       >
         <Link
           to="/"
           aria-current={loc.pathname === "/" ? "page" : undefined}
           className={`flex flex-col items-center justify-center gap-0.5 text-xs transition ${
-            loc.pathname === "/" ? "font-semibold text-indigo-400" : "text-slate-400"
+            loc.pathname === "/" ? "font-semibold text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"
           }`}
         >
           <Box className="h-5 w-5" />
@@ -482,7 +486,7 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           to="/search"
           aria-current={loc.pathname === "/search" ? "page" : undefined}
           className={`flex flex-col items-center justify-center gap-0.5 text-xs transition ${
-            loc.pathname === "/search" ? "font-semibold text-indigo-400" : "text-slate-400"
+            loc.pathname === "/search" ? "font-semibold text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"
           }`}
         >
           <Search className="h-5 w-5" />
@@ -509,17 +513,17 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           ariaLabel="Quick Search"
           className="flex items-start justify-center p-4 pt-20"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-4 shadow-2xl">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
               <Search className="h-4 w-4 text-slate-400" />
               <input
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products..."
-                className="flex-1 bg-transparent text-sm text-white outline-none"
+                className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 outline-none dark:text-white dark:placeholder:text-slate-500"
               />
-              <button type="button" onClick={() => setSearchOpen(false)} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={() => setSearchOpen(false)} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -533,10 +537,10 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
                     setSearchQuery("");
                     navigate(`/products/${p.id}`);
                   }}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-800"
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
-                  <span className="font-medium text-white">{p.name}</span>
-                  <span className="text-xs text-slate-400">{p.in_stock_count} in stock</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{p.name}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{p.in_stock_count} in stock</span>
                 </button>
               ))}
             </div>
@@ -551,24 +555,24 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           ariaLabel="Keyboard Shortcuts"
           className="flex items-center justify-center p-4"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold text-white">Keyboard Shortcuts</h2>
-              <button type="button" onClick={() => setHelpOpen(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4" /></button>
+              <h2 className="font-semibold text-slate-900 dark:text-white">Keyboard Shortcuts</h2>
+              <button type="button" onClick={() => setHelpOpen(false)} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"><X className="h-4 w-4" /></button>
             </div>
-            <ul className="space-y-1.5 text-xs text-slate-300">
+            <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
               {KEYBOARD_SHORTCUTS.map((s) => (
                 <li key={s.keys} className="flex justify-between gap-3">
                   <span>{s.label}</span>
-                  <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-slate-200">{s.keys}</kbd>
+                  <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800 dark:bg-slate-800 dark:text-slate-200">{s.keys}</kbd>
                 </li>
               ))}
             </ul>
-            <div className="mt-4 border-t border-slate-800 pt-3 text-right">
+            <div className="mt-4 border-t border-slate-200 pt-3 text-right dark:border-slate-800">
               <Link
                 to="/help"
                 onClick={() => setHelpOpen(false)}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+                className="text-xs font-medium text-indigo-700 hover:text-indigo-800 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
               >
                 Open full Help guide →
               </Link>

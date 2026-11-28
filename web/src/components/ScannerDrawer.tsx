@@ -1119,26 +1119,26 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
   return (
     <ModalBackdrop onClose={onClose} ariaLabel="Scanner" className="flex items-end justify-center sm:items-center">
-      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl sm:rounded-2xl">
+      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-2xl sm:rounded-2xl">
         {/* Header & Mode Switcher */}
-        <div className="border-b border-slate-800 px-4 py-3">
+        <div className="border-b border-slate-200 dark:border-slate-800 px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-white">Scan &amp; Action</h2>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Scan &amp; Action</h2>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => openHelpForScreen("dialog/scanner")}
                 aria-label="Help for Scan and Action"
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-slate-800 hover:text-indigo-200"
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-800 dark:hover:text-indigo-200"
               >
                 <HelpCircle className="h-4 w-4" /> Help
               </button>
-              <button type="button" onClick={onClose} aria-label="Close scanner" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+              <button type="button" onClick={onClose} aria-label="Close scanner" className="rounded-lg p-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-5 gap-1 rounded-xl bg-slate-900 p-1">
+          <div className="grid grid-cols-5 gap-1 rounded-xl bg-white dark:bg-slate-900 p-1">
             {MODES.map((m) => (
               <button
                 key={m.id}
@@ -1148,7 +1148,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   resetSubState();
                 }}
                 className={`rounded-lg py-1.5 text-xs font-medium transition ${
-                  mode === m.id ? "bg-indigo-600 text-white shadow" : "text-slate-400 hover:text-slate-200"
+                  mode === m.id ? "bg-indigo-600 text-white shadow" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 {m.label}
@@ -1169,7 +1169,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
           />
 
           {toast && (
-            <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">
+            <div className="flex items-center justify-between rounded-xl border border-emerald-200 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">
               <span>{toast.message}</span>
               <button
                 type="button"
@@ -1181,8 +1181,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
             </div>
           )}
 
-          {statusMsg && <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-200">{statusMsg}</div>}
-          {errorMsg && <div className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{errorMsg}</div>}
+          {statusMsg && <div className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-500/10 px-3 py-2 text-sm text-indigo-800 dark:text-indigo-200">{statusMsg}</div>}
+          {errorMsg && <div className="rounded-lg border border-rose-200 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/15 px-3 py-2 text-sm text-rose-800 dark:text-rose-200">{errorMsg}</div>}
 
           {/* PURCHASE WORKFLOW */}
           {mode === "purchase" && hasPurchaseContent && (
@@ -1190,16 +1190,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               {lookupPhase === "upc" && (
                 <div
                   role="status"
-                  className="flex items-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200"
+                  className="flex items-center gap-2 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-500/10 px-3 py-2 text-xs text-indigo-800 dark:text-indigo-200"
                 >
-                  <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
                   <span>Looking up barcode in OpenFoodFacts...</span>
                 </div>
               )}
 
               {upcHint && (
-                <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-300">
-                  <Sparkles className="h-4 w-4 text-amber-400" />
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-700 dark:text-slate-300">
+                  <Sparkles className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                   <span>{upcHint}</span>
                 </div>
               )}
@@ -1207,15 +1207,15 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               {lookupPhase === "classify" && (
                 <div
                   role="status"
-                  className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+                  className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200"
                 >
-                  <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-700 dark:text-amber-400" />
                   <span>Classifying product...</span>
                 </div>
               )}
 
               {classifyWarning && lookupPhase === "idle" && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
                   Product classifier warning: {classifyWarning}
                 </div>
               )}
@@ -1223,10 +1223,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               {llmMatchedProduct && purchaseProduct && !creatingNew && (
                 <div
                   data-testid="llm-matched-product-banner"
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200"
                 >
                   <span>
-                    Matched existing product: <strong className="font-semibold text-white">{llmMatchedProduct.name}</strong>
+                    Matched existing product: <strong className="font-semibold text-slate-900 dark:text-white">{llmMatchedProduct.name}</strong>
                   </span>
                   <button
                     type="button"
@@ -1237,7 +1237,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                       setNewProdLocId(0);
                       setCreatingNew(true);
                     }}
-                    className="rounded-md border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
+                    className="rounded-md border border-emerald-200 dark:border-emerald-400/40 bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-500/30"
                   >
                     Create new product instead
                   </button>
@@ -1251,14 +1251,14 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     onChange={(e) => setPurchaseExistingQuery(e.target.value)}
                     placeholder="Search existing products to attach this barcode..."
                     aria-label="Search existing products"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-white placeholder-slate-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                   />
                 </div>
               )}
 
               {purchaseSearchHits.length > 0 && !purchaseProduct && (
                 <div className="space-y-1.5">
-                  <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Matching Products</div>
+                  <div className="text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">Matching Products</div>
                   {purchaseSearchHits.map((p) => (
                     <button
                       key={p.id}
@@ -1271,23 +1271,23 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         setPurchaseDueDate(computeDefaultDueDateStr(p));
                         setPurchasePrintMode(p.label_print_mode);
                       }}
-                      className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
+                      className="flex w-full items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
                     >
-                      <span className="font-medium text-slate-100">{p.name}</span>
-                      <span className="text-xs text-slate-400">{p.category_name}</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">{p.name}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400">{p.category_name}</span>
                     </button>
                   ))}
                 </div>
               )}
 
               {(purchaseProduct || creatingNew) && (
-                <form onSubmit={submitPurchase} className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                <form onSubmit={submitPurchase} className="space-y-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                       {creatingNew ? "Create Product & Add Items" : `Confirm & Add: ${purchaseProduct?.name}`}
                     </h3>
                     {creatingNew && purchaseSearchHits.length > 0 && (
-                      <span className="text-xs text-slate-400">Or pick a match above</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400">Or pick a match above</span>
                     )}
                   </div>
 
@@ -1302,14 +1302,14 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                             setNewProdName(e.target.value);
                           }}
                           placeholder="Product name"
-                          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white"
                         />
                         {liveSimilarProducts.length > 0 && (
                           <div
                             data-testid="scanner-similar-products"
-                            className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2"
+                            className="space-y-1 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-2"
                           >
-                            <div className="text-[11px] font-medium text-amber-200">Similar existing products</div>
+                            <div className="text-[11px] font-medium text-amber-900 dark:text-amber-200">Similar existing products</div>
                             {liveSimilarProducts.map((p) => (
                               <button
                                 key={p.id}
@@ -1323,10 +1323,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                                   setPurchaseDueDate(computeDefaultDueDateStr(p));
                                   setPurchasePrintMode(p.label_print_mode);
                                 }}
-                                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-amber-500/20"
+                                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs text-slate-900 dark:text-slate-100 hover:bg-amber-100 dark:hover:bg-amber-500/20"
                               >
                                 <span className="font-medium">{p.name}</span>
-                                <span className="text-[11px] text-amber-200">Use existing</span>
+                                <span className="text-[11px] text-amber-900 dark:text-amber-200">Use existing</span>
                               </button>
                             ))}
                           </div>
@@ -1349,9 +1349,9 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         value={newProdUseAvg ? "" : newProdDueDays}
                         onChange={setNewProdDueDays}
                         placeholder={newProdUseAvg ? "Due days (auto rolling avg)" : "Default due days (optional)"}
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-white disabled:cursor-not-allowed disabled:opacity-50"
                       />
-                      <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={newProdUseAvg}
@@ -1374,17 +1374,17 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   )}
 
                   <div className={`grid grid-cols-2 gap-3 ${printersEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-                    <label className="block min-w-0 text-xs text-slate-400">
+                    <label className="block min-w-0 text-xs text-slate-600 dark:text-slate-400">
                       Quantity
                       <NumberInput
                         min={1}
                         required
                         value={purchaseQty}
                         onChange={setPurchaseQty}
-                        className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                        className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-1.5 text-sm text-slate-900 dark:text-white"
                       />
                     </label>
-                    <div className="block min-w-0 text-xs text-slate-400">
+                    <div className="block min-w-0 text-xs text-slate-600 dark:text-slate-400">
                       <div className="mb-1">Location</div>
                       <HierarchySelect
                         items={effectiveLocations}
@@ -1400,22 +1400,22 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         showFreezerOption
                       />
                     </div>
-                    <label className="block min-w-0 text-xs text-slate-400">
+                    <label className="block min-w-0 text-xs text-slate-600 dark:text-slate-400">
                       Due Date
                       <input
                         type="date"
                         value={purchaseDueDate}
                         onChange={(e) => setPurchaseDueDate(e.target.value)}
-                        className="mt-1 block h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                        className="mt-1 block h-10 w-full min-w-0 max-w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-1.5 text-sm text-slate-900 dark:text-white"
                       />
                     </label>
                     {printersEnabled && (
-                      <label className="block min-w-0 text-xs text-slate-400">
+                      <label className="block min-w-0 text-xs text-slate-600 dark:text-slate-400">
                         Label Mode
                         <select
                           value={purchasePrintMode}
                           onChange={(e) => setPurchasePrintMode(e.target.value)}
-                          className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                          className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-1.5 text-sm text-slate-900 dark:text-white"
                         >
                           <option value="per_item">Per Item</option>
                           <option value="single">Single Label</option>
@@ -1426,11 +1426,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   </div>
 
                   {/* Expandable Variant & Pack Details */}
-                  <div className="border-t border-slate-800 pt-2">
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-2">
                     <button
                       type="button"
                       onClick={() => setShowVariantSection((v) => !v)}
-                      className="flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300"
+                      className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
                     >
                       {showVariantSection ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                       Variant &amp; Barcode Details
@@ -1438,14 +1438,14 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     {showVariantSection && (
                       <div className="mt-2 space-y-2">
                         {scanTarget && (
-                          <div className="flex items-center justify-between rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-2.5 py-1.5 text-xs text-indigo-200">
+                          <div className="flex items-center justify-between rounded-lg border border-indigo-200 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/15 px-2.5 py-1.5 text-xs text-indigo-800 dark:text-indigo-200">
                             <span>
                               Ready to scan into {scanTarget === "primary_barcode" ? "primary barcode" : "second barcode"}...
                             </span>
                             <button
                               type="button"
                               onClick={() => setScanTarget(null)}
-                              className="font-semibold text-indigo-300 hover:text-white"
+                              className="font-semibold text-indigo-700 dark:text-indigo-300 hover:text-slate-900 dark:hover:text-white"
                             >
                               Cancel
                             </button>
@@ -1456,7 +1456,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                           onChange={(e) => setVariantName(e.target.value)}
                           placeholder="Variant name (e.g. 16 oz)"
                           aria-label="Variant name"
-                          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                          className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-1.5 text-sm text-slate-900 dark:text-white"
                         />
                         <div className="flex items-center gap-2" data-testid="primary-barcode-row">
                           <div className="relative flex flex-1 items-center">
@@ -1465,8 +1465,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               onChange={(e) => setPurchaseBarcode(e.target.value)}
                               placeholder="Primary barcode"
                               aria-label="Primary barcode"
-                              className={`w-full rounded-lg border bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-white ${
-                                scanTarget === "primary_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-700"
+                              className={`w-full rounded-lg border bg-white dark:bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-slate-900 dark:text-white ${
+                                scanTarget === "primary_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-300 dark:border-slate-700"
                               }`}
                             />
                             <button
@@ -1477,7 +1477,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               className={`absolute right-1.5 rounded p-1 ${
                                 scanTarget === "primary_barcode"
                                   ? "bg-indigo-600 text-white"
-                                  : "text-slate-400 hover:bg-slate-800 hover:text-indigo-300"
+                                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-800 dark:hover:text-indigo-300"
                               }`}
                             >
                               <ScanBarcode className="h-4 w-4" />
@@ -1490,7 +1490,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                             placeholder="Qty"
                             aria-label="Primary pack quantity"
                             title="Primary pack quantity"
-                            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-center text-sm text-white"
+                            className="w-20 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-center text-sm text-slate-900 dark:text-white"
                           />
                         </div>
                         <div className="flex items-center gap-2" data-testid="second-barcode-row">
@@ -1500,8 +1500,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               onChange={(e) => setSecondBarcode(e.target.value)}
                               placeholder="Second barcode (optional)"
                               aria-label="Second barcode"
-                              className={`w-full rounded-lg border bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-white ${
-                                scanTarget === "second_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-700"
+                              className={`w-full rounded-lg border bg-white dark:bg-slate-950 py-1.5 pl-3 pr-9 text-sm text-slate-900 dark:text-white ${
+                                scanTarget === "second_barcode" ? "border-indigo-500 ring-1 ring-indigo-500" : "border-slate-300 dark:border-slate-700"
                               }`}
                             />
                             <button
@@ -1512,7 +1512,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               className={`absolute right-1.5 rounded p-1 ${
                                 scanTarget === "second_barcode"
                                   ? "bg-indigo-600 text-white"
-                                  : "text-slate-400 hover:bg-slate-800 hover:text-indigo-300"
+                                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-800 dark:hover:text-indigo-300"
                               }`}
                             >
                               <ScanBarcode className="h-4 w-4" />
@@ -1525,7 +1525,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                             placeholder="Qty"
                             aria-label="Second pack quantity"
                             title="Second pack quantity"
-                            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-center text-sm text-white"
+                            className="w-20 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-1.5 text-center text-sm text-slate-900 dark:text-white"
                           />
                         </div>
                         <MeasurementFields
@@ -1544,7 +1544,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   <button
                     type="submit"
                     disabled={purchaseMissingRequired}
-                    className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Confirm &amp; Add ({purchaseQty})
                   </button>
@@ -1556,16 +1556,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
           {/* MATCHING PRODUCTS (Consume / Open / Transfer) */}
           {actionSearchHits.length > 0 && (mode === "consume" || mode === "open" || mode === "transfer") && (
             <div className="space-y-1.5">
-              <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Matching Products</div>
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">Matching Products</div>
               {actionSearchHits.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => void loadProductCandidates(p, mode)}
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-left text-sm hover:border-indigo-500"
                 >
-                  <span className="font-medium text-slate-100">{p.name}</span>
-                  <span className="text-xs text-slate-400">{p.category_name}</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">{p.name}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400">{p.category_name}</span>
                 </button>
               ))}
             </div>
@@ -1574,23 +1574,23 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
           {/* TRANSFER STAGED LIST & DESTINATION COMPLETION */}
           {mode === "transfer" && (
             <div className="space-y-3">
-              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+              <div className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  <div className="text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Items to Transfer ({transferItems.length})
                   </div>
                   {transferItems.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setTransferItems([])}
-                      className="text-xs text-slate-400 hover:text-slate-200"
+                      className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                     >
                       Clear
                     </button>
                   )}
                 </div>
                 {transferItems.length === 0 ? (
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
                     Scan item, product, or UPC barcodes to add items to the transfer list.
                   </p>
                 ) : (
@@ -1598,16 +1598,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     {transferItems.map((it) => (
                       <div
                         key={it.id}
-                        className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
+                        className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
                       >
                         <div className="min-w-0">
-                          <div className="truncate font-medium text-slate-100">
+                          <div className="truncate font-medium text-slate-900 dark:text-slate-100">
                             {it.product_name}
                             {it.variant_name ? (
-                              <span className="ml-1.5 text-xs font-normal text-slate-400">({it.variant_name})</span>
+                              <span className="ml-1.5 text-xs font-normal text-slate-600 dark:text-slate-400">({it.variant_name})</span>
                             ) : null}
                           </div>
-                          <div className="text-xs text-slate-400">
+                          <div className="text-xs text-slate-600 dark:text-slate-400">
                             {it.location_name || "No location"} {it.due_on_date ? `• Due ${it.due_on_date}` : ""}
                           </div>
                         </div>
@@ -1615,7 +1615,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                           type="button"
                           onClick={() => setTransferItems((prev) => prev.filter((x) => x.id !== it.id))}
                           aria-label={`Remove ${it.product_name} #${it.id}`}
-                          className="ml-2 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                          className="ml-2 rounded p-1 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-rose-700 dark:hover:text-rose-300"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -1625,8 +1625,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                 )}
               </div>
 
-              <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                <div className="text-xs font-medium text-slate-400">
+              <div className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
+                <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
                   Destination Location (scan location QR or select to complete transfer)
                 </div>
                 <HierarchySelect
@@ -1646,7 +1646,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                       void executeTransfer(transferDest);
                     }
                   }}
-                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Complete Transfer ({transferItems.length})
                 </button>
@@ -1656,8 +1656,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
           {/* UNKNOWN BARCODE INLINE ASSOCIATION (Consume/Open) */}
           {unknownBarcodeForAssoc && (mode === "consume" || mode === "open") && (
-            <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-              <div className="text-xs font-medium text-amber-200">
+            <div className="space-y-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3">
+              <div className="text-xs font-medium text-amber-900 dark:text-amber-200">
                 Link barcode <code>{unknownBarcodeForAssoc}</code> to an existing product:
               </div>
               <div className="flex gap-2">
@@ -1665,7 +1665,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   value={assocQuery}
                   onChange={(e) => setAssocQuery(e.target.value)}
                   placeholder="Search product name..."
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
+                  className="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-1.5 text-sm text-slate-900 dark:text-white"
                 />
                 <button
                   type="button"
@@ -1683,10 +1683,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   key={p.id}
                   type="button"
                   onClick={() => associateUnknownBarcode(p)}
-                  className="flex w-full items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-left text-sm hover:bg-slate-800"
+                  className="flex w-full items-center justify-between rounded-lg bg-white dark:bg-slate-900 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   <span>{p.name}</span>
-                  <span className="text-xs text-indigo-400">Link</span>
+                  <span className="text-xs text-indigo-600 dark:text-indigo-400">Link</span>
                 </button>
               ))}
             </div>
@@ -1694,15 +1694,15 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
 
           {/* ITEM SELECTION LIST (Consume / Open / Transfer) */}
           {candidateItems.length > 0 && mode !== "purchase" && mode !== "inventory" && (
-            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-              <div className="text-xs font-medium uppercase tracking-wider text-slate-400">
+            <div className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
+              <div className="text-xs font-medium uppercase tracking-wider text-slate-600 dark:text-slate-400">
                 {candidateHeading || "Select items (soonest due first)"}
               </div>
               {candidateItems.map((it) => {
                 const checked = selectedItemIds.includes(it.id);
                 const alreadyStaged = mode === "transfer" && transferItems.some((t) => t.id === it.id);
                 return (
-                  <label key={it.id} className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
+                  <label key={it.id} className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -1714,19 +1714,19 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         }
                       />
                       <div>
-                        <div className="font-medium text-slate-100">
+                        <div className="font-medium text-slate-900 dark:text-slate-100">
                           {it.product_name}
                           {it.variant_name ? (
-                            <span className="ml-1.5 text-xs font-normal text-slate-400">({it.variant_name})</span>
+                            <span className="ml-1.5 text-xs font-normal text-slate-600 dark:text-slate-400">({it.variant_name})</span>
                           ) : null}
                         </div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-slate-600 dark:text-slate-400">
                           {it.location_name || "No location"} {it.due_on_date ? `• Due ${it.due_on_date}` : ""}
                         </div>
                       </div>
                     </div>
                     {alreadyStaged && (
-                      <span className="rounded bg-indigo-500/20 px-1.5 py-0.5 text-[11px] font-medium text-indigo-300">
+                      <span className="rounded bg-indigo-50 dark:bg-indigo-500/20 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:text-indigo-300">
                         In list
                       </span>
                     )}
@@ -1738,7 +1738,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   type="button"
                   disabled={selectedItemIds.length === 0}
                   onClick={addCandidatesToTransfer}
-                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Add to Transfer List ({selectedItemIds.length})
                 </button>
@@ -1746,7 +1746,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                 <button
                   type="button"
                   onClick={applyCandidateItems}
-                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                  className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
                 >
                   Apply {mode} ({selectedItemIds.length})
                 </button>
@@ -1757,8 +1757,8 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
           {/* INVENTORY AUDIT WORKFLOW */}
           {mode === "inventory" && (
             <div className="space-y-3">
-              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                <div className="mb-1 text-xs font-medium text-slate-400">Location to Audit</div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
+                <div className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">Location to Audit</div>
                 <HierarchySelect
                   items={locations}
                   value={invLocation?.id ?? null}
@@ -1777,19 +1777,19 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               </div>
 
               {invLocation && !invSummary && (
-                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
+                <div className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3">
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                     <span>Scanned: {invScannedItemIds.length} items, {invScannedProducts.reduce((s, p) => s + p.quantity, 0)} product units</span>
                     <button
                       type="button"
                       onClick={buildInventorySummary}
-                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500"
                     >
                       Review Reconciliation
                     </button>
                   </div>
                   {invScannedProducts.map((sp) => (
-                    <div key={sp.product_id} className="flex items-center justify-between rounded bg-slate-950 px-3 py-1.5 text-sm">
+                    <div key={sp.product_id} className="flex items-center justify-between rounded bg-white dark:bg-slate-950 px-3 py-1.5 text-sm">
                       <span>{sp.product_name}</span>
                       <NumberInput
                         min={1}
@@ -1799,7 +1799,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                             prev.map((x) => (x.product_id === sp.product_id ? { ...x, quantity: qty } : x))
                           )
                         }
-                        className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-right text-xs"
+                        className="w-16 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-right text-xs"
                       />
                     </div>
                   ))}
@@ -1807,10 +1807,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
               )}
 
               {invSummary && (
-                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm">
-                  <h3 className="font-semibold text-white">Reconciliation Summary</h3>
+                <div className="space-y-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 p-3 text-sm">
+                  <h3 className="font-semibold text-slate-900 dark:text-white">Reconciliation Summary</h3>
                   <div>
-                    <div className="text-xs font-semibold text-rose-300">Consume Missing ({invSummary.to_consume.length})</div>
+                    <div className="text-xs font-semibold text-rose-700 dark:text-rose-300">Consume Missing ({invSummary.to_consume.length})</div>
                     {invSummary.to_consume.map((it) => (
                       <label key={it.id} className="mt-1 flex items-center gap-2 text-xs">
                         <input
@@ -1825,7 +1825,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     ))}
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-amber-300">Transfer Here ({invSummary.to_transfer.length})</div>
+                    <div className="text-xs font-semibold text-amber-800 dark:text-amber-300">Transfer Here ({invSummary.to_transfer.length})</div>
                     {invSummary.to_transfer.map((it) => (
                       <label key={it.id} className="mt-1 flex items-center gap-2 text-xs">
                         <input
@@ -1840,11 +1840,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                     ))}
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-emerald-300">Confirmed ({invSummary.to_confirm.length})</div>
+                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Confirmed ({invSummary.to_confirm.length})</div>
                   </div>
                   {invSummary.to_create.length > 0 && (
                     <div>
-                      <div className="text-xs font-semibold text-indigo-300">Create New ({invSummary.to_create.length})</div>
+                      <div className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Create New ({invSummary.to_create.length})</div>
                       {invSummary.to_create.map((c) => (
                         <div key={c.product_id} className="mt-1 flex items-center justify-between gap-2 text-xs">
                           <label className="flex items-center gap-2">
@@ -1869,7 +1869,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                                 [c.product_id]: { ...prev[c.product_id], due_on_date: e.target.value },
                               }))
                             }
-                            className="rounded border border-slate-700 bg-slate-950 px-2 py-0.5 text-xs"
+                            className="rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-0.5 text-xs"
                           />
                         </div>
                       ))}

@@ -280,12 +280,12 @@ export function HierarchySelect<T extends HierarchyItem>({
       style={inlineMenu ? undefined : portalStyle}
       className={
         inlineMenu
-          ? "mt-1.5 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-          : "flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+          ? "mt-1.5 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+          : "flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
       }
     >
       {/* Persistent cross-hierarchy search at all drill levels */}
-      <div className="border-b border-slate-800 p-2">
+      <div className="border-b border-slate-200 p-2 dark:border-slate-800">
         <div className="relative flex items-center">
           <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-slate-400" />
           <input
@@ -313,14 +313,14 @@ export function HierarchySelect<T extends HierarchyItem>({
                 : "Search all..."
             }
             aria-label={`Search ${ariaLabel || "options"}`}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 py-1.5 pl-8 pr-7 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 bg-slate-50 py-1.5 pl-8 pr-7 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-950"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="absolute right-2 rounded p-0.5 text-slate-400 hover:text-white"
+              className="absolute right-2 rounded p-0.5 text-slate-400 hover:text-slate-900 dark:hover:text-white"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -341,14 +341,16 @@ export function HierarchySelect<T extends HierarchyItem>({
                   type="button"
                   onClick={() => selectAndClose(item.id)}
                   className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition ${
-                    isSelected ? "bg-indigo-600/20 text-indigo-200" : "text-slate-200 hover:bg-slate-800"
+                    isSelected ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-200" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                   }`}
                 >
                   <span className="flex items-center gap-1.5 truncate">
                     <span className="truncate">{item.hierarchy_name || item.name}</span>
-                    {item.is_freezer && <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
+                    {item.is_freezer && (
+                      <Snowflake className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} />
+                    )}
                   </span>
-                  {isSelected && <Check className="h-4 w-4 shrink-0 text-indigo-400" />}
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
                 </button>
               );
             })
@@ -357,16 +359,16 @@ export function HierarchySelect<T extends HierarchyItem>({
           <>
             {currentParent ? (
               <>
-                <div className="flex items-center gap-1 border-b border-slate-800 px-2 py-1.5">
+                <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
                   <button
                     type="button"
                     aria-label="Back"
                     onClick={() => setDrillStack((prev) => prev.slice(0, -1))}
-                    className="flex items-center justify-center rounded-md p-1 text-slate-300 hover:bg-slate-800 hover:text-white"
+                    className="flex items-center justify-center rounded-md p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="truncate text-xs font-semibold text-slate-400">
+                  <span className="truncate text-xs font-semibold text-slate-600 dark:text-slate-400">
                     {currentParent.hierarchy_name || currentParent.name}
                   </span>
                 </div>
@@ -374,10 +376,10 @@ export function HierarchySelect<T extends HierarchyItem>({
                 <button
                   type="button"
                   onClick={() => selectAndClose(currentParent.id)}
-                  className="flex w-full items-center justify-between border-b border-slate-800 px-3 py-2 text-left text-sm font-semibold text-indigo-300 hover:bg-indigo-600/20"
+                  className="flex w-full items-center justify-between border-b border-slate-200 px-3 py-2 text-left text-sm font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-slate-800 dark:text-indigo-300 dark:hover:bg-indigo-600/20"
                 >
                   <span className="truncate">Select &ldquo;{currentParent.name}&rdquo;</span>
-                  {value === currentParent.id && <Check className="h-4 w-4 shrink-0 text-indigo-400" />}
+                  {value === currentParent.id && <Check className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
                 </button>
 
                 <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -389,10 +391,10 @@ export function HierarchySelect<T extends HierarchyItem>({
                 <button
                   type="button"
                   onClick={() => selectAndClose(null)}
-                  className="flex w-full items-center justify-between border-b border-slate-800 px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-800"
+                  className="flex w-full items-center justify-between border-b border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   <span>{emptyLabel}</span>
-                  {value == null && <Check className="h-4 w-4 text-indigo-400" />}
+                  {value == null && <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />}
                 </button>
               )
             )}
@@ -411,17 +413,19 @@ export function HierarchySelect<T extends HierarchyItem>({
                     type="button"
                     onClick={() => handleItemClick(item)}
                     className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition ${
-                      isSelected ? "bg-indigo-600/20 text-indigo-200" : "text-slate-200 hover:bg-slate-800"
+                      isSelected ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-600/20 dark:text-indigo-200" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                     }`}
                   >
                     <span className="flex items-center gap-1.5 truncate">
                       <span className="truncate">{item.name}</span>
-                      {item.is_freezer && <Snowflake className="h-3.5 w-3.5 shrink-0 text-sky-400" />}
+                      {item.is_freezer && (
+                      <Snowflake className={`h-3.5 w-3.5 shrink-0 ${isSelected ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`} />
+                    )}
                     </span>
                     {hasChildren ? (
                       <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
                     ) : isSelected ? (
-                      <Check className="h-4 w-4 shrink-0 text-indigo-400" />
+                      <Check className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
                     ) : null}
                   </button>
                 );
@@ -432,9 +436,9 @@ export function HierarchySelect<T extends HierarchyItem>({
       </div>
 
       {(canCreateInline || createError) && (
-        <div className="border-t border-slate-800 bg-slate-900/95 p-2 space-y-1.5">
+        <div className="border-t border-slate-200 bg-slate-50 p-2 space-y-1.5 dark:border-slate-800 dark:bg-slate-900/95">
           {createError && (
-            <div role="alert" className="rounded-md bg-rose-500/15 px-2.5 py-1.5 text-xs text-rose-300">
+            <div role="alert" className="rounded-md bg-rose-50 px-2.5 py-1.5 text-xs text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
               {createError}
             </div>
           )}
@@ -444,7 +448,7 @@ export function HierarchySelect<T extends HierarchyItem>({
                 type="button"
                 disabled={creating}
                 onClick={() => void handleCreateInline(false)}
-                className="flex w-full items-center gap-1.5 rounded-lg bg-indigo-600/20 px-2.5 py-2 text-left text-xs font-semibold text-indigo-200 hover:bg-indigo-600/30 disabled:opacity-50"
+                className="flex w-full items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-2 text-left text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-600/20 dark:text-indigo-200 dark:hover:bg-indigo-600/30"
               >
                 {creating ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -461,7 +465,7 @@ export function HierarchySelect<T extends HierarchyItem>({
                   type="button"
                   disabled={creating}
                   onClick={() => void handleCreateInline(true)}
-                  className="flex w-full items-center gap-1.5 rounded-lg bg-sky-500/15 px-2.5 py-2 text-left text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50"
+                  className="flex w-full items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-2 text-left text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-600/20 dark:text-indigo-200 dark:hover:bg-indigo-600/30"
                 >
                   {creating ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -471,7 +475,7 @@ export function HierarchySelect<T extends HierarchyItem>({
                   <span className="flex min-w-0 items-center gap-1">
                     <span className="shrink-0">Create Freezer</span>
                     {" "}
-                    <Snowflake aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                    <Snowflake aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">
                       &ldquo;{trimmedQuery}&rdquo;
                       {currentParent ? ` in ${currentParent.name}` : ""}
@@ -500,11 +504,11 @@ export function HierarchySelect<T extends HierarchyItem>({
             setOpen(true);
           }
         }}
-        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 text-left text-white hover:border-slate-600 focus:border-indigo-500 focus:outline-none ${
+        className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white text-left text-slate-900 hover:border-slate-400 focus:border-indigo-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:hover:border-slate-600 dark:focus:border-indigo-500 ${
           size === "sm" ? "h-8 px-2.5 text-xs" : "h-10 px-3 py-1.5 text-sm"
         }`}
       >
-        <span className={`truncate ${selectedItem ? "text-white" : "text-slate-400"}`}>
+        <span className={`truncate ${selectedItem ? "text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"}`}>
           {selectedItem ? selectedItem.hierarchy_name || selectedItem.name : allowEmpty ? emptyLabel : placeholder}
         </span>
         <ChevronDown className={`shrink-0 text-slate-400 ${size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"}`} />

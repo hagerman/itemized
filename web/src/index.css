@@ -1,7 +1,12 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
     color-scheme: dark;
   }
 
@@ -44,16 +49,22 @@
 .help-prose h2 {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #0f172a;
   margin-top: 1.25rem;
   margin-bottom: 0.45rem;
+}
+.dark .help-prose h2 {
+  color: #ffffff;
 }
 .help-prose h3 {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #1e293b;
   margin-top: 1rem;
   margin-bottom: 0.35rem;
+}
+.dark .help-prose h3 {
+  color: #e2e8f0;
 }
 .help-prose p {
   margin: 0.6rem 0;
@@ -73,26 +84,41 @@
   margin: 0.25rem 0;
 }
 .help-prose a {
-  color: #a5b4fc;
+  color: #4338ca;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .help-prose a:hover {
+  color: #3730a3;
+}
+.dark .help-prose a {
+  color: #a5b4fc;
+}
+.dark .help-prose a:hover {
   color: #c7d2fe;
 }
 .help-prose img {
   max-width: 100%;
   height: auto;
   border-radius: 0.75rem;
-  border: 1px solid #334155;
+  border: 1px solid #cbd5e1;
   margin: 0.75rem 0;
 }
+.dark .help-prose img {
+  border-color: #334155;
+}
 .help-prose code {
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   border-radius: 0.25rem;
   padding: 0.05rem 0.3rem;
   font-size: 0.85em;
+  color: #0f172a;
+}
+.dark .help-prose code {
+  background: #0f172a;
+  border-color: #334155;
+  color: inherit;
 }
 .help-prose .table-wrap {
   overflow-x: auto;
@@ -105,12 +131,20 @@
 }
 .help-prose th,
 .help-prose td {
-  border: 1px solid #334155;
+  border: 1px solid #e2e8f0;
   padding: 0.4rem 0.55rem;
   text-align: left;
 }
+.dark .help-prose th,
+.dark .help-prose td {
+  border-color: #334155;
+}
 .help-prose th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 600;
+}
+.dark .help-prose th {
   background: #1e293b;
   color: #f8fafc;
-  font-weight: 600;
 }
