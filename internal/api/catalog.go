@@ -911,12 +911,50 @@ func (s *Server) handleListProducts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	compareName := func(a, b Product) bool {
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+	}
 	switch r.URL.Query().Get("sort") {
+	case "category":
+		sort.SliceStable(filtered, func(i, j int) bool {
+			a, b := strings.ToLower(filtered[i].CategoryName), strings.ToLower(filtered[j].CategoryName)
+			if a == b {
+				return compareName(filtered[i], filtered[j])
+			}
+			if a == "" {
+				return false
+			}
+			if b == "" {
+				return true
+			}
+			return a < b
+		})
+	case "location":
+		sort.SliceStable(filtered, func(i, j int) bool {
+			a, b := strings.ToLower(filtered[i].NextLocationName), strings.ToLower(filtered[j].NextLocationName)
+			if a == b {
+				return compareName(filtered[i], filtered[j])
+			}
+			if a == "" {
+				return false
+			}
+			if b == "" {
+				return true
+			}
+			return a < b
+		})
+	case "stock":
+		sort.SliceStable(filtered, func(i, j int) bool {
+			if filtered[i].InStockCount != filtered[j].InStockCount {
+				return filtered[i].InStockCount > filtered[j].InStockCount
+			}
+			return compareName(filtered[i], filtered[j])
+		})
 	case "due_date":
 		sort.SliceStable(filtered, func(i, j int) bool {
 			a, b := filtered[i].NextDueOnDate, filtered[j].NextDueOnDate
 			if a == nil && b == nil {
-				return filtered[i].Name < filtered[j].Name
+				return compareName(filtered[i], filtered[j])
 			}
 			if a == nil {
 				return false
@@ -924,11 +962,27 @@ func (s *Server) handleListProducts(w http.ResponseWriter, r *http.Request) {
 			if b == nil {
 				return true
 			}
-			return *a < *b
+			if *a != *b {
+				return *a < *b
+			}
+			return compareName(filtered[i], filtered[j])
 		})
-	case "stock":
+	case "shopping_list":
 		sort.SliceStable(filtered, func(i, j int) bool {
-			return filtered[i].InStockCount > filtered[j].InStockCount
+			if filtered[i].OnShoppingList != filtered[j].OnShoppingList {
+				return filtered[i].OnShoppingList
+			}
+			var aAmt, bAmt int
+			if filtered[i].LowStockAmount != nil {
+				aAmt = *filtered[i].LowStockAmount
+			}
+			if filtered[j].LowStockAmount != nil {
+				bAmt = *filtered[j].LowStockAmount
+			}
+			if aAmt != bAmt {
+				return aAmt > bAmt
+			}
+			return compareName(filtered[i], filtered[j])
 		})
 	}
 

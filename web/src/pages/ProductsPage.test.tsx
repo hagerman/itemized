@@ -113,13 +113,35 @@ describe("ProductsPage responsive index toolbar", () => {
     const row = screen.getByTestId("products-toolbar-row");
     expect(row).toHaveClass("flex-nowrap");
 
-    // Full sort select is hidden below @[540px] and shown at @[540px]:
+    // Both toolbar sort controls are wrapped in a mobile-only container hidden on desktop (md:hidden)
+    const mobileSortWrapper = screen.getByTestId("products-mobile-sort");
+    expect(mobileSortWrapper).toHaveClass("contents", "md:hidden");
+
+    // Full sort select is hidden below @[540px] and shown at @[540px]: (only on mobile)
     const fullSelect = screen.getByRole("combobox", { name: "Sort products" }) as HTMLSelectElement;
+    expect(mobileSortWrapper).toContainElement(fullSelect);
     expect(fullSelect).toHaveClass("hidden", "@[540px]:block");
     expect(fullSelect.value).toBe("name");
+    expect(Array.from(fullSelect.options).map((o) => o.value)).toEqual([
+      "name",
+      "category",
+      "location",
+      "stock",
+      "due_date",
+      "shopping_list",
+    ]);
+    expect(Array.from(fullSelect.options).map((o) => o.text)).toEqual([
+      "Sort: Name",
+      "Sort: Category",
+      "Sort: Location",
+      "Sort: Stock Count",
+      "Sort: Soonest Due",
+      "Sort: Shopping List",
+    ]);
 
-    // Compact sort button is shown below @[540px] and opens an accessible listbox
+    // Compact sort button is shown below @[540px] and opens an accessible listbox in table column order
     const sortButton = screen.getByRole("button", { name: "Sort products" });
+    expect(mobileSortWrapper).toContainElement(sortButton);
     expect(sortButton.parentElement).toHaveClass("@[540px]:hidden");
     expect(sortButton).toHaveAttribute("aria-expanded", "false");
 
@@ -129,10 +151,19 @@ describe("ProductsPage responsive index toolbar", () => {
     const newLabel = screen.getByText("New Product");
     expect(newLabel).toHaveClass("hidden", "@[540px]:inline");
 
-    // Open compact sort dropdown, verify active selection, and switch to Soonest Due
+    // Open compact sort dropdown, verify option order and active selection, and switch to Soonest Due
     fireEvent.click(sortButton);
     expect(sortButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("listbox", { name: "Sort options" })).toBeInTheDocument();
+    const listbox = screen.getByRole("listbox", { name: "Sort options" });
+    expect(listbox).toBeInTheDocument();
+    expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Name",
+      "Category",
+      "Location",
+      "Stock Count",
+      "Soonest Due",
+      "Shopping List",
+    ]);
     expect(screen.getByRole("option", { name: "Name" })).toHaveAttribute("aria-selected", "true");
 
     fireEvent.click(screen.getByRole("option", { name: "Soonest Due" }));
@@ -249,7 +280,7 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
     expect(await screen.findByTestId("product-detail-route")).toBeInTheDocument();
   });
 
-  it("updates sort order and aria-sort when clicking desktop table column headers", async () => {
+  it("updates sort order and aria-sort when clicking any desktop table column header", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -258,37 +289,43 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
     const tableContainer = await screen.findByTestId("products-table");
     const fullSelect = screen.getByRole("combobox", { name: "Sort products" }) as HTMLSelectElement;
 
-    const productBtn = within(tableContainer).getByRole("button", { name: "Product" });
-    const stockBtn = within(tableContainer).getByRole("button", { name: "Stock" });
-    const nextDueBtn = within(tableContainer).getByRole("button", { name: "Next Due" });
+    const columnCases: Array<{ header: string; sortKey: string; ariaSort: "ascending" | "descending" }> = [
+      { header: "Category", sortKey: "category", ariaSort: "ascending" },
+      { header: "Location", sortKey: "location", ariaSort: "ascending" },
+      { header: "Stock", sortKey: "stock", ariaSort: "descending" },
+      { header: "Next Due", sortKey: "due_date", ariaSort: "ascending" },
+      { header: "Shopping List", sortKey: "shopping_list", ariaSort: "descending" },
+      { header: "Product", sortKey: "name", ariaSort: "ascending" },
+    ];
 
-    expect(productBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
-    expect(stockBtn.closest("th")).not.toHaveAttribute("aria-sort");
-
-    fireEvent.click(stockBtn);
-    expect(fullSelect.value).toBe("stock");
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/products?status=in_stock&sort=stock", expect.anything())
-    );
-    const updatedTableAfterStock = await screen.findByTestId("products-table");
-    expect(within(updatedTableAfterStock).getByRole("button", { name: "Stock" }).closest("th")).toHaveAttribute(
+    expect(within(tableContainer).getByRole("button", { name: "Product" }).closest("th")).toHaveAttribute(
       "aria-sort",
       "ascending"
     );
-    expect(within(updatedTableAfterStock).getByRole("button", { name: "Product" }).closest("th")).not.toHaveAttribute(
+    expect(within(tableContainer).getByRole("button", { name: "Category" }).closest("th")).not.toHaveAttribute(
       "aria-sort"
     );
 
-    fireEvent.click(within(updatedTableAfterStock).getByRole("button", { name: "Next Due" }));
-    expect(fullSelect.value).toBe("due_date");
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/products?status=in_stock&sort=due_date", expect.anything())
-    );
-    const updatedTableAfterDue = await screen.findByTestId("products-table");
-    expect(within(updatedTableAfterDue).getByRole("button", { name: "Next Due" }).closest("th")).toHaveAttribute(
-      "aria-sort",
-      "ascending"
-    );
+    for (const { header, sortKey, ariaSort } of columnCases) {
+      const currentTable = await screen.findByTestId("products-table");
+      fireEvent.click(within(currentTable).getByRole("button", { name: header }));
+      expect(fullSelect.value).toBe(sortKey);
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(`/api/products?status=in_stock&sort=${sortKey}`, expect.anything())
+      );
+      const updatedTable = await screen.findByTestId("products-table");
+      expect(within(updatedTable).getByRole("button", { name: header }).closest("th")).toHaveAttribute(
+        "aria-sort",
+        ariaSort
+      );
+      for (const other of columnCases) {
+        if (other.header !== header) {
+          expect(within(updatedTable).getByRole("button", { name: other.header }).closest("th")).not.toHaveAttribute(
+            "aria-sort"
+          );
+        }
+      }
+    }
   });
 
   it("supports desktop bulk selection, confirmation cancellation, bulk deletion, and filter selection reset", async () => {

@@ -57,7 +57,7 @@ The navigation sidebar SHALL provide status views (`In Stock`, `Shopping List`, 
 - **THEN** the product list filters to in-stock products in that location (and its descendants) while keeping the `In Stock` status active
 
 ### Requirement: Products list, sorting, and quick search
-The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes, bulk deletion, bulk product merging (when at least two products are selected), and bulk LLM name reclassification (when at least one product is selected and an LLM provider is configured), and a single-column mobile card layout; provide responsive filter, sort, clear-filters, and create controls synced with desktop table column-header sorting; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back without exposing product merge or reclassification controls.
+The Products view SHALL display matching products with stock counts, next-due item location when in stock, next due date, and shopping-list/overdue indicators in a compact desktop table with desktop-only selection checkboxes, bulk deletion, bulk product merging (when at least two products are selected), and bulk LLM name reclassification (when at least one product is selected and an LLM provider is configured), and a single-column mobile card layout; provide responsive filter, clear-filters, and create controls alongside desktop table column-header sorting across all six data columns (`Product`, `Category`, `Location`, `Stock`, `Next Due`, `Shopping List`) and a mobile-only sort dropdown (hidden on desktop viewports `>= 768px`) whose options appear in the exact order of the table columns; and expose fuzzy search via desktop Quick Search and a dedicated mobile `/search` page that preserves results when navigating back without exposing product merge or reclassification controls.
 
 #### Scenario: Desktop viewports display inventory list pages as a compact table
 - **WHEN** a user views an inventory list page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a desktop viewport (`>= 768px`)
@@ -95,20 +95,25 @@ The Products view SHALL display matching products with stock counts, next-due it
 - **THEN** no selection checkboxes, product merge actions, or bulk reclassification actions are displayed
 
 #### Scenario: Sorting inventory list via desktop table column headers
-- **WHEN** a user views an inventory list page on a desktop viewport and clicks the `Product`, `Stock`, or `Next Due` column header button
-- **THEN** the product list sort order updates to `name`, `stock`, or `due_date` respectively, stays synchronized with the toolbar sort selector, and indicates the active sort column
+- **WHEN** a user views an inventory list page on a desktop viewport and clicks the `Product`, `Category`, `Location`, `Stock`, `Next Due`, or `Shopping List` column header button
+- **THEN** the product list sort order updates to `name`, `category`, `location`, `stock`, `due_date`, or `shopping_list` respectively, fetches `/api/products` with that `sort` parameter, stays synchronized with the shared sort state, and indicates the active sort column
+
+#### Scenario: Desktop viewports hide toolbar sort dropdown controls
+- **WHEN** a user views an inventory list page on a desktop viewport (`>= 768px`) where the desktop table is displayed
+- **THEN** both the full `Sort: ...` `<select>` dropdown and the compact icon-only sort dropdown button in the toolbar are hidden so users sort via the table column headers instead
 
 #### Scenario: Compact single-row toolbar on narrow index viewports
-- **WHEN** a user views an inventory index page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a narrow viewport where the filter input, full `Sort: ...` select, and `+ New Product` button do not fit on one line
+- **WHEN** a user views an inventory index page (`In Stock`, `Shopping List`, `Due Soon`, `Overdue`, `All Items`, or a filtered category/location view) on a narrow mobile viewport (`< 768px`) where the filter input, full `Sort: ...` select, and `+ New Product` button do not fit on one line
 - **THEN** the toolbar keeps the filter input, sort control, and create button on a single horizontal line by rendering an icon-only sort dropdown button (with accessible label `Sort products`) and an icon-only `+` link (with accessible label `New Product`) instead of the full-width text controls
 
 #### Scenario: Changing sort order via the compact sort dropdown button
-- **WHEN** a user activates the compact sort dropdown button on a mobile index page
-- **THEN** a dropdown menu opens displaying the available sort options (`Name`, `Soonest Due`, `Stock Count`) with the active option indicated, selecting an option updates the product list sort order and closes the menu, and clicking outside or pressing `Escape` closes the menu without changing the sort order
+- **WHEN** a user activates the compact sort dropdown button on a mobile index page (`< 768px`)
+- **THEN** a dropdown menu opens displaying the available sort options in the exact order of the desktop table columns (`Name`, `Category`, `Location`, `Stock Count`, `Soonest Due`, `Shopping List`) with the active option indicated, selecting an option updates the product list sort order and closes the menu, and clicking outside or pressing `Escape` closes the menu without changing the sort order
 
 #### Scenario: Full-label toolbar controls on wider viewports
-- **WHEN** a user views an inventory index page on a wider viewport where the filter input, full `Sort: ...` select, and `+ New Product` button fit on one line
-- **THEN** the toolbar displays the filter input, full `Sort: ...` dropdown, and `+ New Product` button with visible text labels on a single row
+- **WHEN** a user views an inventory index page on a wider mobile viewport (`< 768px` with container width `>= 540px`)
+- **THEN** the toolbar displays the filter input, full `Sort: ...` dropdown (with options in table column order), and `+ New Product` button with visible text labels on a single row
+- **AND** on desktop viewports (`>= 768px`), the toolbar displays the filter input and `+ New Product` button without the toolbar sort dropdown
 
 #### Scenario: Applying a filter on wider viewports shows inline Clear Filters without vertical layout shift
 - **WHEN** a user applies an active filter (search text, category, or location) on an inventory index page at a wider viewport where the `Clear Filters` button fits inline in the primary toolbar row

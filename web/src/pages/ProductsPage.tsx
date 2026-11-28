@@ -30,8 +30,11 @@ const RECLASSIFY_CHUNK_SIZE = 10;
 
 const SORT_OPTIONS = [
   { value: "name", label: "Name", selectLabel: "Sort: Name" },
-  { value: "due_date", label: "Soonest Due", selectLabel: "Sort: Soonest Due" },
+  { value: "category", label: "Category", selectLabel: "Sort: Category" },
+  { value: "location", label: "Location", selectLabel: "Sort: Location" },
   { value: "stock", label: "Stock Count", selectLabel: "Sort: Stock Count" },
+  { value: "due_date", label: "Soonest Due", selectLabel: "Sort: Soonest Due" },
+  { value: "shopping_list", label: "Shopping List", selectLabel: "Sort: Shopping List" },
 ] as const;
 
 export const ProductsPage: React.FC = () => {
@@ -493,62 +496,64 @@ export const ProductsPage: React.FC = () => {
             />
           </div>
 
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            aria-label="Sort products"
-            className="hidden shrink-0 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 @[540px]:block"
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.selectLabel}
-              </option>
-            ))}
-          </select>
-
-          <div ref={sortMenuRef} className="relative shrink-0 self-stretch @[540px]:hidden">
-            <button
-              type="button"
-              onClick={() => setSortMenuOpen((open) => !open)}
+          <div data-testid="products-mobile-sort" className="contents md:hidden">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
               aria-label="Sort products"
-              aria-haspopup="listbox"
-              aria-expanded={sortMenuOpen}
-              title={`Sort: ${activeSortLabel}`}
-              className="flex h-full min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-800 bg-slate-900 px-2.5 text-slate-200 hover:bg-slate-800"
+              className="hidden shrink-0 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 @[540px]:block"
             >
-              <ArrowUpDown className="h-4 w-4" />
-            </button>
-            {sortMenuOpen && (
-              <div
-                role="listbox"
-                aria-label="Sort options"
-                className="absolute right-0 z-20 mt-1.5 w-44 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl"
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.selectLabel}
+                </option>
+              ))}
+            </select>
+
+            <div ref={sortMenuRef} className="relative shrink-0 self-stretch @[540px]:hidden">
+              <button
+                type="button"
+                onClick={() => setSortMenuOpen((open) => !open)}
+                aria-label="Sort products"
+                aria-haspopup="listbox"
+                aria-expanded={sortMenuOpen}
+                title={`Sort: ${activeSortLabel}`}
+                className="flex h-full min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-slate-800 bg-slate-900 px-2.5 text-slate-200 hover:bg-slate-800"
               >
-                {SORT_OPTIONS.map((opt) => {
-                  const active = sort === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      onClick={() => {
-                        setSort(opt.value);
-                        setSortMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition ${
-                        active
-                          ? "bg-indigo-600/20 font-medium text-indigo-200"
-                          : "text-slate-200 hover:bg-slate-800"
-                      }`}
-                    >
-                      <span>{opt.label}</span>
-                      {active && <Check className="h-4 w-4 text-indigo-400" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                <ArrowUpDown className="h-4 w-4" />
+              </button>
+              {sortMenuOpen && (
+                <div
+                  role="listbox"
+                  aria-label="Sort options"
+                  className="absolute right-0 z-20 mt-1.5 w-44 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl"
+                >
+                  {SORT_OPTIONS.map((opt) => {
+                    const active = sort === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => {
+                          setSort(opt.value);
+                          setSortMenuOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition ${
+                          active
+                            ? "bg-indigo-600/20 font-medium text-indigo-200"
+                            : "text-slate-200 hover:bg-slate-800"
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {active && <Check className="h-4 w-4 text-indigo-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {hasActiveFilters && (
@@ -787,10 +792,38 @@ export const ProductsPage: React.FC = () => {
                       <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </th>
-                  <th className="py-2.5 pr-3 font-semibold">Category</th>
-                  <th className="py-2.5 pr-3 font-semibold">Location</th>
                   <th
-                    aria-sort={sort === "stock" ? "ascending" : undefined}
+                    aria-sort={sort === "category" ? "ascending" : undefined}
+                    className="py-2.5 pr-3 font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("category")}
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "category" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Category</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
+                  <th
+                    aria-sort={sort === "location" ? "ascending" : undefined}
+                    className="py-2.5 pr-3 font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("location")}
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "location" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Location</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
+                  <th
+                    aria-sort={sort === "stock" ? "descending" : undefined}
                     className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold"
                   >
                     <button
@@ -819,7 +852,21 @@ export const ProductsPage: React.FC = () => {
                       <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </th>
-                  <th className="whitespace-nowrap py-2.5 pr-4 font-semibold">Shopping List</th>
+                  <th
+                    aria-sort={sort === "shopping_list" ? "descending" : undefined}
+                    className="whitespace-nowrap py-2.5 pr-4 font-semibold"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSort("shopping_list")}
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                        sort === "shopping_list" ? "text-indigo-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span>Shopping List</span>
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/70">

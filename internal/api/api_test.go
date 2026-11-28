@@ -3002,3 +3002,127 @@ func TestOpenItemAlreadyOpenedAndBulkOpen(t *testing.T) {
 		t.Fatalf("expected 2 total print jobs (only item2 reprinted), got %d", len(fake.jobs))
 	}
 }
+
+func TestProductListSortingAllColumns(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+	}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+		"mode":     "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	tok := loginResp.Token
+
+	createCat := func(name string) int64 {
+		r := doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": name}, tok)
+		var out struct{ Category struct{ ID int64 } }
+		_ = json.NewDecoder(r.Body).Decode(&out)
+		return out.Category.ID
+	}
+	createLoc := func(name string) int64 {
+		r := doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": name}, tok)
+		var out struct{ Location struct{ ID int64 } }
+		_ = json.NewDecoder(r.Body).Decode(&out)
+		return out.Location.ID
+	}
+
+	catBeverages := createCat("Beverages")
+	catDairy := createCat("Dairy")
+	catPantry := createCat("Pantry")
+
+	locFridge := createLoc("Fridge")
+	locGarage := createLoc("Garage")
+	locPantry := createLoc("Pantry")
+
+	createProd := func(body map[string]any) int64 {
+		r := doReq(t, h, http.MethodPost, "/api/products", body, tok)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("create product %v: %d %s", body["name"], r.Code, r.Body.String())
+		}
+		var out struct{ Product struct{ ID int64 } }
+		_ = json.NewDecoder(r.Body).Decode(&out)
+		return out.Product.ID
+	}
+
+	// 1. Yogurt: Dairy, 3 in Fridge, due 2026-12-20, not on shopping list
+	pYogurt := createProd(map[string]any{
+		"name": "Yogurt", "category_id": catDairy, "default_location_id": locFridge,
+	})
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": pYogurt, "location_id": locFridge, "quantity": 3, "due_on_date": "2026-12-20", "label_print_mode": "none",
+	}, tok)
+
+	// 2. Milk: Dairy, 1 in Garage, due 2026-12-05, low stock (min 4 -> shortage 3)
+	pMilk := createProd(map[string]any{
+		"name": "Milk", "category_id": catDairy, "default_location_id": locFridge, "minimum_value": 4,
+	})
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": pMilk, "location_id": locGarage, "quantity": 1, "due_on_date": "2026-12-05", "label_print_mode": "none",
+	}, tok)
+
+	// 3. Coffee: Beverages, 2 in Pantry, no due date, manually added to shopping list
+	pCoffee := createProd(map[string]any{
+		"name": "Coffee", "category_id": catBeverages, "default_location_id": locPantry, "manually_added_to_shopping_list": true,
+	})
+	doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": pCoffee, "location_id": locPantry, "quantity": 2, "label_print_mode": "none",
+	}, tok)
+
+	// 4. Beans: Pantry, 0 in stock (no next_location_name, no due date), low stock (min 1 -> shortage 1)
+	createProd(map[string]any{
+		"name": "Beans", "category_id": catPantry, "default_location_id": locPantry, "minimum_value": 1,
+	})
+
+	fetchNames := func(sortKey string) []string {
+		r := doReq(t, h, http.MethodGet, "/api/products?status=all&sort="+sortKey, nil, tok)
+		if r.Code != http.StatusOK {
+			t.Fatalf("GET /api/products?sort=%s: %d %s", sortKey, r.Code, r.Body.String())
+		}
+		var out struct {
+			Products []Product `json:"products"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&out)
+		names := make([]string, len(out.Products))
+		for i, p := range out.Products {
+			names[i] = p.Name
+		}
+		return names
+	}
+
+	assertOrder := func(sortKey string, want []string) {
+		t.Helper()
+		got := fetchNames(sortKey)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("sort=%s: got %v, want %v", sortKey, got, want)
+		}
+	}
+
+	// Default / name: Beans, Coffee, Milk, Yogurt
+	assertOrder("name", []string{"Beans", "Coffee", "Milk", "Yogurt"})
+	// Category: Beverages (Coffee), Dairy (Milk, Yogurt - tie-broken by name), Pantry (Beans)
+	assertOrder("category", []string{"Coffee", "Milk", "Yogurt", "Beans"})
+	// Location (next_location_name asc, empty last): Fridge (Yogurt), Garage (Milk), Pantry (Coffee), "" (Beans)
+	assertOrder("location", []string{"Yogurt", "Milk", "Coffee", "Beans"})
+	// Stock (desc): Yogurt (3), Coffee (2), Milk (1), Beans (0)
+	assertOrder("stock", []string{"Yogurt", "Coffee", "Milk", "Beans"})
+	// Due date (asc, unset last, tie-broken by name): Milk (2026-12-05), Yogurt (2026-12-20), Beans (nil), Coffee (nil)
+	assertOrder("due_date", []string{"Milk", "Yogurt", "Beans", "Coffee"})
+	// Shopping list (on list first, higher shortage first, manually added after, off-list last):
+	// Milk (need 3), Beans (need 1), Coffee (manual, need 0), Yogurt (off list)
+	assertOrder("shopping_list", []string{"Milk", "Beans", "Coffee", "Yogurt"})
+}
