@@ -83,11 +83,11 @@ describe("AppRoutes logout behavior", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("link", { name: /Sign in with OIDC/i })).toBeInTheDocument();
+      expect(screen.getByTestId("current-path").textContent).toBe("/");
     });
 
     expect(logoutCalls).toEqual(["/api/auth/logout"]);
     expect(screen.getByLabelText(/Email address/i)).toBeInTheDocument();
-    expect(screen.getByTestId("current-path").textContent).toBe("/");
     expect(qc.getQueryData(["locations"])).toBeUndefined();
     expect(qc.getQueryData(["categories"])).toBeUndefined();
   });
@@ -140,9 +140,9 @@ describe("AppRoutes logout behavior", () => {
 
     await waitFor(() => {
       expect(redirect).toHaveBeenCalledWith("/api/auth/oidc/login");
+      expect(screen.getByTestId("current-path").textContent).toBe("/");
     });
 
     expect(screen.getByText(/Redirecting to your identity provider/i)).toBeInTheDocument();
-    expect(screen.getByTestId("current-path").textContent).toBe("/");
   });
 });
