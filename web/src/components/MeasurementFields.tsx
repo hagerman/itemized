@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { OptionalNumberInput } from "./NumberInput";
 
 export type MeasurementType = "" | "volume" | "weight" | "length";
 
@@ -150,12 +151,11 @@ export const MeasurementFields: React.FC<MeasurementFieldsProps> = ({
             <option value="length">Length</option>
           </select>
 
-          <input
-            type="number"
-            step="any"
+          <OptionalNumberInput
+            allowDecimal
             disabled={!value.type}
             value={value.value}
-            onChange={(e) => onChange({ ...value, value: e.target.value })}
+            onChange={(val) => onChange({ ...value, value: val })}
             placeholder="Value"
             aria-label={`${ariaPrefix} value`}
             className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white disabled:opacity-40"

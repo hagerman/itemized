@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Pencil, Plus, Printer, ScanBarcode, ShoppingCart, Tra
 import { apiFetch, invalidateInventoryQueries, Item, Location, Product, usePrintersEnabled, Variant } from "../api";
 import { BarcodeScanModal } from "../components/BarcodeScanModal";
 import { HierarchySelect } from "../components/HierarchySelect";
+import { NumberInput, OptionalNumberInput } from "../components/NumberInput";
 import {
   formatMeasurement,
   MEASUREMENT_UNITS,
@@ -733,11 +734,10 @@ export const ProductDetailPage: React.FC = () => {
               </select>
               {newVariantMType && (
                 <div className="flex gap-1.5">
-                  <input
-                    type="number"
-                    step="any"
+                  <OptionalNumberInput
+                    allowDecimal
                     value={newVariantMVal}
-                    onChange={(e) => setNewVariantMVal(e.target.value)}
+                    onChange={setNewVariantMVal}
                     placeholder="Val"
                     className="w-20 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white"
                   />
@@ -795,11 +795,10 @@ export const ProductDetailPage: React.FC = () => {
                         </select>
                         {editVariantMType && (
                           <>
-                            <input
-                              type="number"
-                              step="any"
+                            <OptionalNumberInput
+                              allowDecimal
                               value={editVariantMVal}
-                              onChange={(e) => setEditVariantMVal(e.target.value)}
+                              onChange={setEditVariantMVal}
                               placeholder="Value"
                               className="w-20 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white"
                             />
@@ -892,11 +891,10 @@ export const ProductDetailPage: React.FC = () => {
                         <ScanBarcode className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <input
-                      type="number"
+                    <NumberInput
                       min={1}
                       value={draft.qty}
-                      onChange={(e) => setDraft(v.id, { qty: Number(e.target.value) })}
+                      onChange={(qty) => setDraft(v.id, { qty })}
                       aria-label={`Pack quantity for ${v.name}`}
                       title="Pack quantity"
                       className="w-16 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-center text-xs text-white"

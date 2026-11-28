@@ -2305,9 +2305,9 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     fireEvent.submit(scanInput.closest("form")!);
 
     await screen.findByPlaceholderText("Product name");
-    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
-    expect(screen.getByLabelText("Primary pack quantity")).toHaveValue(1);
-    expect(screen.getByLabelText("Second pack quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Quantity")).toHaveValue("1");
+    expect(screen.getByLabelText("Primary pack quantity")).toHaveValue("1");
+    expect(screen.getByLabelText("Second pack quantity")).toHaveValue("1");
     expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
 
     // Submit second product with quantity 4, then start an unmatched text search
@@ -2325,7 +2325,7 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     fireEvent.submit(scanInput.closest("form")!);
 
     await screen.findByPlaceholderText("Product name");
-    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Quantity")).toHaveValue("1");
     expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
   });
 
@@ -2370,7 +2370,7 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     fireEvent.change(scanInput, { target: { value: "098798798798" } });
     fireEvent.submit(scanInput.closest("form")!);
     await waitFor(() => expect(screen.getByLabelText("Primary barcode")).toHaveValue("098798798798"));
-    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Quantity")).toHaveValue("1");
     expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
 
     // Edit Quantity to 7 and submit an unmatched text search without submitting -> resets Quantity to 1
@@ -2380,8 +2380,103 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     fireEvent.change(scanInput, { target: { value: "Kumquat" } });
     fireEvent.submit(scanInput.closest("form")!);
     await waitFor(() => expect(screen.getByPlaceholderText("Product name")).toHaveValue("Kumquat"));
-    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Quantity")).toHaveValue("1");
     expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
+  });
+
+  it("allows clearing Purchase quantity without snapping to 0 and evaluates inline math expressions", async () => {
+    const purchasePayloads: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/scan/resolve") {
+          const body = JSON.parse(String(init?.body || "{}"));
+          return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(JSON.stringify({ found: false }), { status: 200 });
+        }
+        if (url === "/api/workflows/purchase") {
+          const body = JSON.parse(String(init?.body || "{}"));
+          purchasePayloads.push(body);
+          const qty = Number(body.quantity || 1);
+          return new Response(
+            JSON.stringify({
+              product: { id: 99, name: body.new_product?.name || "Item" },
+              items: Array.from({ length: qty }, (_, i) => ({ id: i + 1 })),
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+          locations={[{ id: 1, name: "Shelf", parent_id: null, is_freezer: false, hierarchy_name: "Shelf" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const scanInput = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(scanInput, { target: { value: "011122233344" } });
+    fireEvent.submit(scanInput.closest("form")!);
+
+    const nameInput = await screen.findByPlaceholderText("Product name");
+    fireEvent.change(nameInput, { target: { value: "Olive Oil" } });
+
+    const qtyInput = screen.getByLabelText("Quantity");
+    const packQtyInput = screen.getByLabelText("Primary pack quantity");
+
+    // Clearing 1 leaves input empty (not "0") and typing "2" yields "2" (not "02")
+    fireEvent.change(qtyInput, { target: { value: "" } });
+    expect(qtyInput).toHaveValue("");
+    fireEvent.change(qtyInput, { target: { value: "2" } });
+    expect(qtyInput).toHaveValue("2");
+    expect(screen.getByRole("button", { name: "Confirm & Add (2)" })).toBeInTheDocument();
+
+    // Clearing pack quantity and blurring restores 1
+    fireEvent.change(packQtyInput, { target: { value: "" } });
+    expect(packQtyInput).toHaveValue("");
+    fireEvent.blur(packQtyInput);
+    expect(packQtyInput).toHaveValue("1");
+
+    // Simple math in Quantity (2*6 -> 12) and Product measurement (500/5 -> 100)
+    fireEvent.change(qtyInput, { target: { value: "2*6" } });
+    expect(screen.getByRole("button", { name: "Confirm & Add (12)" })).toBeInTheDocument();
+    fireEvent.blur(qtyInput);
+    expect(qtyInput).toHaveValue("12");
+
+    fireEvent.click(screen.getByRole("button", { name: /Product Measurement/i }));
+    fireEvent.change(screen.getByLabelText("Product measurement type"), { target: { value: "volume" } });
+    const measValInput = screen.getByLabelText("Product measurement value");
+    fireEvent.change(measValInput, { target: { value: "500/5" } });
+    fireEvent.blur(measValInput);
+    expect(measValInput).toHaveValue("100");
+
+    fireEvent.click(screen.getByRole("button", { name: "New product category" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pantry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Purchase location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Shelf" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & Add (12)" }));
+
+    await waitFor(() => expect(purchasePayloads).toHaveLength(1));
+    expect(purchasePayloads[0]).toMatchObject({
+      quantity: 12,
+      barcode_quantity: 1,
+      new_product: expect.objectContaining({
+        name: "Olive Oil",
+        volume_value: 100,
+        volume_unit: "ml",
+      }),
+    });
   });
 
   it("excludes QR codes when allowQrCodes is false across zxing-wasm and native BarcodeDetector without restarting camera on toggle", async () => {

@@ -15,6 +15,7 @@ import { BarcodeScanner } from "./BarcodeScanner";
 import { useHelp } from "./HelpContext";
 import { HierarchyCreateInput, HierarchySelect } from "./HierarchySelect";
 import { ModalBackdrop } from "./ModalBackdrop";
+import { NumberInput, OptionalNumberInput } from "./NumberInput";
 import {
   EMPTY_MEASUREMENT,
   MeasurementDraft,
@@ -1279,11 +1280,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                         onCreate={handleCreateCategory}
                         createEntityLabel="category"
                       />
-                      <input
-                        type="number"
+                      <OptionalNumberInput
                         disabled={newProdUseAvg}
                         value={newProdUseAvg ? "" : newProdDueDays}
-                        onChange={(e) => setNewProdDueDays(e.target.value)}
+                        onChange={setNewProdDueDays}
                         placeholder={newProdUseAvg ? "Due days (auto rolling avg)" : "Default due days (optional)"}
                         className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
                       />
@@ -1312,11 +1312,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   <div className={`grid grid-cols-2 gap-3 ${printersEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                     <label className="block min-w-0 text-xs text-slate-400">
                       Quantity
-                      <input
-                        type="number"
+                      <NumberInput
                         min={1}
+                        required
                         value={purchaseQty}
-                        onChange={(e) => setPurchaseQty(Number(e.target.value))}
+                        onChange={setPurchaseQty}
                         className="mt-1 h-10 w-full min-w-0 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white"
                       />
                     </label>
@@ -1419,11 +1419,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               <ScanBarcode className="h-4 w-4" />
                             </button>
                           </div>
-                          <input
-                            type="number"
+                          <NumberInput
                             min={1}
                             value={purchaseBarcodeQty}
-                            onChange={(e) => setPurchaseBarcodeQty(Number(e.target.value))}
+                            onChange={setPurchaseBarcodeQty}
                             placeholder="Qty"
                             aria-label="Primary pack quantity"
                             title="Primary pack quantity"
@@ -1455,11 +1454,10 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                               <ScanBarcode className="h-4 w-4" />
                             </button>
                           </div>
-                          <input
-                            type="number"
+                          <NumberInput
                             min={1}
                             value={secondBarcodeQty}
-                            onChange={(e) => setSecondBarcodeQty(Number(e.target.value))}
+                            onChange={setSecondBarcodeQty}
                             placeholder="Qty"
                             aria-label="Second pack quantity"
                             title="Second pack quantity"
@@ -1729,13 +1727,12 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
                   {invScannedProducts.map((sp) => (
                     <div key={sp.product_id} className="flex items-center justify-between rounded bg-slate-950 px-3 py-1.5 text-sm">
                       <span>{sp.product_name}</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         min={1}
                         value={sp.quantity}
-                        onChange={(e) =>
+                        onChange={(qty) =>
                           setInvScannedProducts((prev) =>
-                            prev.map((x) => (x.product_id === sp.product_id ? { ...x, quantity: Number(e.target.value) } : x))
+                            prev.map((x) => (x.product_id === sp.product_id ? { ...x, quantity: qty } : x))
                           )
                         }
                         className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-right text-xs"

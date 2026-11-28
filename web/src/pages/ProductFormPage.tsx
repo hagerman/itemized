@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiFetch, Category, invalidateInventoryQueries, Location, Product, usePrintersEnabled } from "../api";
 import { HierarchyCreateInput, HierarchySelect } from "../components/HierarchySelect";
+import { OptionalNumberInput } from "../components/NumberInput";
 import {
   EMPTY_MEASUREMENT,
   MeasurementDraft,
@@ -260,33 +261,32 @@ export const ProductFormPage: React.FC = () => {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <label className="block text-xs text-slate-400">
           Due Days
-          <input
-            type="number"
+          <OptionalNumberInput
             disabled={useAvg}
             value={useAvg ? "" : dueDays}
             placeholder={useAvg ? "Auto" : ""}
-            onChange={(e) => setDueDays(e.target.value)}
+            onChange={setDueDays}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
         <label className="block text-xs text-slate-400">
           On Open (days)
-          <input type="number" value={openDays} onChange={(e) => setOpenDays(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={openDays} onChange={setOpenDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         </label>
         <label className="block text-xs text-slate-400">
           On Freeze (days)
-          <input type="number" value={freezeDays} onChange={(e) => setFreezeDays(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={freezeDays} onChange={setFreezeDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         </label>
         <label className="block text-xs text-slate-400">
           On Thaw (days)
-          <input type="number" value={thawDays} onChange={(e) => setThawDays(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={thawDays} onChange={setThawDays} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         </label>
       </div>
 
       <div className={`grid grid-cols-1 gap-4 ${printersEnabled ? "sm:grid-cols-2" : ""}`}>
         <label className="block text-xs text-slate-400">
           Minimum Stock (Shopping List threshold)
-          <input type="number" value={minVal} onChange={(e) => setMinVal(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <OptionalNumberInput value={minVal} onChange={setMinVal} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
         </label>
         {printersEnabled && (
           <label className="block text-xs text-slate-400">

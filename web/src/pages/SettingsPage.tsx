@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HelpCircle, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { apiFetch, AppSettings, LabelTemplate, PrinterRecord, User } from "../api";
 import { useHelp } from "../components/HelpContext";
+import { NumberInput } from "../components/NumberInput";
 
 interface SettingsPageProps {
   user: User;
@@ -32,7 +33,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
     enabled: isAdmin,
   });
   const [baseUrl, setBaseUrl] = useState("");
-  const [avgCount, setAvgCount] = useState("3");
+  const [avgCount, setAvgCount] = useState(3);
   const [oidcIssuer, setOidcIssuer] = useState("");
   const [oidcClientId, setOidcClientId] = useState("");
   const [oidcClientSecret, setOidcClientSecret] = useState("");
@@ -48,7 +49,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
   useEffect(() => {
     if (!settings) return;
     setBaseUrl(settings.base_url);
-    setAvgCount(String(settings.due_date_average_count));
+    setAvgCount(settings.due_date_average_count);
     setOidcIssuer(settings.oidc_issuer);
     setOidcClientId(settings.oidc_client_id);
     setOidcAutoProv(settings.oidc_auto_provision);
@@ -208,7 +209,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
           </label>
           <label className="block text-xs text-slate-400">
             Due Date Rolling Average Count
-            <input type="number" min={1} value={avgCount} onChange={(e) => setAvgCount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <NumberInput min={1} fallback={3} required value={avgCount} onChange={setAvgCount} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
           </label>
         </div>
 
