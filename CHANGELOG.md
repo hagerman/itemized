@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/itemizedapp/itemized/compare/v0.14.1...v0.14.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* match document root background to header for seamless iOS PWA status bar ([0d6988b](https://github.com/itemizedapp/itemized/commit/0d6988bbea5a120a22841ccf4df735c784d46154))
+
 ## [0.14.1](https://github.com/itemizedapp/itemized/compare/v0.14.0...v0.14.1) (2026-11-28)
 
 
