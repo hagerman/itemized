@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/itemizedapp/itemized/compare/v0.14.0...v0.14.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* set ios pwa status bar style to default in index.html ([7b9fc68](https://github.com/itemizedapp/itemized/commit/7b9fc68ea63a095d3c0f72656f9d7d3470e70b67))
+
 ## [0.14.0](https://github.com/itemizedapp/itemized/compare/v0.13.0...v0.14.0) (2026-11-28)
 
 
