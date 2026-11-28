@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // Node 25+ exposes an experimental global localStorage without --localstorage-file,
 // which can leave jsdom's window.localStorage undefined or without Storage methods.
