@@ -13,6 +13,7 @@ import (
 	"itemized/internal/api"
 	"itemized/internal/db"
 	"itemized/internal/demo"
+	"itemized/internal/notify"
 	"itemized/web"
 )
 
@@ -39,10 +40,11 @@ func main() {
 
 	srv := api.NewServer(conn, staticFS)
 
-	demoCtx, demoCancel := context.WithCancel(context.Background())
-	defer demoCancel()
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
 
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("DEMO_MODE")), "true") {
+	demoMode := strings.EqualFold(strings.TrimSpace(os.Getenv("DEMO_MODE")), "true")
+	if demoMode {
 		interval := demo.DefaultResetInterval
 		if raw := strings.TrimSpace(os.Getenv("DEMO_RESET_INTERVAL")); raw != "" {
 			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
@@ -56,8 +58,12 @@ func main() {
 			log.Fatalf("failed to initialize demo mode: %v", err)
 		}
 		srv.EnableDemoMode(demoMgr)
-		demoMgr.Start(demoCtx)
+		demoMgr.Start(bgCtx)
 		log.Printf("Demo mode enabled (reset interval: %s, next reset: %s)", interval, demoMgr.NextResetAt().Format(time.RFC3339))
+	} else {
+		sched := notify.NewScheduler(srv.NotifyStore, srv.NotifyDispatcher)
+		sched.Start(bgCtx)
+		log.Printf("Notification digest scheduler started (timezone: %s)", notify.LocalTimezoneName())
 	}
 
 	httpServer := &http.Server{
@@ -77,7 +83,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
-	demoCancel()
+	bgCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)

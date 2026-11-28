@@ -22,6 +22,7 @@ Itemized compiles into a single Go binary (`cmd/itemized`) that embeds the built
 | `internal/docsverify` | Automated Go drift tests verifying environment variables, API docs, and package maps | None |
 | `internal/domain` | Core inventory business logic, due-date calculation rules, and FTS5 trigram search | None |
 | `internal/llm` | Optional AI product normalization and reclassification clients (Anthropic, OpenAI, Gemini, Ollama) | None |
+| `internal/notify` | Channel-agnostic notification dispatcher, VAPID Web Push delivery, per-user preferences/targets, and daily digest scheduler | None |
 | `internal/printer` | Direct LAN Zebra label printing (IPP ZPL and Raw TCP `:9100`) and Go `text/template` ZPL layouts | `internal/printer/templates` |
 | `internal/upc` | OpenFoodFacts retail barcode (UPC/EAN) lookup client | None |
 

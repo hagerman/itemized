@@ -151,6 +151,34 @@ export interface AppSettings {
   llm_has_api_key: boolean;
 }
 
+export interface NotificationConfig {
+  enabled: boolean;
+  vapid_public_key: string;
+  timezone: string;
+}
+
+export interface NotificationPreferences {
+  digest_time: string;
+  expiration_enabled: boolean;
+  shopping_list_enabled: boolean;
+  timezone: string;
+}
+
+export interface NotificationTarget {
+  id: number;
+  channel: string;
+  label: string;
+  created_at: string;
+  last_used_at: string | null;
+  last_error: string | null;
+}
+
+export interface NotificationDeliveryResult {
+  sent: number;
+  failed: number;
+  pruned: number;
+}
+
 export type ScanResolution =
   | { kind: "item"; item: Item; product: Product }
   | { kind: "product"; product: Product; items: Item[] }

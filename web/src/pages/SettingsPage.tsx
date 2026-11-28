@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, HelpCircle, KeyRound, Monitor, Moon, Printer, RotateCcw, Sun, Trash2 } from "lucide-react";
 import { apiFetch, APIToken, AppSettings, AuthStatus, LabelTemplate, PrinterRecord, ThemePreference, User } from "../api";
 import { useHelp } from "../components/HelpContext";
+import { NotificationsCard } from "../components/NotificationsCard";
 import { NumberInput } from "../components/NumberInput";
 import { useTheme } from "../components/ThemeContext";
 
@@ -419,6 +420,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
           </div>
         </div>
       </section>
+
+      {/* Push Notifications (All Users) */}
+      <NotificationsCard
+        demoMode={demoMode}
+        onFlash={flash}
+        onError={(msg) => {
+          setNotice(null);
+          setError(msg);
+        }}
+      />
 
       {/* Personal API Tokens (All Users) */}
       <section className={CARD_CLASS}>

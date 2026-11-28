@@ -18,6 +18,7 @@ import (
 	"itemized/internal/db"
 	"itemized/internal/demo"
 	"itemized/internal/llm"
+	"itemized/internal/notify"
 	"itemized/internal/printer"
 	"itemized/internal/upc"
 )
@@ -30,31 +31,37 @@ const (
 )
 
 type Server struct {
-	DB             *sql.DB
-	Auth           *auth.Service
-	OIDC           *auth.OIDCManager
-	Printer        *printer.Service
-	UPC            *upc.Client
-	LLM            *llm.Classifier
-	StaticFS       fs.FS
-	LoginLimiter   *loginRateLimiter
-	DemoUPCLimiter *loginRateLimiter
-	DemoMode       bool
-	DemoManager    *demo.Manager
-	TrustProxy     bool
+	DB               *sql.DB
+	Auth             *auth.Service
+	OIDC             *auth.OIDCManager
+	Printer          *printer.Service
+	UPC              *upc.Client
+	LLM              *llm.Classifier
+	NotifyStore      *notify.Store
+	NotifyDispatcher *notify.Dispatcher
+	StaticFS         fs.FS
+	LoginLimiter     *loginRateLimiter
+	DemoUPCLimiter   *loginRateLimiter
+	DemoMode         bool
+	DemoManager      *demo.Manager
+	TrustProxy       bool
 }
 
 func NewServer(conn *sql.DB, staticFS fs.FS) *Server {
+	notifyStore := notify.NewStore(conn)
+	webPushCh := notify.NewWebPushChannel(notifyStore)
 	return &Server{
-		DB:           conn,
-		Auth:         auth.NewService(conn),
-		OIDC:         auth.NewOIDCManager(),
-		Printer:      printer.NewService(),
-		UPC:          upc.NewClient(),
-		LLM:          llm.NewClassifier(),
-		StaticFS:     staticFS,
-		LoginLimiter: newLoginRateLimiter(defaultLoginRateLimit, defaultLoginRateWindow),
-		TrustProxy:   strings.EqualFold(strings.TrimSpace(os.Getenv("TRUST_PROXY")), "true"),
+		DB:               conn,
+		Auth:             auth.NewService(conn),
+		OIDC:             auth.NewOIDCManager(),
+		Printer:          printer.NewService(),
+		UPC:              upc.NewClient(),
+		LLM:              llm.NewClassifier(),
+		NotifyStore:      notifyStore,
+		NotifyDispatcher: notify.NewDispatcher(notifyStore, webPushCh),
+		StaticFS:         staticFS,
+		LoginLimiter:     newLoginRateLimiter(defaultLoginRateLimit, defaultLoginRateWindow),
+		TrustProxy:       strings.EqualFold(strings.TrimSpace(os.Getenv("TRUST_PROXY")), "true"),
 	}
 }
 
@@ -87,6 +94,15 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("POST /api/auth/tokens", s.handleCreateAPIToken)
 	authed.HandleFunc("DELETE /api/auth/tokens/{id}", s.handleDeleteAPIToken)
 	authed.HandleFunc("GET /api/summary", s.handleSummary)
+
+	// Notifications (per-user)
+	authed.HandleFunc("GET /api/notifications/config", s.handleGetNotificationConfig)
+	authed.HandleFunc("GET /api/notifications/preferences", s.handleGetNotificationPreferences)
+	authed.HandleFunc("PATCH /api/notifications/preferences", s.handleUpdateNotificationPreferences)
+	authed.HandleFunc("GET /api/notifications/targets", s.handleListNotificationTargets)
+	authed.HandleFunc("POST /api/notifications/targets", s.handleCreateNotificationTarget)
+	authed.HandleFunc("DELETE /api/notifications/targets/{id}", s.handleDeleteNotificationTarget)
+	authed.HandleFunc("POST /api/notifications/test", s.handleTestNotification)
 
 	// Admin user management
 	adminOnly := func(h http.HandlerFunc) http.Handler {
@@ -225,6 +241,9 @@ func (s *Server) spaHandler() http.Handler {
 		if clean != "" {
 			if f, err := s.StaticFS.Open(clean); err == nil {
 				_ = f.Close()
+				if clean == "sw.js" {
+					w.Header().Set("Cache-Control", "no-cache")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
