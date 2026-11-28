@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/itemizedapp/itemized/compare/v0.15.0...v0.15.1) (2026-11-28)
+
+
+### Miscellaneous Chores
+
+* trigger release ([d79378a](https://github.com/itemizedapp/itemized/commit/d79378ad7d395ab5f34358bbb5eae630e8bea4e4))
+
 ## [0.15.0](https://github.com/itemizedapp/itemized/compare/v0.14.2...v0.15.0) (2026-11-28)
 
 
