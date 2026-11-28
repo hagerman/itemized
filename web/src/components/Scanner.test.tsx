@@ -29,6 +29,16 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     readBarcodesMock.mockResolvedValue([]);
   });
 
+  it("uses the simplified default placeholder and supports custom placeholder overrides", () => {
+    const { rerender } = render(<BarcodeScanner onScan={vi.fn()} />);
+
+    const input = screen.getByLabelText("Barcode or search input");
+    expect(input).toHaveAttribute("placeholder", "Scan barcode or type to search...");
+
+    rerender(<BarcodeScanner onScan={vi.fn()} placeholder="Scan or enter barcode..." />);
+    expect(input).toHaveAttribute("placeholder", "Scan or enter barcode...");
+  });
+
   it("emits scanned value from manual/HID input and debounces duplicates", () => {
     const onScan = vi.fn();
     render(<BarcodeScanner onScan={onScan} />);

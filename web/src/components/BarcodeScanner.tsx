@@ -95,7 +95,7 @@ function normalizeScanDebounceKey(code: string): string {
 
 export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   onScan,
-  placeholder = "Scan barcode, QR URL, or type to search...",
+  placeholder = "Scan barcode or type to search...",
   active = true,
   defaultCameraEnabled = false,
   flashOnScan = false,
