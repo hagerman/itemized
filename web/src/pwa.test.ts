@@ -32,7 +32,7 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
     expect(doc.querySelector('meta[name="apple-mobile-web-app-capable"]')?.getAttribute("content")).toBe("yes");
     expect(doc.querySelector('meta[name="mobile-web-app-capable"]')?.getAttribute("content")).toBe("yes");
     expect(doc.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.getAttribute("content")).toBe(
-      "black-translucent"
+      "default"
     );
     expect(doc.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute("content")).toBe("itemized");
     expect(doc.querySelector("title")?.textContent).toBe("itemized");
