@@ -2383,4 +2383,209 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     expect(screen.getByLabelText("Quantity")).toHaveValue(1);
     expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
   });
+
+  it("excludes QR codes when allowQrCodes is false across zxing-wasm and native BarcodeDetector without restarting camera on toggle", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
+
+    const stream = {
+      getVideoTracks: () => [
+        {
+          getSettings: () => ({ deviceId: "cam-rear" }),
+          getCapabilities: () => ({}),
+          stop: vi.fn(),
+        },
+      ],
+      getTracks: () => [{ stop: vi.fn() }],
+    } as unknown as MediaStream;
+
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        getUserMedia,
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+        width,
+        height,
+      })),
+    } as unknown as CanvasRenderingContext2D);
+
+    const detectorConfigs: Array<{ formats?: string[] }> = [];
+    const detectWithQr = vi.fn().mockResolvedValue([
+      { rawValue: "https://itemized.example.com/go/i/99", format: "qr_code" },
+    ]);
+    // Simulate a quirky browser returning a qr_code hit alongside a upc_a hit even on the 1D detector
+    const detect1dOnly = vi.fn().mockResolvedValue([
+      { rawValue: "https://promo.example.com/qr", format: "qr_code" },
+      { rawValue: "049000028904", format: "upc_a" },
+    ]);
+    class MockBarcodeDetector {
+      static async getSupportedFormats() {
+        return ["qr_code", "upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "itf"];
+      }
+      formats: string[];
+      constructor(opts?: { formats?: string[] }) {
+        detectorConfigs.push(opts ?? {});
+        this.formats = opts?.formats ?? [];
+      }
+      detect() {
+        return this.formats.includes("qr_code") ? detectWithQr() : detect1dOnly();
+      }
+    }
+    Object.defineProperty(window, "BarcodeDetector", {
+      value: MockBarcodeDetector,
+      configurable: true,
+    });
+
+    readBarcodesMock.mockResolvedValue([]);
+    const onScan = vi.fn();
+
+    try {
+      const { container, rerender } = render(
+        <BarcodeScanner onScan={onScan} defaultCameraEnabled={true} allowQrCodes={false} />
+      );
+      const video = container.querySelector("video")!;
+      Object.defineProperty(video, "readyState", { value: 4, configurable: true });
+      Object.defineProperty(video, "videoWidth", { value: 1280, configurable: true });
+      Object.defineProperty(video, "videoHeight", { value: 720, configurable: true });
+
+      // 1D detector is used (and quirky qr_code hit is skipped so only upc_a emits)
+      await waitFor(() => expect(onScan).toHaveBeenCalledWith("049000028904"), { timeout: 2000 });
+      expect(onScan).not.toHaveBeenCalledWith("https://promo.example.com/qr");
+      expect(detect1dOnly).toHaveBeenCalled();
+      expect(detectWithQr).not.toHaveBeenCalled();
+      expect(detectorConfigs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ formats: expect.arrayContaining(["qr_code", "upc_a"]) }),
+          expect.objectContaining({ formats: expect.not.arrayContaining(["qr_code"]) }),
+        ])
+      );
+
+      // zxing-wasm also excludes QRCode while allowQrCodes is false
+      await waitFor(() => expect(readBarcodesMock).toHaveBeenCalled(), { timeout: 2000 });
+      const firstWasmOpts = readBarcodesMock.mock.calls[0][1] as { formats?: string[] };
+      expect(firstWasmOpts.formats).not.toContain("QRCode");
+      expect(firstWasmOpts.formats).toContain("UPCA");
+
+      // Toggle allowQrCodes to true without restarting the camera stream
+      readBarcodesMock.mockClear();
+      rerender(<BarcodeScanner onScan={onScan} defaultCameraEnabled={true} allowQrCodes={true} />);
+
+      await waitFor(
+        () => expect(onScan).toHaveBeenCalledWith("https://itemized.example.com/go/i/99"),
+        { timeout: 2000 }
+      );
+      await waitFor(() => expect(readBarcodesMock).toHaveBeenCalled(), { timeout: 2000 });
+      const toggledWasmOpts = readBarcodesMock.mock.calls[0][1] as { formats?: string[] };
+      expect(toggledWasmOpts.formats).toContain("QRCode");
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+      if (origBarcodeDetector) {
+        Object.defineProperty(window, "BarcodeDetector", origBarcodeDetector);
+      } else {
+        delete (window as unknown as Record<string, unknown>).BarcodeDetector;
+      }
+    }
+  });
+
+  it("ignores QR codes in Purchase mode and enables them in Consume, Open, Transfer, and Inventory without restarting camera", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
+
+    const stream = {
+      getVideoTracks: () => [
+        {
+          getSettings: () => ({ deviceId: "cam-rear" }),
+          getCapabilities: () => ({}),
+          stop: vi.fn(),
+        },
+      ],
+      getTracks: () => [{ stop: vi.fn() }],
+    } as unknown as MediaStream;
+
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(window, "BarcodeDetector", { value: undefined, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        getUserMedia,
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+        width,
+        height,
+      })),
+    } as unknown as CanvasRenderingContext2D);
+    readBarcodesMock.mockResolvedValue([]);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    try {
+      const { container } = render(
+        <QueryClientProvider client={qc}>
+          <ScannerDrawer
+            open={true}
+            initialMode="purchase"
+            onClose={() => {}}
+            categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+            locations={[{ id: 1, name: "Shelf", parent_id: null, is_freezer: false, hierarchy_name: "Shelf" }]}
+          />
+        </QueryClientProvider>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Start camera" }));
+      const video = await waitFor(() => {
+        const v = container.querySelector("video");
+        expect(v).not.toBeNull();
+        return v!;
+      });
+      Object.defineProperty(video, "readyState", { value: 4, configurable: true });
+      Object.defineProperty(video, "videoWidth", { value: 1280, configurable: true });
+      Object.defineProperty(video, "videoHeight", { value: 720, configurable: true });
+
+      // Purchase mode: excludes QRCode
+      await waitFor(() => expect(readBarcodesMock).toHaveBeenCalled(), { timeout: 2000 });
+      expect((readBarcodesMock.mock.calls.at(-1)?.[1] as { formats?: string[] })?.formats).not.toContain("QRCode");
+
+      // Consume, Open, Transfer, Inventory modes: include QRCode
+      for (const label of ["Consume", "Open", "Transfer", "Inventory"]) {
+        readBarcodesMock.mockClear();
+        fireEvent.click(screen.getByRole("button", { name: label }));
+        await waitFor(() => expect(readBarcodesMock).toHaveBeenCalled(), { timeout: 2000 });
+        expect((readBarcodesMock.mock.calls.at(-1)?.[1] as { formats?: string[] })?.formats).toContain("QRCode");
+      }
+
+      // Switching back to Purchase: excludes QRCode again without restarting camera
+      readBarcodesMock.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Purchase" }));
+      await waitFor(() => expect(readBarcodesMock).toHaveBeenCalled(), { timeout: 2000 });
+      expect((readBarcodesMock.mock.calls.at(-1)?.[1] as { formats?: string[] })?.formats).not.toContain("QRCode");
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+      if (origBarcodeDetector) {
+        Object.defineProperty(window, "BarcodeDetector", origBarcodeDetector);
+      } else {
+        delete (window as unknown as Record<string, unknown>).BarcodeDetector;
+      }
+    }
+  });
 });

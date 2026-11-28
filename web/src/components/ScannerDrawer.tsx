@@ -1099,6 +1099,7 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
             active={true}
             defaultCameraEnabled={isMobileDevice()}
             flashOnScan={mode === "consume"}
+            allowQrCodes={mode !== "purchase"}
             onScan={handleScan}
           />
 

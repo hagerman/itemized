@@ -625,4 +625,110 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     );
     await waitFor(() => expect(within(desktopTable).getByText("Opened Friday")).toBeInTheDocument());
   });
+
+  it("ignores QR codes when scanning a variant barcode via the camera modal", async () => {
+    const origSecure = Object.getOwnPropertyDescriptor(window, "isSecureContext");
+    const origMediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const origBarcodeDetector = Object.getOwnPropertyDescriptor(window, "BarcodeDetector");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(MOCK_PRODUCT_RESPONSE), { status: 200 });
+        }
+        return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+      })
+    );
+
+    const stream = {
+      getVideoTracks: () => [
+        {
+          getSettings: () => ({ deviceId: "cam-rear" }),
+          getCapabilities: () => ({}),
+          stop: vi.fn(),
+        },
+      ],
+      getTracks: () => [{ stop: vi.fn() }],
+    } as unknown as MediaStream;
+
+    Object.defineProperty(window, "isSecureContext", { value: true, configurable: true });
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        getUserMedia: vi.fn().mockResolvedValue(stream),
+        enumerateDevices: vi.fn().mockResolvedValue([]),
+      },
+      configurable: true,
+    });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    const detectWithQr = vi.fn().mockResolvedValue([
+      { rawValue: "https://promo.example.com/qr", format: "qr_code" },
+    ]);
+    const detect1dOnly = vi.fn().mockResolvedValue([
+      { rawValue: "https://promo.example.com/qr", format: "qr_code" },
+      { rawValue: "049000028904", format: "upc_a" },
+    ]);
+    class MockBarcodeDetector {
+      static async getSupportedFormats() {
+        return ["qr_code", "upc_a", "ean_13"];
+      }
+      formats: string[];
+      constructor(opts?: { formats?: string[] }) {
+        this.formats = opts?.formats ?? [];
+      }
+      detect() {
+        return this.formats.includes("qr_code") ? detectWithQr() : detect1dOnly();
+      }
+    }
+    Object.defineProperty(window, "BarcodeDetector", {
+      value: MockBarcodeDetector,
+      configurable: true,
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    try {
+      const { container } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={["/products/1"]}>
+            <Routes>
+              <Route path="/products/:id" element={<ProductDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      const scanBtn = await waitFor(() =>
+        screen.getByRole("button", { name: "Scan barcode for Default" })
+      );
+      fireEvent.click(scanBtn);
+
+      const dialog = screen.getByRole("dialog", { name: "Scan Variant Barcode" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Start camera" }));
+
+      const video = await waitFor(() => {
+        const v = container.querySelector("video");
+        expect(v).not.toBeNull();
+        return v!;
+      });
+      Object.defineProperty(video, "readyState", { value: 4, configurable: true });
+      Object.defineProperty(video, "videoWidth", { value: 1280, configurable: true });
+      Object.defineProperty(video, "videoHeight", { value: 720, configurable: true });
+
+      await waitFor(
+        () => expect(screen.getByLabelText("Barcode for Default")).toHaveValue("049000028904"),
+        { timeout: 2000 }
+      );
+      expect(detect1dOnly).toHaveBeenCalled();
+      expect(detectWithQr).not.toHaveBeenCalled();
+    } finally {
+      if (origSecure) Object.defineProperty(window, "isSecureContext", origSecure);
+      if (origMediaDevices) Object.defineProperty(navigator, "mediaDevices", origMediaDevices);
+      if (origBarcodeDetector) {
+        Object.defineProperty(window, "BarcodeDetector", origBarcodeDetector);
+      } else {
+        delete (window as unknown as Record<string, unknown>).BarcodeDetector;
+      }
+    }
+  });
 });

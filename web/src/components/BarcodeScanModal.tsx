@@ -6,6 +6,7 @@ import { ModalBackdrop } from "./ModalBackdrop";
 interface BarcodeScanModalProps {
   open: boolean;
   title?: string;
+  allowQrCodes?: boolean;
   onCapture: (code: string) => void;
   onClose: () => void;
 }
@@ -13,6 +14,7 @@ interface BarcodeScanModalProps {
 export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   open,
   title = "Scan Barcode",
+  allowQrCodes = true,
   onCapture,
   onClose,
 }) => {
@@ -38,6 +40,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
         </div>
         <BarcodeScanner
           active={open}
+          allowQrCodes={allowQrCodes}
           placeholder="Scan or enter barcode..."
           onScan={(code) => {
             onCapture(code);

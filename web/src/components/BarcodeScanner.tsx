@@ -3,8 +3,17 @@ import { prepareZXingModule, readBarcodes, type ReaderOptions } from "zxing-wasm
 import zxingReaderWasmUrl from "zxing-wasm/reader/zxing_reader.wasm?url";
 import { Camera, Flashlight, FlashlightOff, RefreshCw, Search } from "lucide-react";
 
-const ZXING_READER_OPTIONS: ReaderOptions = {
-  formats: ["QRCode", "UPCA", "UPCE", "EAN13", "EAN8", "Code128", "Code39", "ITF"],
+const ZXING_1D_FORMATS: NonNullable<ReaderOptions["formats"]> = [
+  "UPCA",
+  "UPCE",
+  "EAN13",
+  "EAN8",
+  "Code128",
+  "Code39",
+  "ITF",
+];
+
+const ZXING_BASE_OPTIONS: Omit<ReaderOptions, "formats"> = {
   tryHarder: true,
   tryRotate: true,
   tryInvert: true,
@@ -12,8 +21,17 @@ const ZXING_READER_OPTIONS: ReaderOptions = {
   maxNumberOfSymbols: 1,
 };
 
-const NATIVE_DETECTOR_FORMATS = [
-  "qr_code",
+const ZXING_READER_OPTIONS_WITH_QR: ReaderOptions = {
+  ...ZXING_BASE_OPTIONS,
+  formats: ["QRCode", ...ZXING_1D_FORMATS],
+};
+
+const ZXING_READER_OPTIONS_1D_ONLY: ReaderOptions = {
+  ...ZXING_BASE_OPTIONS,
+  formats: ZXING_1D_FORMATS,
+};
+
+const NATIVE_1D_FORMATS = [
   "upc_a",
   "upc_e",
   "ean_13",
@@ -22,6 +40,8 @@ const NATIVE_DETECTOR_FORMATS = [
   "code_39",
   "itf",
 ];
+
+const NATIVE_ALL_FORMATS = ["qr_code", ...NATIVE_1D_FORMATS];
 
 const MAX_CAPTURE_DIMENSION = 1024;
 const WASM_DECODE_INTERVAL_MS = 120;
@@ -32,6 +52,7 @@ interface BarcodeScannerProps {
   active?: boolean;
   defaultCameraEnabled?: boolean;
   flashOnScan?: boolean;
+  allowQrCodes?: boolean;
 }
 
 function playBeep() {
@@ -78,6 +99,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   active = true,
   defaultCameraEnabled = false,
   flashOnScan = false,
+  allowQrCodes = true,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -85,6 +107,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   onScanRef.current = onScan;
   const flashOnScanRef = useRef(flashOnScan);
   flashOnScanRef.current = flashOnScan;
+  const allowQrCodesRef = useRef(allowQrCodes);
+  allowQrCodesRef.current = allowQrCodes;
   const flashTimerRef = useRef<number | null>(null);
 
   const [cameraEnabled, setCameraEnabled] = useState(defaultCameraEnabled);
@@ -202,30 +226,41 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         const win = window as unknown as {
           BarcodeDetector?: {
             new (opts?: { formats?: string[] }): {
-              detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+              detect: (el: HTMLVideoElement) => Promise<Array<{ rawValue?: string; format?: string }>>;
             };
             getSupportedFormats?: () => Promise<string[]>;
           };
         };
         if (win.BarcodeDetector) {
           try {
-            let formats = NATIVE_DETECTOR_FORMATS;
+            let formatsWithQr = NATIVE_ALL_FORMATS;
+            let formats1dOnly = NATIVE_1D_FORMATS;
             if (typeof win.BarcodeDetector.getSupportedFormats === "function") {
               const supported = await win.BarcodeDetector.getSupportedFormats();
-              const filtered = NATIVE_DETECTOR_FORMATS.filter((f) => supported.includes(f));
-              if (filtered.length > 0) {
-                formats = filtered;
+              const filteredAll = NATIVE_ALL_FORMATS.filter((f) => supported.includes(f));
+              if (filteredAll.length > 0) {
+                formatsWithQr = filteredAll;
+              }
+              const filtered1d = NATIVE_1D_FORMATS.filter((f) => supported.includes(f));
+              if (filtered1d.length > 0) {
+                formats1dOnly = filtered1d;
               }
             }
             if (!cancelled) {
-              const detector = new win.BarcodeDetector({ formats });
+              const detectorWithQr = new win.BarcodeDetector({ formats: formatsWithQr });
+              const detector1dOnly = new win.BarcodeDetector({ formats: formats1dOnly });
               const loop = async () => {
                 if (cancelled || !videoRef.current) return;
                 if (videoRef.current.readyState >= 2) {
                   try {
+                    const qrAllowed = allowQrCodesRef.current;
+                    const detector = qrAllowed ? detectorWithQr : detector1dOnly;
                     const hits = await detector.detect(videoRef.current);
-                    if (hits[0]?.rawValue) {
-                      emitScan(hits[0].rawValue);
+                    const hit = hits.find(
+                      (h) => h.rawValue && (qrAllowed || h.format !== "qr_code")
+                    );
+                    if (hit?.rawValue) {
+                      emitScan(hit.rawValue);
                     }
                   } catch {
                     // Ignore transient frame errors
@@ -277,7 +312,10 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
               if (captureCtx) {
                 captureCtx.drawImage(el, 0, 0, width, height);
                 const imageData = captureCtx.getImageData(0, 0, width, height);
-                const results = await readBarcodes(imageData, ZXING_READER_OPTIONS);
+                const readerOptions = allowQrCodesRef.current
+                  ? ZXING_READER_OPTIONS_WITH_QR
+                  : ZXING_READER_OPTIONS_1D_ONLY;
+                const results = await readBarcodes(imageData, readerOptions);
                 if (!cancelled && results[0]?.text) {
                   emitScan(results[0].text);
                 }

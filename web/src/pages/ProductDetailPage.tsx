@@ -918,6 +918,7 @@ export const ProductDetailPage: React.FC = () => {
       <BarcodeScanModal
         open={scanModalVariantId !== null}
         title="Scan Variant Barcode"
+        allowQrCodes={false}
         onCapture={(code) => {
           if (scanModalVariantId !== null) {
             setDraft(scanModalVariantId, { barcode: code });
