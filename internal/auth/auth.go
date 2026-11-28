@@ -46,14 +46,15 @@ func IsValidTheme(theme string) bool {
 }
 
 type User struct {
-	ID          int64   `json:"id"`
-	Email       string  `json:"email"`
-	Role        string  `json:"role"`
-	Theme       string  `json:"theme"`
-	OIDCIssuer  *string `json:"oidc_issuer,omitempty"`
-	OIDCSubject *string `json:"oidc_subject,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	ID                  int64   `json:"id"`
+	Email               string  `json:"email"`
+	Role                string  `json:"role"`
+	Theme               string  `json:"theme"`
+	QuickActionsEnabled bool    `json:"quick_actions_enabled"`
+	OIDCIssuer          *string `json:"oidc_issuer,omitempty"`
+	OIDCSubject         *string `json:"oidc_subject,omitempty"`
+	CreatedAt           string  `json:"created_at"`
+	UpdatedAt           string  `json:"updated_at"`
 }
 
 func (u *User) IsAdmin() bool {
@@ -156,12 +157,13 @@ func (s *Service) SetupAdmin(ctx context.Context, email, password string) (*User
 	}
 
 	return &User{
-		ID:        id,
-		Email:     email,
-		Role:      RoleAdmin,
-		Theme:     ThemeSystem,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                  id,
+		Email:               email,
+		Role:                RoleAdmin,
+		Theme:               ThemeSystem,
+		QuickActionsEnabled: true,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}, nil
 }
 
@@ -196,18 +198,19 @@ func (s *Service) CreateUser(ctx context.Context, email, password, role string) 
 		return nil, err
 	}
 	return &User{
-		ID:        id,
-		Email:     email,
-		Role:      role,
-		Theme:     ThemeSystem,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                  id,
+		Email:               email,
+		Role:                role,
+		Theme:               ThemeSystem,
+		QuickActionsEnabled: true,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}, nil
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, email, role, theme, oidc_issuer, oidc_subject, created_at, updated_at
+		SELECT id, email, role, theme, quick_actions_enabled, oidc_issuer, oidc_subject, created_at, updated_at
 		FROM users
 		ORDER BY id ASC
 	`)
@@ -219,10 +222,12 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
+		var quickActions int
 		var iss, sub sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &iss, &sub, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &quickActions, &iss, &sub, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
+		u.QuickActionsEnabled = quickActions != 0
 		if iss.Valid {
 			u.OIDCIssuer = &iss.String
 		}
@@ -236,17 +241,19 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 
 func (s *Service) GetUser(ctx context.Context, id int64) (*User, error) {
 	var u User
+	var quickActions int
 	var iss, sub sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role, theme, oidc_issuer, oidc_subject, created_at, updated_at
+		SELECT id, email, role, theme, quick_actions_enabled, oidc_issuer, oidc_subject, created_at, updated_at
 		FROM users WHERE id = ?
-	`, id).Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
+	`, id).Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &quickActions, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	u.QuickActionsEnabled = quickActions != 0
 	if iss.Valid {
 		u.OIDCIssuer = &iss.String
 	}
@@ -258,17 +265,19 @@ func (s *Service) GetUser(ctx context.Context, id int64) (*User, error) {
 
 func (s *Service) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
+	var quickActions int
 	var iss, sub sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role, theme, oidc_issuer, oidc_subject, created_at, updated_at
+		SELECT id, email, role, theme, quick_actions_enabled, oidc_issuer, oidc_subject, created_at, updated_at
 		FROM users WHERE email = ?
-	`, normalizeEmail(email)).Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
+	`, normalizeEmail(email)).Scan(&u.ID, &u.Email, &u.Role, &u.Theme, &quickActions, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	u.QuickActionsEnabled = quickActions != 0
 	if iss.Valid {
 		u.OIDCIssuer = &iss.String
 	}
@@ -355,7 +364,7 @@ func (s *Service) DeleteUser(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID int64, email, currentPassword, newPassword, theme string) (*User, error) {
+func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID int64, email, currentPassword, newPassword, theme string, quickActionsEnabled *bool) (*User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -363,7 +372,8 @@ func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID in
 	defer tx.Rollback()
 
 	var existingEmail, existingHash, existingTheme string
-	err = tx.QueryRowContext(ctx, `SELECT email, password_hash, theme FROM users WHERE id = ?`, userID).Scan(&existingEmail, &existingHash, &existingTheme)
+	var existingQuickActions int
+	err = tx.QueryRowContext(ctx, `SELECT email, password_hash, theme, quick_actions_enabled FROM users WHERE id = ?`, userID).Scan(&existingEmail, &existingHash, &existingTheme, &existingQuickActions)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -385,6 +395,15 @@ func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID in
 		nextTheme = normalizedTheme
 	}
 
+	nextQuickActions := existingQuickActions
+	if quickActionsEnabled != nil {
+		if *quickActionsEnabled {
+			nextQuickActions = 1
+		} else {
+			nextQuickActions = 0
+		}
+	}
+
 	nextHash := existingHash
 	if newPassword != "" {
 		if !CheckPassword(existingHash, currentPassword) {
@@ -399,8 +418,8 @@ func (s *Service) UpdateAccount(ctx context.Context, userID, currentSessionID in
 
 	now := db.NowUTC()
 	_, err = tx.ExecContext(ctx, `
-		UPDATE users SET email = ?, password_hash = ?, theme = ?, updated_at = ? WHERE id = ?
-	`, nextEmail, nextHash, nextTheme, now, userID)
+		UPDATE users SET email = ?, password_hash = ?, theme = ?, quick_actions_enabled = ?, updated_at = ? WHERE id = ?
+	`, nextEmail, nextHash, nextTheme, nextQuickActions, now, userID)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, ErrDuplicateEmail
@@ -430,11 +449,12 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*Us
 	email = normalizeEmail(email)
 	var u User
 	var hash string
+	var quickActions int
 	var iss, sub sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, password_hash, role, theme, oidc_issuer, oidc_subject, created_at, updated_at
+		SELECT id, email, password_hash, role, theme, quick_actions_enabled, oidc_issuer, oidc_subject, created_at, updated_at
 		FROM users WHERE email = ?
-	`, email).Scan(&u.ID, &u.Email, &hash, &u.Role, &u.Theme, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
+	`, email).Scan(&u.ID, &u.Email, &hash, &u.Role, &u.Theme, &quickActions, &iss, &sub, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrInvalidCredentials
 	}
@@ -444,6 +464,7 @@ func (s *Service) Authenticate(ctx context.Context, email, password string) (*Us
 	if !CheckPassword(hash, password) {
 		return nil, ErrInvalidCredentials
 	}
+	u.QuickActionsEnabled = quickActions != 0
 	if iss.Valid {
 		u.OIDCIssuer = &iss.String
 	}
@@ -496,17 +517,18 @@ func (s *Service) ValidateToken(ctx context.Context, rawToken string) (*User, *S
 	}
 	var u User
 	var sess Session
+	var quickActions int
 	var iss, sub, ua, ip sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			s.id, s.user_id, s.kind, s.user_agent, s.ip_address, s.expires_at, s.created_at,
-			u.id, u.email, u.role, u.theme, u.oidc_issuer, u.oidc_subject, u.created_at, u.updated_at
+			u.id, u.email, u.role, u.theme, u.quick_actions_enabled, u.oidc_issuer, u.oidc_subject, u.created_at, u.updated_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ?
 	`, HashToken(rawToken)).Scan(
 		&sess.ID, &sess.UserID, &sess.Kind, &ua, &ip, &sess.ExpiresAt, &sess.CreatedAt,
-		&u.ID, &u.Email, &u.Role, &u.Theme, &iss, &sub, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Email, &u.Role, &u.Theme, &quickActions, &iss, &sub, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, ErrUnauthorized
@@ -514,6 +536,7 @@ func (s *Service) ValidateToken(ctx context.Context, rawToken string) (*User, *S
 	if err != nil {
 		return nil, nil, err
 	}
+	u.QuickActionsEnabled = quickActions != 0
 
 	exp, err := time.Parse(time.RFC3339, sess.ExpiresAt)
 	if err != nil || time.Now().UTC().After(exp) {

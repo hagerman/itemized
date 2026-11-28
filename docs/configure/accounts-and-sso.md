@@ -18,7 +18,7 @@ Itemized supports multiple household members with **Admin** and **Member** roles
 
 ## Updating your own account
 
-Every user can open **Settings → Account** to update their email address or change their password (enter your current password and a new password of at least 8 characters).
+Every user can open **Settings** to update their email address, change their password (enter your current password and a new password of at least 8 characters), choose an **Appearance** theme (**System**, **Light**, or **Dark**), or switch **Quick Actions** between **Enabled** and **Disabled** (enabled by default; disable if you scan printed item labels and prefer marking specific units consumed).
 
 ## Managing household users
 

@@ -782,4 +782,131 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
     });
   });
+
+  it("supports quick -1 consume with Undo toast on in-stock products and hides buttons when quick_actions_enabled is false", async () => {
+    let quickActionsEnabled = true;
+    const consumeCalls: string[] = [];
+    const undoCalls: Array<{ url: string; body: unknown }> = [];
+
+    const products = [
+      {
+        id: 1,
+        name: "Milk, Whole",
+        category_id: 1,
+        category_name: "Dairy",
+        default_location_id: 1,
+        default_location_name: "Fridge",
+        in_stock_count: 2,
+        next_due_on_date: "2026-12-05",
+        next_location_name: "Fridge",
+        on_shopping_list: false,
+        low_stock: false,
+        low_stock_amount: null,
+        due_soon: false,
+        overdue: false,
+      },
+      {
+        id: 2,
+        name: "Eggs, Large",
+        category_id: 1,
+        category_name: "Dairy",
+        default_location_id: 1,
+        default_location_name: "Fridge",
+        in_stock_count: 0,
+        next_due_on_date: null,
+        next_location_name: "",
+        on_shopping_list: true,
+        low_stock: true,
+        low_stock_amount: 1,
+        due_soon: false,
+        overdue: false,
+      },
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({
+              initialized: true,
+              oidc_enabled: false,
+              oidc_force: false,
+              llm_enabled: false,
+              user: { id: 1, email: "a@b.c", role: "member", quick_actions_enabled: quickActionsEnabled },
+            }),
+            { status: 200 }
+          );
+        }
+        if (url.startsWith("/api/products?")) {
+          return new Response(
+            JSON.stringify({ products, status_counts: { in_stock: 1, shopping_list: 1, due_soon: 0, overdue: 0, all: 2 } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1/consume-next" && init?.method === "POST") {
+          consumeCalls.push(url);
+          return new Response(
+            JSON.stringify({
+              item: { id: 55, product_id: 1, product_name: "Milk, Whole", location_name: "Fridge", consumed_on_date: "2026-11-28" },
+              previous: { id: 55, product_id: 1, product_name: "Milk, Whole", location_name: "Fridge", consumed_on_date: null },
+            }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/items/55" && init?.method === "PATCH") {
+          undoCalls.push({ url, body: JSON.parse(String(init.body)) });
+          return new Response(JSON.stringify({ item: { id: 55, consumed_on_date: null } }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/?status=all"]}>
+          <Routes>
+            <Route path="/" element={<ProductsPage />} />
+            <Route path="/products/:id" element={<div>Product Detail</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Quick consume buttons shown for in-stock Milk (card + table), not for out-of-stock Eggs
+    const milkConsumeBtns = await screen.findAllByRole("button", { name: "Quick consume Milk, Whole" });
+    expect(milkConsumeBtns.length).toBe(2);
+    expect(milkConsumeBtns[0]).toHaveTextContent("Consume");
+    expect(screen.queryByRole("button", { name: "Quick consume Eggs, Large" })).not.toBeInTheDocument();
+
+    // Clicking -1 consumes without navigating to Product Detail and shows Undo toast
+    fireEvent.click(milkConsumeBtns[0]);
+    const toast = await screen.findByTestId("quick-consume-toast");
+    expect(toast).toHaveTextContent("Consumed 1 Milk, Whole from Fridge");
+    expect(consumeCalls).toEqual(["/api/products/1/consume-next"]);
+    expect(screen.queryByText("Product Detail")).not.toBeInTheDocument();
+
+    // Clicking Undo restores the item and dismisses the toast
+    fireEvent.click(within(toast).getByRole("button", { name: /Undo/i }));
+    await waitFor(() => expect(undoCalls).toEqual([{ url: "/api/items/55", body: { consumed_on_date: null } }]));
+    await waitFor(() => expect(screen.queryByTestId("quick-consume-toast")).not.toBeInTheDocument());
+    unmount();
+
+    // When quick_actions_enabled is false, -1 buttons are hidden
+    quickActionsEnabled = false;
+    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc2}>
+        <MemoryRouter initialEntries={["/?status=all"]}>
+          <Routes>
+            <Route path="/" element={<ProductsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await screen.findByTestId("products-table");
+    expect(screen.queryByRole("button", { name: "Quick consume Milk, Whole" })).not.toBeInTheDocument();
+  });
 });

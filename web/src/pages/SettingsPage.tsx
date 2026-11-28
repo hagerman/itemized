@@ -30,6 +30,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingTheme, setSavingTheme] = useState(false);
+  const [quickActionsEnabled, setQuickActionsEnabled] = useState(user.quick_actions_enabled !== false);
+  const [savingQuickActions, setSavingQuickActions] = useState(false);
 
   // Account (All users)
   const [accountEmail, setAccountEmail] = useState(user.email);
@@ -39,6 +41,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
   useEffect(() => {
     setAccountEmail(user.email);
   }, [user.email]);
+
+  useEffect(() => {
+    setQuickActionsEnabled(user.quick_actions_enabled !== false);
+  }, [user.quick_actions_enabled]);
 
   // Instance Settings (Admin only)
   const { data: settings } = useQuery({
@@ -136,6 +142,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
       setError(err instanceof Error ? err.message : "Failed to save theme preference");
     } finally {
       setSavingTheme(false);
+    }
+  };
+
+  const handleToggleQuickActions = async (next: boolean) => {
+    if (savingQuickActions) return;
+    const previous = quickActionsEnabled;
+    setQuickActionsEnabled(next);
+    if (demoMode) {
+      qc.setQueryData<AuthStatus>(["auth-status"], (prev) =>
+        prev && prev.user ? { ...prev, user: { ...prev.user, quick_actions_enabled: next } } : prev
+      );
+      flash("Quick actions preference updated locally for this session.");
+      return;
+    }
+    setSavingQuickActions(true);
+    try {
+      const res = await apiFetch<{ user: User }>("/api/auth/account", {
+        method: "PATCH",
+        body: JSON.stringify({ quick_actions_enabled: next }),
+      });
+      qc.setQueryData<AuthStatus>(["auth-status"], (prev) =>
+        prev ? { ...prev, user: res.user ?? (prev.user ? { ...prev.user, quick_actions_enabled: next } : null) } : prev
+      );
+      flash("Quick actions preference saved.");
+    } catch (err) {
+      setQuickActionsEnabled(previous);
+      setNotice(null);
+      setError(err instanceof Error ? err.message : "Failed to save quick actions preference");
+    } finally {
+      setSavingQuickActions(false);
     }
   };
 
@@ -273,6 +309,48 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ user, demoMode = fal
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Quick Actions</h2>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              Show one-tap Consume buttons on the inventory list. Disable if you scan printed item labels to mark specific units.
+            </p>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label="Quick actions"
+            className="inline-grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-950"
+          >
+            {[
+              { value: true, label: "Enabled" },
+              { value: false, label: "Disabled" },
+            ].map((opt) => {
+              const selected = quickActionsEnabled === opt.value;
+              return (
+                <button
+                  key={opt.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={savingQuickActions}
+                  onClick={() => {
+                    if (opt.value !== quickActionsEnabled) {
+                      void handleToggleQuickActions(opt.value);
+                    }
+                  }}
+                  className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    selected
+                      ? "bg-white text-slate-900 shadow-xs dark:bg-indigo-600 dark:text-white dark:shadow-none"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
                   <span>{opt.label}</span>
                 </button>
               );

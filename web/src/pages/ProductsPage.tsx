@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpDown, Check, CheckCircle2, Clock, GitMerge, HelpCircle, Loader2, Plus, ScanBarcode, Search, ShieldAlert, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
-import { apiFetch, AuthStatus, Category, invalidateInventoryQueries, Location, Product } from "../api";
+import { AlertTriangle, ArrowUpDown, Check, CheckCircle2, Clock, GitMerge, HelpCircle, Loader2, Plus, RotateCcw, ScanBarcode, Search, ShieldAlert, ShoppingCart, Sparkles, Trash2, X } from "lucide-react";
+import { apiFetch, AuthStatus, Category, invalidateInventoryQueries, Item, Location, Product } from "../api";
 import { useHelp } from "../components/HelpContext";
 import { useScannerControl } from "../components/Layout";
 import { ModalBackdrop } from "../components/ModalBackdrop";
@@ -45,6 +45,10 @@ export const ProductsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [seedingStarter, setSeedingStarter] = useState(false);
   const [starterError, setStarterError] = useState<string | null>(null);
+  const [consumingIds, setConsumingIds] = useState<number[]>([]);
+  const [quickConsumeError, setQuickConsumeError] = useState<string | null>(null);
+  const [undoToast, setUndoToast] = useState<{ itemId: number; message: string; undoing?: boolean } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
   const status = searchParams.get("status") || "in_stock";
   const categoryId = searchParams.get("category_id") || "";
   const locationId = searchParams.get("location_id") || "";
@@ -144,6 +148,72 @@ export const ProductsPage: React.FC = () => {
     queryFn: () => apiFetch<AuthStatus>("/api/auth/status"),
   });
   const llmEnabled = Boolean(authStatus?.llm_enabled);
+  const quickActionsEnabled = authStatus?.user?.quick_actions_enabled !== false;
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) {
+        window.clearTimeout(undoTimerRef.current);
+      }
+    };
+  }, []);
+
+  const dismissUndoToast = () => {
+    if (undoTimerRef.current) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setUndoToast(null);
+  };
+
+  const handleQuickConsume = async (product: Product) => {
+    if (consumingIds.includes(product.id)) return;
+    setConsumingIds((prev) => [...prev, product.id]);
+    setQuickConsumeError(null);
+    try {
+      const res = await apiFetch<{ item: Item; previous: Item }>(`/api/products/${product.id}/consume-next`, {
+        method: "POST",
+      });
+      void invalidateInventoryQueries(qc);
+      void qc.invalidateQueries({ queryKey: ["product", String(product.id)] });
+      const label = res.item?.product_name || product.name;
+      const locSuffix = res.item?.location_name ? ` from ${res.item.location_name}` : "";
+      if (undoTimerRef.current) {
+        window.clearTimeout(undoTimerRef.current);
+      }
+      setUndoToast({
+        itemId: res.item.id,
+        message: `Consumed 1 ${label}${locSuffix}`,
+      });
+      undoTimerRef.current = window.setTimeout(() => {
+        setUndoToast(null);
+        undoTimerRef.current = null;
+      }, 8000);
+    } catch (err) {
+      setQuickConsumeError(err instanceof Error ? err.message : "Failed to consume item");
+    } finally {
+      setConsumingIds((prev) => prev.filter((id) => id !== product.id));
+    }
+  };
+
+  const handleUndoConsume = async () => {
+    if (!undoToast || undoToast.undoing) return;
+    const itemId = undoToast.itemId;
+    setUndoToast((prev) => (prev ? { ...prev, undoing: true } : null));
+    setQuickConsumeError(null);
+    try {
+      await apiFetch(`/api/items/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ consumed_on_date: null }),
+      });
+      void invalidateInventoryQueries(qc);
+      void qc.invalidateQueries({ queryKey: ["product"] });
+      dismissUndoToast();
+    } catch (err) {
+      setUndoToast((prev) => (prev ? { ...prev, undoing: false } : null));
+      setQuickConsumeError(err instanceof Error ? err.message : "Failed to undo consume");
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["products", queryStr],
@@ -734,25 +804,43 @@ export const ProductsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  {p.overdue && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300">
-                      <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
-                    </span>
-                  )}
-                  {!p.overdue && p.due_soon && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
-                      <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
-                    </span>
-                  )}
-                  {!p.overdue && !p.due_soon && p.next_due_on_date && (
-                    <span className="text-xs text-slate-500">Next due: {p.next_due_on_date}</span>
-                  )}
-                  {p.on_shopping_list && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-                      <ShoppingCart className="h-3 w-3" />
-                      {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
-                    </span>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {p.overdue && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 dark:bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-300">
+                        <AlertTriangle className="h-3 w-3" /> Overdue ({p.next_due_on_date})
+                      </span>
+                    )}
+                    {!p.overdue && p.due_soon && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                        <Clock className="h-3 w-3" /> Due {p.next_due_on_date}
+                      </span>
+                    )}
+                    {!p.overdue && !p.due_soon && p.next_due_on_date && (
+                      <span className="text-xs text-slate-500">Next due: {p.next_due_on_date}</span>
+                    )}
+                    {p.on_shopping_list && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                        <ShoppingCart className="h-3 w-3" />
+                        {p.low_stock_amount ? `Need ${p.low_stock_amount}` : "Shopping List"}
+                      </span>
+                    )}
+                  </div>
+                  {quickActionsEnabled && p.in_stock_count > 0 && (
+                    <button
+                      type="button"
+                      disabled={consumingIds.includes(p.id)}
+                      aria-label={`Quick consume ${p.name}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleQuickConsume(p);
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-500/60 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200"
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>Consume</span>
+                    </button>
                   )}
                 </div>
               </Link>
@@ -867,6 +955,11 @@ export const ProductsPage: React.FC = () => {
                       <ArrowUpDown className="h-3.5 w-3.5" />
                     </button>
                   </th>
+                  {quickActionsEnabled && (
+                    <th className="w-24 whitespace-nowrap py-2.5 pr-4 text-right font-semibold">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -934,6 +1027,25 @@ export const ProductsPage: React.FC = () => {
                           <span className="text-slate-500">—</span>
                         )}
                       </td>
+                      {quickActionsEnabled && (
+                        <td
+                          className="whitespace-nowrap py-2.5 pr-4 text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {p.in_stock_count > 0 ? (
+                            <button
+                              type="button"
+                              disabled={consumingIds.includes(p.id)}
+                              aria-label={`Quick consume ${p.name}`}
+                              onClick={() => void handleQuickConsume(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-indigo-500/60 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200"
+                            >
+                              <Check className="h-3 w-3" />
+                              <span>Consume</span>
+                            </button>
+                          ) : null}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -1281,6 +1393,52 @@ export const ProductsPage: React.FC = () => {
             </ModalBackdrop>
           )}
         </>
+      )}
+
+      {quickConsumeError && (
+        <div
+          role="alert"
+          className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-800 shadow-2xl dark:border-rose-500/40 dark:bg-rose-950/95 dark:text-rose-200 lg:bottom-6"
+        >
+          <span>{quickConsumeError}</span>
+          <button
+            type="button"
+            aria-label="Dismiss error"
+            onClick={() => setQuickConsumeError(null)}
+            className="rounded p-0.5 hover:bg-rose-200/60 dark:hover:bg-rose-900"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {undoToast && (
+        <div
+          role="status"
+          data-testid="quick-consume-toast"
+          className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-2.5 text-xs text-slate-800 shadow-2xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100 lg:bottom-6"
+        >
+          <span className="truncate font-medium">{undoToast.message}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              disabled={undoToast.undoing}
+              onClick={() => void handleUndoConsume()}
+              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 font-semibold text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 disabled:opacity-50"
+            >
+              <RotateCcw className="h-3 w-3" />
+              {undoToast.undoing ? "Undoing..." : "Undo"}
+            </button>
+            <button
+              type="button"
+              aria-label="Dismiss toast"
+              onClick={dismissUndoToast}
+              className="rounded p-0.5 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

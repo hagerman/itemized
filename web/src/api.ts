@@ -7,6 +7,7 @@ export interface User {
   email: string;
   role: "admin" | "member";
   theme?: ThemePreference;
+  quick_actions_enabled?: boolean;
   oidc_issuer?: string;
   oidc_subject?: string;
   created_at: string;

@@ -421,6 +421,56 @@ func (s *Server) handleConsumeItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"item": updated, "previous": prev, "already_consumed": false})
 }
 
+func (s *Server) handleConsumeNextProductItem(w http.ResponseWriter, r *http.Request) {
+	productID, err := parseIDParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
+	if _, err := s.getProductByID(r.Context(), productID); errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "product not found")
+		return
+	} else if err != nil {
+		writeInternalError(w, "consume next load product", err)
+		return
+	}
+
+	var nextID int64
+	err = s.DB.QueryRowContext(r.Context(), `
+		SELECT id FROM items
+		WHERE product_id = ? AND consumed_on_date IS NULL
+		ORDER BY CASE WHEN due_on_date IS NULL THEN 1 ELSE 0 END, due_on_date ASC, id ASC
+		LIMIT 1
+	`, productID).Scan(&nextID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusConflict, "no in-stock items to consume")
+		return
+	}
+	if err != nil {
+		writeInternalError(w, "consume next select item", err)
+		return
+	}
+
+	prev, err := s.getItemByID(r.Context(), nextID)
+	if err != nil {
+		writeInternalError(w, "consume next load item", err)
+		return
+	}
+
+	today := todayUTC().Format(domain.DateLayout)
+	now := db.NowUTC()
+	if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET consumed_on_date = ?, updated_at = ? WHERE id = ?`, today, now, nextID); err != nil {
+		writeInternalError(w, "consume next update item", err)
+		return
+	}
+	updated, err := s.getItemByID(r.Context(), nextID)
+	if err != nil {
+		writeInternalError(w, "consume next reload item", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"item": updated, "previous": prev})
+}
+
 func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "id")
 	if err != nil {

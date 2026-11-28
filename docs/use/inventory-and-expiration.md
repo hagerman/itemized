@@ -40,4 +40,6 @@ Itemized calculates due dates automatically when you add, open, freeze, or thaw 
 
 ## Managing individual and bulk items
 
+On the inventory list, in-stock products display a **Consume** quick-action button on both mobile cards and desktop table rows so household members can log a consumed unit with one tap. Quick consume always marks the soonest-due item consumed (with unset due dates last, breaking ties by oldest item) and shows an **Undo** toast in case of an accidental tap. Power users who prefer scanning printed QR labels to mark exact units can disable **Quick Actions** per account under **Settings**.
+
 Open any product to inspect its metadata, optional **Measurement** (volume, weight, or length), variants, barcodes, and individual items. Select checkboxes on multiple items to **Consume**, **Open**, **Transfer**, **Set Due Date**, **Set Variant**, or **Reprint Labels** in one action.

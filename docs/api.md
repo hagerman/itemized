@@ -137,6 +137,13 @@ Content-Type: application/json
 # expect-keys: items
 ```
 
+```http run
+POST /api/products/{{product_id}}/consume-next
+
+# expect-status: 200
+# expect-keys: item, previous
+```
+
 ### Scan and workflows
 
 ```http run

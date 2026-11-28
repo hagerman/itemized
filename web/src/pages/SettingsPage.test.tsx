@@ -430,4 +430,56 @@ describe("SettingsPage Appearance theme selector", () => {
     expect(await screen.findByText("Theme updated locally for this browser.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("toggles quick actions preference via PATCH /api/auth/account and supports demo mode locally", async () => {
+    const patchPayloads: unknown[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/account" && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body));
+        patchPayloads.push(body);
+        return new Response(
+          JSON.stringify({ user: { ...MEMBER_USER, quick_actions_enabled: body.quick_actions_enabled } }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "Quick actions" });
+    const enabledBtn = group.querySelector('button[aria-checked="true"]') as HTMLButtonElement;
+    expect(enabledBtn).toHaveTextContent("Enabled");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Disabled" }));
+    expect(await screen.findByText("Quick actions preference saved.")).toBeInTheDocument();
+    expect(patchPayloads).toEqual([{ quick_actions_enabled: false }]);
+    expect(screen.getByRole("radio", { name: "Disabled" })).toHaveAttribute("aria-checked", "true");
+    unmount();
+
+    // Demo mode updates locally without calling PATCH /api/auth/account
+    const demoFetch = vi.fn();
+    vi.stubGlobal("fetch", demoFetch);
+    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc2}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} demoMode />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Disabled" }));
+    expect(await screen.findByText("Quick actions preference updated locally for this session.")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Disabled" })).toHaveAttribute("aria-checked", "true");
+    expect(demoFetch).not.toHaveBeenCalled();
+  });
 });

@@ -169,7 +169,7 @@ func TestSessionRevocationOnPasswordResetAndChange(t *testing.T) {
 	}
 
 	// Changing own password keeps current session (sess1) and revokes other sessions (tok2).
-	if _, err := svc.UpdateAccount(ctx, u.ID, sess1.ID, "", "password123", "newpassword456", ""); err != nil {
+	if _, err := svc.UpdateAccount(ctx, u.ID, sess1.ID, "", "password123", "newpassword456", "", nil); err != nil {
 		t.Fatalf("UpdateAccount password change: %v", err)
 	}
 	if _, _, err := svc.ValidateToken(ctx, tok1); err != nil {
@@ -293,7 +293,7 @@ func TestUserThemePreference(t *testing.T) {
 	}
 
 	// Update theme to light without changing email or password.
-	updated, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", ThemeLight)
+	updated, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", ThemeLight, nil)
 	if err != nil {
 		t.Fatalf("UpdateAccount theme=light: %v", err)
 	}
@@ -316,11 +316,73 @@ func TestUserThemePreference(t *testing.T) {
 	}
 
 	// Invalid theme is rejected without changing stored value.
-	if _, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "sepia"); err != ErrInvalidTheme {
+	if _, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "sepia", nil); err != ErrInvalidTheme {
 		t.Fatalf("expected ErrInvalidTheme, got %v", err)
 	}
 	reloaded, err := svc.GetUser(ctx, u.ID)
 	if err != nil || reloaded.Theme != ThemeLight {
 		t.Fatalf("expected stored theme to remain %q, got %+v err=%v", ThemeLight, reloaded, err)
+	}
+}
+
+func TestUserQuickActionsPreference(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ctx := context.Background()
+
+	u, err := svc.SetupAdmin(ctx, "admin@example.com", "password123")
+	if err != nil {
+		t.Fatalf("SetupAdmin: %v", err)
+	}
+	if !u.QuickActionsEnabled {
+		t.Fatalf("expected default quick_actions_enabled=true, got false")
+	}
+
+	m, err := svc.CreateUser(ctx, "member@example.com", "password123", RoleMember)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if !m.QuickActionsEnabled {
+		t.Fatalf("expected member default quick_actions_enabled=true, got false")
+	}
+
+	// Toggle off independently of email/password/theme.
+	disabled := false
+	updated, err := svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "", &disabled)
+	if err != nil {
+		t.Fatalf("UpdateAccount quick_actions_enabled=false: %v", err)
+	}
+	if updated.QuickActionsEnabled || updated.Email != "admin@example.com" || updated.Theme != ThemeSystem {
+		t.Fatalf("unexpected updated user: %+v", updated)
+	}
+
+	// Persists across ValidateToken, Authenticate, GetUser, and ListUsers.
+	tok, _, err := svc.CreateSession(ctx, u.ID, SessionKindBearer, "test", "127.0.0.1", time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	fromTok, _, err := svc.ValidateToken(ctx, tok)
+	if err != nil || fromTok.QuickActionsEnabled {
+		t.Fatalf("ValidateToken expected quick_actions_enabled=false, got %+v err=%v", fromTok, err)
+	}
+	fromAuth, err := svc.Authenticate(ctx, "admin@example.com", "password123")
+	if err != nil || fromAuth.QuickActionsEnabled {
+		t.Fatalf("Authenticate expected quick_actions_enabled=false, got %+v err=%v", fromAuth, err)
+	}
+	users, err := svc.ListUsers(ctx)
+	if err != nil || len(users) != 2 || users[0].QuickActionsEnabled || !users[1].QuickActionsEnabled {
+		t.Fatalf("ListUsers unexpected quick_actions_enabled values: %+v err=%v", users, err)
+	}
+
+	// Toggle back on.
+	enabled := true
+	updated, err = svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "", &enabled)
+	if err != nil || !updated.QuickActionsEnabled {
+		t.Fatalf("UpdateAccount quick_actions_enabled=true failed: user=%+v err=%v", updated, err)
 	}
 }

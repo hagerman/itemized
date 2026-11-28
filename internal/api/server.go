@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	authed.HandleFunc("PATCH /api/products/{id}", s.handleUpdateProduct)
 	authed.HandleFunc("DELETE /api/products/{id}", s.handleDeleteProduct)
 	authed.HandleFunc("POST /api/products/{id}/toggle-shopping-list", s.handleToggleShoppingList)
+	authed.HandleFunc("POST /api/products/{id}/consume-next", s.handleConsumeNextProductItem)
 	authed.HandleFunc("POST /api/products/{id}/print-label", s.handlePrintProductLabel)
 	authed.HandleFunc("POST /api/products/{id}/variants", s.handleCreateVariant)
 	authed.HandleFunc("PATCH /api/variants/{id}", s.handleUpdateVariant)
@@ -576,10 +577,11 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email           string `json:"email"`
-		CurrentPassword string `json:"current_password"`
-		NewPassword     string `json:"new_password"`
-		Theme           string `json:"theme"`
+		Email               string `json:"email"`
+		CurrentPassword     string `json:"current_password"`
+		NewPassword         string `json:"new_password"`
+		Theme               string `json:"theme"`
+		QuickActionsEnabled *bool  `json:"quick_actions_enabled"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -589,7 +591,7 @@ func (s *Server) handleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	if sess := auth.SessionFromContext(r.Context()); sess != nil {
 		sessID = sess.ID
 	}
-	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, sessID, req.Email, req.CurrentPassword, req.NewPassword, req.Theme)
+	updated, err := s.Auth.UpdateAccount(r.Context(), u.ID, sessID, req.Email, req.CurrentPassword, req.NewPassword, req.Theme, req.QuickActionsEnabled)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
 		writeError(w, http.StatusUnprocessableEntity, "current password is incorrect")
 		return
