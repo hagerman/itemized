@@ -83,6 +83,10 @@ func (s *Server) Handler() http.Handler {
 	authed := http.NewServeMux()
 	authed.HandleFunc("GET /api/auth/me", s.handleAuthMe)
 	authed.HandleFunc("PATCH /api/auth/account", s.handleUpdateAccount)
+	authed.HandleFunc("GET /api/auth/tokens", s.handleListAPITokens)
+	authed.HandleFunc("POST /api/auth/tokens", s.handleCreateAPIToken)
+	authed.HandleFunc("DELETE /api/auth/tokens/{id}", s.handleDeleteAPIToken)
+	authed.HandleFunc("GET /api/summary", s.handleSummary)
 
 	// Admin user management
 	adminOnly := func(h http.HandlerFunc) http.Handler {

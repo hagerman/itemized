@@ -37,19 +37,24 @@ describe("SettingsPage role-based visibility", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows only Account settings and skips admin API calls for member users", () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }));
+  it("shows only Account and API Tokens settings and skips admin API calls for member users", () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tokens: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     renderWithQuery(MEMBER_USER);
 
     expect(screen.getByText("Account")).toBeInTheDocument();
+    expect(screen.getByText("API Tokens")).toBeInTheDocument();
     expect(screen.getByDisplayValue("member@home.local")).toBeInTheDocument();
     expect(screen.queryByText("Instance Configuration")).not.toBeInTheDocument();
     expect(screen.queryByText("Household Users (Admin)")).not.toBeInTheDocument();
     expect(screen.queryByText("Label Printers")).not.toBeInTheDocument();
     expect(screen.queryByText("ZPL Label Templates")).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    const calledUrls = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(calledUrls).not.toContain("/api/settings");
+    expect(calledUrls).not.toContain("/api/users");
+    expect(calledUrls).not.toContain("/api/printers");
+    expect(calledUrls).not.toContain("/api/label-templates");
   });
 
   it("shows all admin settings sections and queries admin endpoints for admin users", async () => {
@@ -481,5 +486,84 @@ describe("SettingsPage Appearance theme selector", () => {
     expect(await screen.findByText("Quick actions preference updated locally for this session.")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Disabled" })).toHaveAttribute("aria-checked", "true");
     expect(demoFetch).not.toHaveBeenCalled();
+  });
+
+  it("creates, reveals once, lists, and revokes Personal API Tokens and disables controls in demo mode", async () => {
+    let tokens: Array<{
+      id: number;
+      user_id: number;
+      name: string;
+      token_prefix: string;
+      last_used_at: string | null;
+      expires_at: string | null;
+      created_at: string;
+    }> = [];
+    const createdPayloads: unknown[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/tokens" && (!init?.method || init.method === "GET")) {
+          return new Response(JSON.stringify({ tokens }), { status: 200 });
+        }
+        if (url === "/api/auth/tokens" && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          createdPayloads.push(body);
+          const meta = {
+            id: 7,
+            user_id: 2,
+            name: body.name,
+            token_prefix: "itm_abcd1234",
+            last_used_at: null,
+            expires_at: "2027-02-26T00:00:00Z",
+            created_at: "2026-11-28T10:00:00Z",
+          };
+          tokens = [meta];
+          return new Response(JSON.stringify({ token: "itm_abcd1234secretvalue", metadata: meta }), { status: 201 });
+        }
+        if (url === "/api/auth/tokens/7" && init?.method === "DELETE") {
+          tokens = [];
+          return new Response(JSON.stringify({ deleted: true }), { status: 200 });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("No personal API tokens yet.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Token name"), { target: { value: "Home Assistant" } });
+    fireEvent.change(screen.getByLabelText("Token expiration"), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create Token/i }));
+
+    const reveal = await screen.findByTestId("api-token-reveal");
+    expect(reveal).toHaveTextContent("Home Assistant");
+    expect(screen.getByLabelText("Created API token")).toHaveValue("itm_abcd1234secretvalue");
+    expect(createdPayloads).toEqual([{ name: "Home Assistant", expires_in_days: 90 }]);
+    expect(await screen.findByText("itm_abcd1234...")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke Home Assistant" }));
+    expect(await screen.findByText("No personal API tokens yet.")).toBeInTheDocument();
+    unmount();
+
+    // Demo mode disables API token creation
+    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc2}>
+        <ThemeProvider>
+          <SettingsPage user={MEMBER_USER} demoMode />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+    expect(screen.getByLabelText("Token name")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Create Token/i })).toBeDisabled();
   });
 });

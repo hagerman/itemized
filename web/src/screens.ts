@@ -22,6 +22,7 @@ export const APP_SCREENS: AppScreen[] = [
 
   // Settings sections / cards (must match SettingsPage.tsx)
   { id: "settings/account", kind: "settings", label: "Account" },
+  { id: "settings/api-tokens", kind: "settings", label: "API Tokens" },
   { id: "settings/instance", kind: "settings", label: "Instance Configuration" },
   { id: "settings/oidc", kind: "settings", label: "OIDC" },
   { id: "settings/llm", kind: "settings", label: "LLM Product Classification" },

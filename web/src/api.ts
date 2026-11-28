@@ -14,6 +14,16 @@ export interface User {
   updated_at: string;
 }
 
+export interface APIToken {
+  id: number;
+  user_id: number;
+  name: string;
+  token_prefix: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
 export interface AuthStatus {
   initialized: boolean;
   oidc_enabled: boolean;

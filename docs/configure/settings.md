@@ -17,6 +17,7 @@ Open **Settings** by clicking your email address in the bottom-left sidebar foot
 ## Available sections
 
 - **Account** (all users): Update your email address, password, theme preference, and quick-consume toggle. See [Household accounts and OIDC SSO](accounts-and-sso.md).
+- **API Tokens** (all users): Create and revoke long-lived Personal API Tokens for Home Assistant, iOS Shortcuts, and scripts. See [API tokens and Home Assistant](api-tokens-and-integrations.md).
 - **Instance Configuration** (Admin): Set the **Base URL** encoded in printed QR labels and the **Due Date Rolling Average Count**. See [Inventory and expiration tracking](../use/inventory-and-expiration.md).
 - **OIDC** (Admin): Configure optional OpenID Connect single sign-on, auto-provisioning, and forced OIDC login. See [Household accounts and OIDC SSO](accounts-and-sso.md).
 - **LLM Product Classification** (Admin): Connect Anthropic, OpenAI, Gemini, or local Ollama for automatic UPC normalization and bulk reclassification. See [UPC lookup and AI classification](upc-and-ai.md).

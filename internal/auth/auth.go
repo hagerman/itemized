@@ -515,6 +515,9 @@ func (s *Service) ValidateToken(ctx context.Context, rawToken string) (*User, *S
 	if rawToken == "" {
 		return nil, nil, ErrUnauthorized
 	}
+	if strings.HasPrefix(rawToken, APITokenPrefix) {
+		return s.validateAPIToken(ctx, rawToken)
+	}
 	var u User
 	var sess Session
 	var quickActions int

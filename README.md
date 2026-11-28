@@ -46,6 +46,7 @@ Itemized is designed to make tracking everything in your pantry, fridge, freezer
 - **[UPC lookup and AI classification](docs/configure/upc-and-ai.md)**: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
 - **[Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
 - **[Settings overview](docs/configure/settings.md)**: Navigate Account, Instance Configuration, OIDC, AI classification, Household Users, Printers, and ZPL Templates.
+- **[API tokens and Home Assistant](docs/configure/api-tokens-and-integrations.md)**: Create long-lived Personal API Tokens and connect itemized to Home Assistant, iOS Shortcuts, and custom scripts.
 
 ---
 

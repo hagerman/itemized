@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -384,5 +385,88 @@ func TestUserQuickActionsPreference(t *testing.T) {
 	updated, err = svc.UpdateAccount(ctx, u.ID, 0, "", "", "", "", &enabled)
 	if err != nil || !updated.QuickActionsEnabled {
 		t.Fatalf("UpdateAccount quick_actions_enabled=true failed: user=%+v err=%v", updated, err)
+	}
+}
+
+func TestPersonalAPITokensLifecycle(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	svc := NewService(conn)
+	ctx := context.Background()
+
+	admin, err := svc.SetupAdmin(ctx, "admin@example.com", "password123")
+	if err != nil {
+		t.Fatalf("SetupAdmin: %v", err)
+	}
+	member, err := svc.CreateUser(ctx, "member@example.com", "password123", RoleMember)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	// Blank name and invalid TTL rejected.
+	if _, _, err := svc.CreateAPIToken(ctx, admin.ID, "   ", nil); err != ErrInvalidAPITokenName {
+		t.Fatalf("expected ErrInvalidAPITokenName, got %v", err)
+	}
+	badDays := 0
+	if _, _, err := svc.CreateAPIToken(ctx, admin.ID, "HA", &badDays); err != ErrInvalidAPITokenTTL {
+		t.Fatalf("expected ErrInvalidAPITokenTTL, got %v", err)
+	}
+
+	// Create non-expiring token for admin.
+	raw, meta, err := svc.CreateAPIToken(ctx, admin.ID, "Home Assistant", nil)
+	if err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+	if !strings.HasPrefix(raw, APITokenPrefix) || !strings.HasPrefix(raw, meta.TokenPrefix) {
+		t.Fatalf("unexpected token format: raw=%q prefix=%q", raw, meta.TokenPrefix)
+	}
+	if meta.ExpiresAt != nil || meta.LastUsedAt != nil {
+		t.Fatalf("expected nil expires/last_used initially, got %+v", meta)
+	}
+
+	// ValidateToken authenticates owning user and updates last_used_at.
+	u, sess, err := svc.ValidateToken(ctx, raw)
+	if err != nil || sess != nil || u.ID != admin.ID || u.Role != RoleAdmin {
+		t.Fatalf("ValidateToken failed: u=%+v sess=%+v err=%v", u, sess, err)
+	}
+
+	list, err := svc.ListAPITokens(ctx, admin.ID)
+	if err != nil || len(list) != 1 || list[0].LastUsedAt == nil {
+		t.Fatalf("expected 1 token with last_used_at set, got %+v err=%v", list, err)
+	}
+
+	// Member cannot see or revoke admin's token.
+	memberList, err := svc.ListAPITokens(ctx, member.ID)
+	if err != nil || len(memberList) != 0 {
+		t.Fatalf("expected 0 tokens for member, got %+v err=%v", memberList, err)
+	}
+	if err := svc.RevokeAPIToken(ctx, member.ID, meta.ID); err != ErrAPITokenNotFound {
+		t.Fatalf("expected ErrAPITokenNotFound for cross-user revoke, got %v", err)
+	}
+
+	// Expired token is rejected.
+	days := 1
+	expRaw, expMeta, err := svc.CreateAPIToken(ctx, admin.ID, "Short-lived", &days)
+	if err != nil {
+		t.Fatalf("CreateAPIToken with ttl: %v", err)
+	}
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	if _, err := conn.ExecContext(ctx, `UPDATE api_tokens SET expires_at = ? WHERE id = ?`, past, expMeta.ID); err != nil {
+		t.Fatalf("force expire: %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, expRaw); err != ErrUnauthorized {
+		t.Fatalf("expected ErrUnauthorized for expired token, got %v", err)
+	}
+
+	// Revoking token rejects further auth.
+	if err := svc.RevokeAPIToken(ctx, admin.ID, meta.ID); err != nil {
+		t.Fatalf("RevokeAPIToken: %v", err)
+	}
+	if _, _, err := svc.ValidateToken(ctx, raw); err != ErrUnauthorized {
+		t.Fatalf("expected ErrUnauthorized after revoke, got %v", err)
 	}
 }

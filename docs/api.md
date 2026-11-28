@@ -12,7 +12,7 @@ capabilities:
 screens: []
 ---
 
-Itemized exposes a JSON HTTP API under `/api/*` using session cookies (`itemized_session`). All request and response bodies use `application/json`.
+Itemized exposes a JSON HTTP API under `/api/*` using either browser session cookies (`itemized_session`) or Personal API Tokens via `Authorization: Bearer itm_...` headers (created in **Settings → API Tokens**). All request and response bodies use `application/json`.
 
 ## Error responses
 
@@ -184,4 +184,40 @@ Content-Type: application/json
 
 # expect-status: 200
 # expect-keys: categories_created, locations_created, categories, locations
+```
+
+### Personal API tokens
+
+```http run
+POST /api/auth/tokens
+Content-Type: application/json
+
+{"name": "Home Assistant", "expires_in_days": 90}
+
+# expect-status: 201
+# expect-keys: token, metadata
+# capture: api_token_id=metadata.id
+```
+
+```http run
+GET /api/auth/tokens
+
+# expect-status: 200
+# expect-keys: tokens
+```
+
+```http run
+DELETE /api/auth/tokens/{{api_token_id}}
+
+# expect-status: 200
+# expect-keys: deleted
+```
+
+### Inventory summary
+
+```http run
+GET /api/summary
+
+# expect-status: 200
+# expect-keys: counts, due_soon_products, overdue_products, shopping_list_products
 ```
