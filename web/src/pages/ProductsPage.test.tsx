@@ -328,6 +328,26 @@ describe("ProductsPage desktop table view, sorting, and bulk deletion", () => {
     }
   });
 
+  it("applies light- and dark-mode hover contrast classes to all desktop table column headers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ products: RICH_MOCK_PRODUCTS }), { status: 200 }))
+    );
+
+    renderProductsPage("/?status=in_stock");
+
+    const tableContainer = await screen.findByTestId("products-table");
+    const headers = ["Product", "Category", "Location", "Stock", "Next Due", "Shopping List"];
+
+    for (const header of headers) {
+      const button = within(tableContainer).getByRole("button", { name: header });
+      const classes = button.className.split(/\s+/);
+      expect(classes).toContain("hover:text-slate-900");
+      expect(classes).toContain("dark:hover:text-white");
+      expect(classes).not.toContain("hover:text-white");
+    }
+  });
+
   it("supports desktop bulk selection, confirmation cancellation, bulk deletion, and filter selection reset", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

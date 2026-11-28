@@ -784,7 +784,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("name")}
-                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "name" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -799,7 +799,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("category")}
-                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "category" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -814,7 +814,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("location")}
-                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "location" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -829,7 +829,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("stock")}
-                      className={`inline-flex items-center justify-end gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center justify-end gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "stock" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -844,7 +844,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("due_date")}
-                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "due_date" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
@@ -859,7 +859,7 @@ export const ProductsPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSort("shopping_list")}
-                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-white ${
+                      className={`inline-flex items-center gap-1 font-semibold uppercase transition hover:text-slate-900 dark:hover:text-white ${
                         sort === "shopping_list" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
                       }`}
                     >
