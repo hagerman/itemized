@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.0](https://github.com/itemizedapp/itemized/compare/v0.13.0...v0.14.0) (2026-11-28)
+
+
+### Features
+
+* add server-side sorting for all inventory table columns and update UI controls ([7ac185c](https://github.com/itemizedapp/itemized/commit/7ac185ce47359d550707dadd1776446109becea3))
+* add support for light, dark, and system user theme preferences ([c70e9b5](https://github.com/itemizedapp/itemized/commit/c70e9b5657553493062e94ad9ab2ae54c2407680))
+* ignore QR codes during live camera scanning in purchase mode and variant scan (manufacturers like to put these next to the UPC barcode) ([7ed408a](https://github.com/itemizedapp/itemized/commit/7ed408a45f9428ea4c3258a1aa17e1d22ea74c9e))
+* improve number input editing with expression support (e.g. "500/4" resolves to "125") and fixed empty-to-zero snap ([53ad2b0](https://github.com/itemizedapp/itemized/commit/53ad2b02c815b529b1241f2b0e60f3b3ed641db8))
+* prevent reopening already opened items across api and ui ([214b253](https://github.com/itemizedapp/itemized/commit/214b25349eab6587a217997e8a294a770d9a5689))
+* simplify default scanner input placeholder ([1bcf184](https://github.com/itemizedapp/itemized/commit/1bcf184b000609a7d0a1c8ecedbd878a5bd41149))
+
+
+### Bug Fixes
+
+* correct display issue for variants with no barcodes and handle item notes ([8474e07](https://github.com/itemizedapp/itemized/commit/8474e074ca686e7d1d5b2dc889ca9e191e7a1817))
+* reset purchase quantity and transient form fields on new purchase or scan mode switch ([174f1cb](https://github.com/itemizedapp/itemized/commit/174f1cb68d1527ee4f98e525444212d41abeb14d))
+
 ## [0.13.0](https://github.com/itemizedapp/itemized/compare/v0.12.0...v0.13.0) (2026-11-27)
 
 
