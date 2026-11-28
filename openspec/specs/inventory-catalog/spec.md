@@ -37,7 +37,7 @@ The system SHALL support nested `Category` and `Location` trees via optional `pa
 - **THEN** the system rejects the request with HTTP 422 Unprocessable Entity and leaves the hierarchy unchanged
 
 ### Requirement: Products, variants, and retail barcodes
-The system SHALL store `Product` records with a category, default location, optional single measurement type (volume, weight, or length), due-date defaults (`default_due_days`, `default_due_days_on_open`, `default_due_days_on_freeze`, `default_due_days_on_thaw`, `use_average_for_due_date`), `label_print_mode` (`none`, `single`, `per_item`), `minimum_value`, and `manually_added_to_shopping_list`. Creating a new product or renaming an existing product to a name that matches another existing product case-insensitively (after trimming whitespace) SHALL be rejected with HTTP 409 Conflict including the conflicting product's `id` and `name`. Editing non-name fields of an existing product without changing its normalized name SHALL be permitted even if a pre-existing legacy duplicate exists in the database. Each `Product` MAY have multiple `Variant` records (with optional measurement overrides), and each `Variant` MAY have multiple globally unique `Barcode` records with a `default_quantity`.
+The system SHALL store `Product` records with a category, default location, optional single measurement type (volume, weight, or length), due-date defaults (`default_due_days`, `default_due_days_on_open`, `default_due_days_on_freeze`, `default_due_days_on_thaw`, `use_average_for_due_date`), `label_print_mode` (`none`, `single`, `per_item`), `minimum_value`, and `manually_added_to_shopping_list`. Creating a new product or renaming an existing product to a name that matches another existing product case-insensitively (after trimming whitespace) SHALL be rejected with HTTP 409 Conflict including the conflicting product's `id` and `name`. Editing non-name fields of an existing product without changing its normalized name SHALL be permitted even if a pre-existing legacy duplicate exists in the database. Each `Product` MAY have multiple `Variant` records (with optional measurement overrides), and each `Variant` MAY have multiple globally unique `Barcode` records with a `default_quantity`. API responses that serialize `Variant` records (including `GET /api/products/:id` and variant creation/update responses) SHALL always include the `barcodes` field as a JSON array (`[]` when the variant has no barcodes) rather than omitting it.
 
 #### Scenario: Enforce unique retail barcode
 - **WHEN** a user attempts to associate a retail barcode that already exists on another variant
@@ -59,8 +59,12 @@ The system SHALL store `Product` records with a category, default location, opti
 - **WHEN** a database contains a legacy duplicate product name and a client sends `PATCH /api/products/{id}` changing `default_location_id` while keeping the same normalized `name`
 - **THEN** the system persists the metadata update and returns HTTP 200
 
+#### Scenario: Variant with zero barcodes serializes an empty array
+- **WHEN** a product has a variant with no associated barcodes and a client requests `GET /api/products/{id}`
+- **THEN** the variant object in the JSON response includes `"barcodes": []`
+
 ### Requirement: Individual item lifecycle and due-date rules
-The system SHALL track physical units as `Item` records with integer primary keys, optional `legacy_uuid`, `product_id`, optional `variant_id`, `location_id`, purchase/open/due/consumed dates, and `notes`. `Product` and `Location` records SHALL use integer IDs and optional unique `legacy_uuid`. When `use_average_for_due_date` is enabled on a product, the system SHALL expose its rolling-average `calculated_due_days` from the last `due_date_average_count` purchases.
+The system SHALL track physical units as `Item` records with integer primary keys, optional `legacy_uuid`, `product_id`, optional `variant_id`, `location_id`, purchase/open/due/consumed dates, and `notes`. `Product` and `Location` records SHALL use integer IDs and optional unique `legacy_uuid`. When `use_average_for_due_date` is enabled on a product, the system SHALL expose its rolling-average `calculated_due_days` from the last `due_date_average_count` purchases. Updating an item via `PATCH /api/items/:id` with a `notes` field SHALL trim leading and trailing whitespace and store `null` when the resulting value is empty or explicitly `null`.
 
 #### Scenario: Automatic due-date calculation on purchase
 - **WHEN** an item is created without an explicit `due_on_date` and the product has `use_average_for_due_date` enabled
@@ -77,6 +81,12 @@ The system SHALL track physical units as `Item` records with integer primary key
 #### Scenario: Calculated rolling-average due days exposed on product
 - **WHEN** a product has `use_average_for_due_date = true` and recent purchased items with offsets of 10, 12, and 8 days (with `due_date_average_count = 3`)
 - **THEN** `GET /api/products/:id` returns `calculated_due_days = 10`
+
+#### Scenario: Updating and clearing item notes
+- **WHEN** a client sends `PATCH /api/items/{id}` with `{"notes": "  Opened for soup  "}`
+- **THEN** the system persists `"Opened for soup"` and returns HTTP 200 with the updated item
+- **AND** when a client subsequently sends `PATCH /api/items/{id}` with `{"notes": "   "}` or `{"notes": null}`
+- **THEN** the system clears `notes` to `null` and returns HTTP 200
 
 ### Requirement: Shopping list and stock status filters
 The system SHALL compute stock counts from unconsumed items (`consumed_on_date IS NULL`), determine each product's `next_due_on_date` and `next_location_name` from the unconsumed item with the soonest due date (treating unset due dates last and breaking ties by first entered), identify low-stock (`in_stock_count < minimum_value`), overdue, and due-soon products, and include a product on the shopping list when `manually_added_to_shopping_list` is true or it is low stock.

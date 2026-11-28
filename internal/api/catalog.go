@@ -56,7 +56,7 @@ type Variant struct {
 	WeightUnit  *string   `json:"weight_unit"`
 	LengthValue *float64  `json:"length_value"`
 	LengthUnit  *string   `json:"length_unit"`
-	Barcodes    []Barcode `json:"barcodes,omitempty"`
+	Barcodes    []Barcode `json:"barcodes"`
 	CreatedAt   string    `json:"created_at"`
 	UpdatedAt   string    `json:"updated_at"`
 }

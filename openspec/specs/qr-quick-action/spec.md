@@ -26,7 +26,7 @@ The web application SHALL render a dedicated QR Quick Action screen at `/go/:kin
 - **THEN** the screen displays a clear error state indicating the QR target was not found or is invalid, with a button to return to Inventory
 
 ### Requirement: Item QR quick actions
-When viewing an in-stock item on `/go/i/:id`, the screen SHALL display the item's product name, variant (if present), current location, due date (with overdue or due-soon visual indicator), opened status, and notes, and SHALL provide prominent one-tap actions to:
+When viewing an in-stock item on `/go/i/:id`, the screen SHALL display the item's product name, variant (if present), current location, due date (with overdue or due-soon visual indicator), opened status, and notes, and SHALL provide an inline control to add, edit, or clear the item's notes (`PATCH /api/items/:id`) as well as prominent one-tap actions to:
 - **Consume** the item (`POST /api/items/:id/consume`) with an inline **Undo** control that restores `consumed_on_date` to `null` via `PATCH /api/items/:id`
 - **Open** the item (`POST /api/items/:id/open`) when not yet opened, updating its due date per `default_due_days_on_open` and providing an inline **Undo** control that restores its previous `opened_on_date` and `due_on_date`
 - **Transfer** the item to another location (`POST /api/items/:id/transfer`) via a hierarchical location picker, applying freeze/thaw due-date rules and displaying the updated location and due date
@@ -54,6 +54,10 @@ When the scanned item is already consumed (`consumed_on_date` is set), the scree
 #### Scenario: Toggling shopping list from an item QR screen
 - **WHEN** a user opens `/go/i/42` and taps **Add to Shopping List**
 - **THEN** `POST /api/products/:productId/toggle-shopping-list` is called and the button updates to reflect that the product is on the shopping list
+
+#### Scenario: Editing item notes from an item QR screen
+- **WHEN** a user opens `/go/i/42`, activates the inline note editor, updates the note text (or clears it), and saves
+- **THEN** the UI sends `PATCH /api/items/42` with the trimmed note (or `null` when cleared) and updates the displayed note immediately
 
 ### Requirement: Product QR quick actions
 When viewing a product on `/go/p/:id`, the screen SHALL display the product's name, category, in-stock count, and shopping list status, and SHALL list all in-stock items ordered by soonest `due_on_date` (FIFO). The screen SHALL provide:

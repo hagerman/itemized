@@ -324,4 +324,58 @@ describe("QrActionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Confirm Transfer/i }));
     await waitFor(() => expect(screen.queryByRole("link", { name: "Peas, Frozen" })).not.toBeInTheDocument());
   });
+
+  it("supports inline editing and clearing item notes on Item QR screen", async () => {
+    let currentItem = makeItem({ notes: "Organic" });
+
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/locations") return Promise.resolve(jsonResp({ locations: sampleLocations }));
+      if (url === "/api/scan/resolve") {
+        return Promise.resolve(jsonResp({ kind: "item", item: currentItem, product: sampleProduct }));
+      }
+      if (url === "/api/items/42" && init?.method === "PATCH") {
+        const patch = JSON.parse(String(init.body));
+        currentItem = { ...currentItem, ...patch };
+        return Promise.resolve(jsonResp({ item: currentItem }));
+      }
+      return Promise.reject(new Error(`unexpected fetch ${url}`));
+    });
+
+    renderQrRoute("/go/i/42");
+    expect(await screen.findByText("Organic")).toBeInTheDocument();
+
+    // Edit note
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    const textarea = screen.getByLabelText("Item notes");
+    expect(textarea).toHaveValue("Organic");
+    fireEvent.change(textarea, { target: { value: "  Half gallon remaining  " } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Note/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/items/42",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ notes: "Half gallon remaining" }),
+        })
+      )
+    );
+    expect(await screen.findByText("Half gallon remaining")).toBeInTheDocument();
+
+    // Clear note
+    fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+    fireEvent.change(screen.getByLabelText("Item notes"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /Save Note/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/items/42",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ notes: null }),
+        })
+      )
+    );
+    expect(await screen.findByRole("button", { name: /Add note/i })).toBeInTheDocument();
+  });
 });

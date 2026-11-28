@@ -2625,3 +2625,232 @@ func TestAuthStatusPrintersEnabled(t *testing.T) {
 	checkPrintersEnabled(adminTok, false)
 	checkPrintersEnabled(memberTok, false)
 }
+
+func TestVariantZeroBarcodesSerializesEmptyArray(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, fstest.MapFS{"index.html": {Data: []byte("<html></html>")}})
+	h := srv.Handler()
+
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+		"mode":     "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	tok := loginResp.Token
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Pantry"}, tok)
+	var catResp struct {
+		Category struct {
+			ID int64 `json:"id"`
+		} `json:"category"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&catResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Shelf"}, tok)
+	var locResp struct {
+		Location struct {
+			ID int64 `json:"id"`
+		} `json:"location"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&locResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name":                "Tomato Paste",
+		"category_id":         catResp.Category.ID,
+		"default_location_id": locResp.Location.ID,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create product expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var prodResp struct {
+		Product struct {
+			ID int64 `json:"id"`
+		} `json:"product"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&prodResp)
+
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/products/%d/variants", prodResp.Product.ID), map[string]any{
+		"name": "6 oz Can",
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create variant expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var createVarRaw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &createVarRaw); err != nil {
+		t.Fatalf("unmarshal create variant: %v", err)
+	}
+	vMap, ok := createVarRaw["variant"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected variant object, got %T", createVarRaw["variant"])
+	}
+	bVal, exists := vMap["barcodes"]
+	if !exists {
+		t.Fatalf("create variant response omitted barcodes key: %s", rec.Body.String())
+	}
+	bSlice, ok := bVal.([]any)
+	if !ok || len(bSlice) != 0 {
+		t.Fatalf("create variant barcodes = %#v, want empty array", bVal)
+	}
+
+	rec = doReq(t, h, http.MethodGet, fmt.Sprintf("/api/products/%d", prodResp.Product.ID), nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get product expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var getProdRaw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &getProdRaw); err != nil {
+		t.Fatalf("unmarshal get product: %v", err)
+	}
+	variants, ok := getProdRaw["variants"].([]any)
+	if !ok || len(variants) != 1 {
+		t.Fatalf("expected 1 variant, got %#v", getProdRaw["variants"])
+	}
+	firstVar, ok := variants[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected variant map, got %T", variants[0])
+	}
+	gbVal, exists := firstVar["barcodes"]
+	if !exists {
+		t.Fatalf("GET /api/products/:id omitted barcodes key: %s", rec.Body.String())
+	}
+	gbSlice, ok := gbVal.([]any)
+	if !ok || len(gbSlice) != 0 {
+		t.Fatalf("GET /api/products/:id barcodes = %#v, want empty array", gbVal)
+	}
+}
+
+func TestUpdateItemNotesTrimAndClear(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, fstest.MapFS{"index.html": {Data: []byte("<html></html>")}})
+	h := srv.Handler()
+
+	rec := doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+	}, "")
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+		"mode":     "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	tok := loginResp.Token
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Soups"}, tok)
+	var catResp struct {
+		Category struct {
+			ID int64 `json:"id"`
+		} `json:"category"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&catResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Fridge"}, tok)
+	var locResp struct {
+		Location struct {
+			ID int64 `json:"id"`
+		} `json:"location"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&locResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name":                "Chicken Stock",
+		"category_id":         catResp.Category.ID,
+		"default_location_id": locResp.Location.ID,
+	}, tok)
+	var prodResp struct {
+		Product struct {
+			ID int64 `json:"id"`
+		} `json:"product"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&prodResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id": prodResp.Product.ID,
+		"quantity":   1,
+	}, tok)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create item expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var createItemResp struct {
+		Items []Item `json:"items"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&createItemResp)
+	itemID := createItemResp.Items[0].ID
+
+	// 1. Set note with leading/trailing whitespace -> stored trimmed.
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/items/%d", itemID), map[string]any{
+		"notes": "  Opened for soup  ",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch note expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var patchResp struct {
+		Item Item `json:"item"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&patchResp)
+	if patchResp.Item.Notes == nil || *patchResp.Item.Notes != "Opened for soup" {
+		t.Fatalf("notes = %v, want %q", patchResp.Item.Notes, "Opened for soup")
+	}
+
+	// 2. Whitespace-only string clears note to nil.
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/items/%d", itemID), map[string]any{
+		"notes": "   ",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear note with whitespace expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	patchResp = struct {
+		Item Item `json:"item"`
+	}{}
+	_ = json.NewDecoder(rec.Body).Decode(&patchResp)
+	if patchResp.Item.Notes != nil {
+		t.Fatalf("notes = %q, want nil", *patchResp.Item.Notes)
+	}
+
+	// 3. Set note again, then clear with explicit null.
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/items/%d", itemID), map[string]any{
+		"notes": "Half carton left",
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set note expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = doReq(t, h, http.MethodPatch, fmt.Sprintf("/api/items/%d", itemID), map[string]any{
+		"notes": nil,
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear note with null expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	patchResp = struct {
+		Item Item `json:"item"`
+	}{}
+	_ = json.NewDecoder(rec.Body).Decode(&patchResp)
+	if patchResp.Item.Notes != nil {
+		t.Fatalf("notes after null patch = %q, want nil", *patchResp.Item.Notes)
+	}
+}

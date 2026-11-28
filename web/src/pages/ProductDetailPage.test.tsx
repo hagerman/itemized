@@ -462,4 +462,167 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["quick-search"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["location"] });
   });
+
+  it("renders cleanly when a variant omits barcodes in the API response", async () => {
+    const responseWithoutBarcodes = {
+      ...MOCK_PRODUCT_RESPONSE,
+      variants: [
+        {
+          id: 12,
+          product_id: 1,
+          name: "Legacy Imported Variant",
+          volume_value: null,
+          volume_unit: null,
+          weight_value: null,
+          weight_unit: null,
+          length_value: null,
+          length_unit: null,
+          // barcodes intentionally omitted (simulating legacy/partial payload)
+        },
+      ],
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1") {
+          return new Response(JSON.stringify(responseWithoutBarcodes), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText("Legacy Imported Variant")).toBeInTheDocument());
+    expect(screen.getByLabelText("Barcode for Legacy Imported Variant")).toBeInTheDocument();
+  });
+
+  it("displays existing item notes and supports adding, editing, and clearing notes inline", async () => {
+    let currentNotes: string | null = "Imported from legacy app";
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/status") {
+        return new Response(
+          JSON.stringify({ initialized: true, oidc_enabled: false, oidc_force: false, printers_enabled: false, user: { id: 1, email: "a@b.c", role: "admin" } }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/products/1" && (!init?.method || init.method === "GET")) {
+        return new Response(
+          JSON.stringify({
+            ...MOCK_PRODUCT_RESPONSE,
+            items: [{ ...MOCK_PRODUCT_RESPONSE.items[0], notes: currentNotes }],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url === "/api/locations") {
+        return new Response(JSON.stringify({ locations: [] }), { status: 200 });
+      }
+      if (url === "/api/items/5" && init?.method === "PATCH") {
+        const body = JSON.parse(String(init.body));
+        currentNotes = body.notes ?? null;
+        return new Response(
+          JSON.stringify({ item: { ...MOCK_PRODUCT_RESPONSE.items[0], notes: currentNotes } }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/products/1"]}>
+          <Routes>
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText("Coca-Cola Original Taste Soda")).toBeInTheDocument());
+
+    const mobileList = screen.getByTestId("items-mobile-list");
+    const desktopTable = screen.getByRole("table");
+
+    // Existing note is rendered in both mobile card and desktop table
+    expect(within(mobileList).getByText("Imported from legacy app")).toBeInTheDocument();
+    expect(within(desktopTable).getByText("Imported from legacy app")).toBeInTheDocument();
+
+    // Edit note from desktop table
+    fireEvent.click(within(desktopTable).getByRole("button", { name: "Edit note for item #5" }));
+    const desktopTextarea = within(desktopTable).getByLabelText("Notes for item #5");
+    expect(desktopTextarea).toHaveValue("Imported from legacy app");
+    fireEvent.change(desktopTextarea, { target: { value: "  Keep chilled  " } });
+    fireEvent.click(within(desktopTable).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/items/5",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ notes: "Keep chilled" }),
+        })
+      )
+    );
+    await waitFor(() => expect(within(mobileList).getByText("Keep chilled")).toBeInTheDocument());
+
+    // Clear note from mobile card
+    fireEvent.click(within(mobileList).getByRole("button", { name: "Edit note for item #5" }));
+    const mobileTextarea = within(mobileList).getByLabelText("Notes for item #5");
+    fireEvent.change(mobileTextarea, { target: { value: "   " } });
+    fireEvent.click(within(mobileList).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/items/5",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ notes: null }),
+        })
+      )
+    );
+    await waitFor(() =>
+      expect(within(mobileList).getByRole("button", { name: "Add note for item #5" })).toBeInTheDocument()
+    );
+
+    // Add a new note to an item with null notes
+    fireEvent.click(within(mobileList).getByRole("button", { name: "Add note for item #5" }));
+    fireEvent.change(within(mobileList).getByLabelText("Notes for item #5"), {
+      target: { value: "Opened Friday" },
+    });
+    fireEvent.click(within(mobileList).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/items/5",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ notes: "Opened Friday" }),
+        })
+      )
+    );
+    await waitFor(() => expect(within(desktopTable).getByText("Opened Friday")).toBeInTheDocument());
+  });
 });

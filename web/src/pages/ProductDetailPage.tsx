@@ -56,6 +56,11 @@ export const ProductDetailPage: React.FC = () => {
   const [barcodeDrafts, setBarcodeDrafts] = useState<Record<number, { barcode: string; qty: number }>>({});
   const [scanModalVariantId, setScanModalVariantId] = useState<number | null>(null);
 
+  // Per-item inline note edit state
+  const [editingNoteItemId, setEditingNoteItemId] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["product", id],
     queryFn: () => apiFetch<{ product: Product; variants: Variant[]; items: Item[] }>(`/api/products/${id}`),
@@ -214,6 +219,37 @@ export const ProductDetailPage: React.FC = () => {
 
   const toggleItemSelection = (itemId: number) => {
     setSelectedIds((prev) => (prev.includes(itemId) ? prev.filter((x) => x !== itemId) : [...prev, itemId]));
+  };
+
+  const startEditNote = (item: Item) => {
+    setEditingNoteItemId(item.id);
+    setNoteDraft(item.notes ?? "");
+    setErrorMsg(null);
+  };
+
+  const cancelEditNote = () => {
+    setEditingNoteItemId(null);
+    setNoteDraft("");
+  };
+
+  const handleSaveNote = async (itemId: number) => {
+    setSavingNote(true);
+    setErrorMsg(null);
+    try {
+      const trimmed = noteDraft.trim();
+      await apiFetch(`/api/items/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes: trimmed || null }),
+      });
+      setEditingNoteItemId(null);
+      setNoteDraft("");
+      setNotice(trimmed ? "Note saved." : "Note cleared.");
+      refresh();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   return (
@@ -463,6 +499,58 @@ export const ProductDetailPage: React.FC = () => {
                         <div className="font-medium text-slate-100">{it.due_on_date || "—"}</div>
                       </div>
                     </div>
+                    {editingNoteItemId === it.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          rows={2}
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          placeholder="Add a note for this item..."
+                          aria-label={`Notes for item #${it.id}`}
+                          className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white placeholder-slate-500"
+                        />
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            disabled={savingNote}
+                            onClick={cancelEditNote}
+                            className="rounded px-2.5 py-1 text-xs text-slate-400 hover:text-white disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={savingNote}
+                            onClick={() => void handleSaveNote(it.id)}
+                            className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                          >
+                            <Check className="h-3 w-3" /> {savingNote ? "Saving..." : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : it.notes ? (
+                      <div className="flex items-start justify-between gap-2 rounded-lg bg-slate-900/80 px-2.5 py-2 text-xs text-slate-300">
+                        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words">{it.notes}</p>
+                        <button
+                          type="button"
+                          aria-label={`Edit note for item #${it.id}`}
+                          title="Edit note"
+                          onClick={() => startEditNote(it)}
+                          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Add note for item #${it.id}`}
+                        onClick={() => startEditNote(it)}
+                        className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-300"
+                      >
+                        <Plus className="h-3 w-3" /> Add note
+                      </button>
+                    )}
                     <div className={`grid ${printersEnabled ? "grid-cols-3" : "grid-cols-2"} gap-2 pt-1`}>
                       <button
                         type="button"
@@ -510,6 +598,7 @@ export const ProductDetailPage: React.FC = () => {
                     <th className="py-2 pr-3 font-semibold">Purchased</th>
                     <th className="py-2 pr-3 font-semibold">Opened</th>
                     <th className="py-2 pr-3 font-semibold">Due</th>
+                    <th className="py-2 pr-3 font-semibold">Notes</th>
                     <th className="py-2 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -532,6 +621,60 @@ export const ProductDetailPage: React.FC = () => {
                         <td className="py-2.5 pr-3 text-xs text-slate-400">{it.purchased_on_date || "—"}</td>
                         <td className="py-2.5 pr-3 text-xs text-slate-400">{it.opened_on_date || "—"}</td>
                         <td className="py-2.5 pr-3 text-xs text-slate-200">{it.due_on_date || "—"}</td>
+                        <td className="max-w-xs py-2.5 pr-3 text-xs text-slate-300">
+                          {editingNoteItemId === it.id ? (
+                            <div className="space-y-1.5">
+                              <textarea
+                                rows={2}
+                                value={noteDraft}
+                                onChange={(e) => setNoteDraft(e.target.value)}
+                                placeholder="Add a note..."
+                                aria-label={`Notes for item #${it.id}`}
+                                className="w-full min-w-[180px] rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white placeholder-slate-500"
+                              />
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={savingNote}
+                                  onClick={cancelEditNote}
+                                  className="rounded px-2 py-0.5 text-xs text-slate-400 hover:text-white disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingNote}
+                                  onClick={() => void handleSaveNote(it.id)}
+                                  className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                                >
+                                  <Check className="h-3 w-3" /> {savingNote ? "Saving..." : "Save"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : it.notes ? (
+                            <div className="flex items-start gap-1.5">
+                              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{it.notes}</span>
+                              <button
+                                type="button"
+                                aria-label={`Edit note for item #${it.id}`}
+                                title="Edit note"
+                                onClick={() => startEditNote(it)}
+                                className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`Add note for item #${it.id}`}
+                              onClick={() => startEditNote(it)}
+                              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-300"
+                            >
+                              <Plus className="h-3 w-3" /> Note
+                            </button>
+                          )}
+                        </td>
                         <td className="whitespace-nowrap py-2.5 text-right space-x-1.5">
                           <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Open</button>
                           <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/consume`, { method: "POST" }); refresh(); }} className="rounded bg-rose-500/20 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/30">Consume</button>
@@ -714,7 +857,7 @@ export const ProductDetailPage: React.FC = () => {
 
                   {/* Existing Barcodes */}
                   <div className="flex flex-wrap gap-1.5">
-                    {v.barcodes.map((b) => (
+                    {(v.barcodes ?? []).map((b) => (
                       <span key={b.id} className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-2 py-0.5 font-mono text-xs text-slate-300">
                         <span>{b.barcode} (×{b.default_quantity})</span>
                         <button

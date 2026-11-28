@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"itemized/internal/db"
@@ -320,7 +321,7 @@ func (s *Server) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	opened := patchNullableString(req, "opened_on_date", existing.OpenedOnDate)
 	due := patchNullableString(req, "due_on_date", existing.DueOnDate)
 	consumed := patchNullableString(req, "consumed_on_date", existing.ConsumedOnDate)
-	notes := patchNullableString(req, "notes", existing.Notes)
+	notes := patchTrimmedNullableString(req, "notes", existing.Notes)
 
 	now := db.NowUTC()
 	_, err = s.DB.ExecContext(r.Context(), `
@@ -348,6 +349,25 @@ func patchNullableString(m map[string]any, key string, current *string) *string 
 		return nil
 	}
 	return &s
+}
+
+func patchTrimmedNullableString(m map[string]any, key string, current *string) *string {
+	v, ok := m[key]
+	if !ok {
+		return current
+	}
+	if v == nil {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return nil
+	}
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func (s *Server) handleDeleteItem(w http.ResponseWriter, r *http.Request) {
