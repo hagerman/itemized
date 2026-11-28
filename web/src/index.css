@@ -4,10 +4,12 @@
 @layer base {
   :root {
     color-scheme: light;
+    background-color: #ffffff;
   }
 
   :root.dark {
     color-scheme: dark;
+    background-color: #0f172a;
   }
 
   body {

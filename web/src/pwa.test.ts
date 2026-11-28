@@ -43,6 +43,10 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
 
     const manifest = doc.querySelector('link[rel="manifest"]');
     expect(manifest?.getAttribute("href")).toBe("/manifest.json");
+
+    const bodyClass = doc.body.getAttribute("class") ?? "";
+    expect(bodyClass).toContain("bg-white");
+    expect(bodyClass).toContain("dark:bg-slate-900");
   });
 
   it("defines unlayered 16px font-size rules for form controls on iOS and coarse touch devices", async () => {
@@ -66,7 +70,9 @@ describe("iOS PWA full-screen configuration and input auto-zoom prevention", () 
     const baseCss = baseMatch![0];
 
     expect(baseCss).toMatch(/color-scheme:\s*light/);
+    expect(baseCss).toMatch(/background-color:\s*#ffffff/i);
     expect(baseCss).toMatch(/color-scheme:\s*dark/);
+    expect(baseCss).toMatch(/background-color:\s*#0f172a/i);
     expect(baseCss).toContain('input[type="date"]');
     expect(baseCss).toMatch(/min-width:\s*0/);
     expect(baseCss).toMatch(/max-width:\s*100%/);

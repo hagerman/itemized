@@ -7,7 +7,7 @@ Defines the responsive React web interface and installable PWA for browsing, sea
 ## Requirements
 
 ### Requirement: Responsive application shell and PWA support
-The web application SHALL provide a responsive layout with a persistent desktop sidebar, a solid non-blurred top header bar, a mobile drawer and bottom action dock (`Inventory`, `Scan / Action`, `Search`) that highlights the active navigation tab (`Inventory` or `Search`), top and bottom safe-area inset handling, automatic iOS input-focus zoom prevention without disabling manual pinch-to-zoom, the custom box brand logo in navigation and auth screens, and an installable PWA manifest with iOS full-screen home-screen meta tags (using `apple-mobile-web-app-status-bar-style` set to `default` rather than `black-translucent`), favicons, and Apple Touch Icon assets.
+The web application SHALL provide a responsive layout with a persistent desktop sidebar, a solid non-blurred top header bar, a mobile drawer and bottom action dock (`Inventory`, `Scan / Action`, `Search`) that highlights the active navigation tab (`Inventory` or `Search`), top and bottom safe-area inset handling, document root (`html` and `body`) backgrounds matching the top header surface (`#ffffff` in light mode, `#0f172a` in dark mode) so the iOS status bar / notch area blends seamlessly with the header in both themes, automatic iOS input-focus zoom prevention without disabling manual pinch-to-zoom, the custom box brand logo in navigation and auth screens, and an installable PWA manifest with iOS full-screen home-screen meta tags (using `apple-mobile-web-app-status-bar-style` set to `default` rather than `black-translucent`), favicons, and Apple Touch Icon assets.
 
 #### Scenario: Mobile viewport displays bottom navigation dock
 - **WHEN** a user opens the application on a mobile viewport
@@ -24,6 +24,10 @@ The web application SHALL provide a responsive layout with a persistent desktop 
 #### Scenario: Top header renders without backdrop blur on iOS
 - **WHEN** a user views any page of the application on iOS Safari or in standalone PWA mode
 - **THEN** the top `<header>` renders with a solid opaque background matching the active theme (`bg-white` in light mode, `dark:bg-slate-900` in dark mode) and no `backdrop-blur` (`backdrop-filter`) so the navigation menu icon and page title remain crisp without iOS top-edge blur artifacts
+
+#### Scenario: Document root background matches top header in light and dark modes
+- **WHEN** a user views the application in standalone iOS PWA mode in either light mode or dark mode
+- **THEN** the document root (`:root` / `html` and `body`) uses `#ffffff` (`bg-white`) in light mode and `#0f172a` (`dark:bg-slate-900`) in dark mode so the iOS status bar / notch area matches the top `<header>` seamlessly without a darker band in dark mode, while the page canvas inside the layout retains `bg-slate-50` / `dark:bg-slate-950`
 
 #### Scenario: Desktop viewport displays persistent sidebar
 - **WHEN** a user opens the application on a desktop viewport
