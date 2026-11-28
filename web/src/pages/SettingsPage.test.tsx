@@ -38,7 +38,7 @@ describe("SettingsPage role-based visibility", () => {
   });
 
   it("shows only Account and API Tokens settings and skips admin API calls for member users", () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ tokens: [] }), { status: 200 }));
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ tokens: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     renderWithQuery(MEMBER_USER);
