@@ -24,7 +24,7 @@ export interface HelpTaskEntry {
   external: boolean;
 }
 
-export const HELP_VERSION = "v0.15.0"; // x-release-please-version
+export const HELP_VERSION = "v0.15.1"; // x-release-please-version
 export const HELP_DOCS_BASE_URL = "https://itemizedapp.com/docs";
 export const HELP_TASK_ENTRIES: HelpTaskEntry[] = [
   {
