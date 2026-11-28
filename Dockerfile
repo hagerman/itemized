@@ -1,3 +1,7 @@
+# Default for legacy Docker builders (e.g. Cloud Build without BuildKit);
+# BuildKit / Buildx overrides this automatically with the host platform.
+ARG BUILDPLATFORM=linux/amd64
+
 # Stage 1: Build React SPA
 FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 WORKDIR /src/web
