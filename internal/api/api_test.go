@@ -2854,3 +2854,151 @@ func TestUpdateItemNotesTrimAndClear(t *testing.T) {
 		t.Fatalf("notes after null patch = %q, want nil", *patchResp.Item.Notes)
 	}
 }
+
+func TestOpenItemAlreadyOpenedAndBulkOpen(t *testing.T) {
+	conn, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	srv := NewServer(conn, nil)
+	fake := &fakeDriver{}
+	srv.Printer.RegisterDriver(printer.DriverRawTCPZPL, fake)
+	h := srv.Handler()
+
+	doReq(t, h, http.MethodPost, "/api/auth/setup", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+	}, "")
+	rec := doReq(t, h, http.MethodPost, "/api/auth/login", map[string]string{
+		"email":    "admin@example.com",
+		"password": "adminpassword123",
+		"mode":     "bearer",
+	}, "")
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&loginResp)
+	tok := loginResp.Token
+
+	// Configure an enabled printer so we can assert zero reprints on already-opened items.
+	doReq(t, h, http.MethodPost, "/api/printers", map[string]any{
+		"name": "Zebra", "driver": "raw_tcp_zpl", "endpoint": "127.0.0.1:9100", "enabled": true,
+	}, tok)
+
+	rec = doReq(t, h, http.MethodPost, "/api/categories", map[string]any{"name": "Pantry Staples"}, tok)
+	var catResp struct{ Category struct{ ID int64 } }
+	_ = json.NewDecoder(rec.Body).Decode(&catResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/locations", map[string]any{"name": "Pantry"}, tok)
+	var locResp struct{ Location struct{ ID int64 } }
+	_ = json.NewDecoder(rec.Body).Decode(&locResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/products", map[string]any{
+		"name":                     "Beans, Black",
+		"category_id":              catResp.Category.ID,
+		"default_location_id":      locResp.Location.ID,
+		"default_due_days":         730,
+		"default_due_days_on_open": 4,
+		"label_print_mode":         "per_item",
+	}, tok)
+	var prodResp struct{ Product struct{ ID int64 } }
+	_ = json.NewDecoder(rec.Body).Decode(&prodResp)
+
+	rec = doReq(t, h, http.MethodPost, "/api/items", map[string]any{
+		"product_id":       prodResp.Product.ID,
+		"quantity":         3,
+		"label_print_mode": "none",
+	}, tok)
+	var createResp struct {
+		Items []Item `json:"items"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&createResp)
+	if len(createResp.Items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(createResp.Items))
+	}
+	item1, item2, item3 := createResp.Items[0].ID, createResp.Items[1].ID, createResp.Items[2].ID
+
+	// 1. Fresh open on item1 -> already_opened: false, triggers 1 reprint because due date shortened.
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/items/%d/open", item1), nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fresh open expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var openResp struct {
+		Item          Item `json:"item"`
+		Previous      Item `json:"previous"`
+		AlreadyOpened bool `json:"already_opened"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&openResp)
+	if openResp.AlreadyOpened {
+		t.Fatalf("expected already_opened=false on fresh open")
+	}
+	if openResp.Item.OpenedOnDate == nil {
+		t.Fatalf("expected opened_on_date to be set")
+	}
+	if len(fake.jobs) != 1 {
+		t.Fatalf("expected 1 print job after fresh open, got %d", len(fake.jobs))
+	}
+
+	// Backdate item1's opened_on_date and due_on_date to verify repeat open does not overwrite them.
+	if _, err := conn.Exec(`UPDATE items SET opened_on_date = '2026-10-01', due_on_date = '2026-10-05' WHERE id = ?`, item1); err != nil {
+		t.Fatalf("backdate item1: %v", err)
+	}
+
+	// 2. Repeat open on item1 -> already_opened: true, dates preserved, no reprint.
+	rec = doReq(t, h, http.MethodPost, fmt.Sprintf("/api/items/%d/open", item1), nil, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("repeat open expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	openResp = struct {
+		Item          Item `json:"item"`
+		Previous      Item `json:"previous"`
+		AlreadyOpened bool `json:"already_opened"`
+	}{}
+	_ = json.NewDecoder(rec.Body).Decode(&openResp)
+	if !openResp.AlreadyOpened {
+		t.Fatalf("expected already_opened=true on repeat open")
+	}
+	if openResp.Item.OpenedOnDate == nil || *openResp.Item.OpenedOnDate != "2026-10-01" {
+		t.Fatalf("opened_on_date overwritten: got %v, want 2026-10-01", openResp.Item.OpenedOnDate)
+	}
+	if openResp.Item.DueOnDate == nil || *openResp.Item.DueOnDate != "2026-10-05" {
+		t.Fatalf("due_on_date overwritten: got %v, want 2026-10-05", openResp.Item.DueOnDate)
+	}
+	if len(fake.jobs) != 1 {
+		t.Fatalf("expected no reprint on repeat open, got %d jobs", len(fake.jobs))
+	}
+
+	// 3. Consume item3, then bulk open [item1 (already opened), item2 (unopened), item3 (consumed)].
+	doReq(t, h, http.MethodPost, fmt.Sprintf("/api/items/%d/consume", item3), nil, tok)
+	rec = doReq(t, h, http.MethodPost, "/api/items/bulk", map[string]any{
+		"action":   "open",
+		"item_ids": []int64{item1, item2, item3},
+	}, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bulk open expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var bulkResp struct {
+		Processed int `json:"processed"`
+	}
+	_ = json.NewDecoder(rec.Body).Decode(&bulkResp)
+	if bulkResp.Processed != 1 {
+		t.Fatalf("bulk open processed = %d, want 1", bulkResp.Processed)
+	}
+	got1, _ := srv.getItemByID(t.Context(), item1)
+	if got1.OpenedOnDate == nil || *got1.OpenedOnDate != "2026-10-01" {
+		t.Fatalf("bulk open modified already-opened item1: %v", got1.OpenedOnDate)
+	}
+	got2, _ := srv.getItemByID(t.Context(), item2)
+	if got2.OpenedOnDate == nil {
+		t.Fatalf("bulk open did not open unopened item2")
+	}
+	got3, _ := srv.getItemByID(t.Context(), item3)
+	if got3.OpenedOnDate != nil {
+		t.Fatalf("bulk open modified consumed item3: %v", *got3.OpenedOnDate)
+	}
+	if len(fake.jobs) != 2 {
+		t.Fatalf("expected 2 total print jobs (only item2 reprinted), got %d", len(fake.jobs))
+	}
+}

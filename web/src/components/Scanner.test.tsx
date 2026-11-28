@@ -2683,4 +2683,147 @@ describe("BarcodeScanner and ScannerDrawer", () => {
       }
     }
   });
+
+  it("displays an error without calling /open when scanning an already-opened item in Open mode", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/scan/resolve") {
+        return new Response(
+          JSON.stringify({
+            kind: "item",
+            item: {
+              id: 77,
+              product_id: 1,
+              product_name: "Beans, Black",
+              consumed_on_date: null,
+              opened_on_date: "2026-11-28",
+            },
+            product: { id: 1, name: "Beans, Black" },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="open"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+          locations={[{ id: 1, name: "Shelf", parent_id: null, is_freezer: false, hierarchy_name: "Shelf" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+    fireEvent.change(input, { target: { value: "https://my.itemizedapp.com/go/i/77" } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Beans, Black was already opened \(2026-11-28\)\./)).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("button", { name: /Undo/i })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/items/77/open", expect.anything());
+  });
+
+  it("handles already_opened response from API and filters/reports already-opened items for product scans in Open mode", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/scan/resolve") {
+        const body = JSON.parse(String(init?.body || "{}")) as { input?: string };
+        if (body.input === "https://my.itemizedapp.com/go/i/88") {
+          // Simulate race: resolve saw unopened, but /open reports already_opened: true
+          return new Response(
+            JSON.stringify({
+              kind: "item",
+              item: { id: 88, product_id: 1, product_name: "Salsa, Fresh", consumed_on_date: null, opened_on_date: null },
+              product: { id: 1, name: "Salsa, Fresh" },
+            }),
+            { status: 200 }
+          );
+        }
+        if (body.input === "https://my.itemizedapp.com/go/p/10") {
+          // All in-stock items already opened
+          return new Response(
+            JSON.stringify({
+              kind: "product",
+              product: { id: 10, name: "Beans, Black" },
+              items: [
+                { id: 101, product_id: 10, product_name: "Beans, Black", location_name: "Pantry", opened_on_date: "2026-11-28", due_on_date: "2028-10-28" },
+                { id: 102, product_id: 10, product_name: "Beans, Black", location_name: "Pantry", opened_on_date: "2026-11-27", due_on_date: "2028-10-29" },
+              ],
+            }),
+            { status: 200 }
+          );
+        }
+        if (body.input === "https://my.itemizedapp.com/go/p/11") {
+          // Mix of opened and unopened items
+          return new Response(
+            JSON.stringify({
+              kind: "product",
+              product: { id: 11, name: "Chicken Stock" },
+              items: [
+                { id: 201, product_id: 11, product_name: "Chicken Stock", variant_name: "Opened Carton", location_name: "Fridge", opened_on_date: "2026-11-25", due_on_date: "2026-11-30" },
+                { id: 202, product_id: 11, product_name: "Chicken Stock", variant_name: "Sealed Carton", location_name: "Pantry", opened_on_date: null, due_on_date: "2027-06-01" },
+              ],
+            }),
+            { status: 200 }
+          );
+        }
+      }
+      if (url === "/api/items/88/open") {
+        return new Response(
+          JSON.stringify({
+            item: { id: 88, product_id: 1, product_name: "Salsa, Fresh", opened_on_date: "2026-11-26" },
+            previous: { id: 88, product_id: 1, product_name: "Salsa, Fresh", opened_on_date: "2026-11-26" },
+            already_opened: true,
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="open"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+          locations={[{ id: 1, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Pantry" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByLabelText("Barcode or search input");
+
+    // 1. Concurrent open fallback
+    fireEvent.change(input, { target: { value: "https://my.itemizedapp.com/go/i/88" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() =>
+      expect(screen.getByText(/Salsa, Fresh was already opened \(2026-11-26\)\./)).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("button", { name: /Undo/i })).not.toBeInTheDocument();
+
+    // 2. Product scan where all in-stock items are already opened
+    fireEvent.change(input, { target: { value: "https://my.itemizedapp.com/go/p/10" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() =>
+      expect(screen.getByText(/All in-stock items of Beans, Black were already opened\./)).toBeInTheDocument()
+    );
+    expect(screen.queryByRole("button", { name: /Apply open/i })).not.toBeInTheDocument();
+
+    // 3. Product scan with mixed opened & unopened items -> only unopened item is shown
+    fireEvent.change(input, { target: { value: "https://my.itemizedapp.com/go/p/11" } });
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(screen.getByText(/Sealed Carton/)).toBeInTheDocument());
+    expect(screen.queryByText(/Opened Carton/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Apply open \(1\)/i })).toBeInTheDocument();
+  });
 });

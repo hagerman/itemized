@@ -731,4 +731,118 @@ describe("ProductDetailPage responsive layout and variant/barcode management", (
       }
     }
   });
+
+  it("omits per-item Open button for already-opened items and omits bulk Open when all selected items are opened", async () => {
+    const productWithOpenedAndUnopened = {
+      ...MOCK_PRODUCT_RESPONSE,
+      product: { ...MOCK_PRODUCT_RESPONSE.product, name: "Beans, Black", in_stock_count: 2 },
+      items: [
+        {
+          id: 50,
+          product_id: 1,
+          product_name: "Beans, Black",
+          variant_id: 10,
+          variant_name: "15 oz Can",
+          location_id: 1,
+          location_name: "Kitchen > Pantry",
+          purchased_on_date: "2026-10-29",
+          opened_on_date: "2026-11-28",
+          due_on_date: "2028-10-28",
+          consumed_on_date: null,
+          notes: null,
+        },
+        {
+          id: 51,
+          product_id: 1,
+          product_name: "Beans, Black",
+          variant_id: 10,
+          variant_name: "15 oz Can",
+          location_id: 1,
+          location_name: "Kitchen > Pantry",
+          purchased_on_date: "2026-10-29",
+          opened_on_date: null,
+          due_on_date: "2028-10-28",
+          consumed_on_date: null,
+          notes: null,
+        },
+      ],
+    };
+
+    const runCheck = async (printersEnabled: boolean) => {
+      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/auth/status") {
+          return new Response(
+            JSON.stringify({
+              initialized: true,
+              oidc_enabled: false,
+              oidc_force: false,
+              printers_enabled: printersEnabled,
+              user: { id: 1, email: "a@b.c", role: "admin" },
+            }),
+            { status: 200 }
+          );
+        }
+        if (url === "/api/products/1" && !init?.method) {
+          return new Response(JSON.stringify(productWithOpenedAndUnopened), { status: 200 });
+        }
+        if (url === "/api/locations") {
+          return new Response(
+            JSON.stringify({ locations: [{ id: 1, name: "Pantry", parent_id: null, is_freezer: false, hierarchy_name: "Kitchen > Pantry" }] }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={["/products/1"]}>
+            <Routes>
+              <Route path="/products/:id" element={<ProductDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      await waitFor(() => expect(screen.getByText("Beans, Black")).toBeInTheDocument());
+
+      // Mobile list: opened item (first card) has no Open button and adjusts grid columns; unopened item (second card) has Open button.
+      const mobileList = screen.getByTestId("items-mobile-list");
+      const mobileCards = Array.from(mobileList.children) as HTMLElement[];
+      expect(mobileCards).toHaveLength(2);
+      expect(within(mobileCards[0]).queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+      expect(within(mobileCards[0]).getByRole("button", { name: "Consume" })).toBeInTheDocument();
+      const openedCardGrid = within(mobileCards[0]).getByRole("button", { name: "Consume" }).parentElement!;
+      expect(openedCardGrid).toHaveClass(printersEnabled ? "grid-cols-2" : "grid-cols-1");
+
+      expect(within(mobileCards[1]).getByRole("button", { name: "Open" })).toBeInTheDocument();
+      const unopenedCardGrid = within(mobileCards[1]).getByRole("button", { name: "Consume" }).parentElement!;
+      expect(unopenedCardGrid).toHaveClass(printersEnabled ? "grid-cols-3" : "grid-cols-2");
+
+      // Desktop table: opened row has no Open button; unopened row has Open button.
+      const desktopRows = screen.getAllByRole("row").slice(1);
+      expect(desktopRows).toHaveLength(2);
+      expect(within(desktopRows[0]).queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+      expect(within(desktopRows[0]).getByRole("button", { name: "Consume" })).toBeInTheDocument();
+      expect(within(desktopRows[1]).getByRole("button", { name: "Open" })).toBeInTheDocument();
+
+      // Bulk selection: selecting only already-opened item #50 hides bulk Open button.
+      fireEvent.click(screen.getByLabelText("Select item #50"));
+      const bulkBar = screen.getByText("1 selected:").parentElement!;
+      expect(within(bulkBar).getByRole("button", { name: "Consume" })).toBeInTheDocument();
+      expect(within(bulkBar).queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+
+      // Selecting unopened item #51 as well shows bulk Open button.
+      fireEvent.click(screen.getByLabelText("Select item #51"));
+      const mixedBulkBar = screen.getByText("2 selected:").parentElement!;
+      expect(within(mixedBulkBar).getByRole("button", { name: "Open" })).toBeInTheDocument();
+
+      unmount();
+    };
+
+    await runCheck(true);
+    await runCheck(false);
+  });
 });

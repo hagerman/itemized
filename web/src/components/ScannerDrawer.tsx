@@ -728,13 +728,26 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         setStatusMsg(`No in-stock items found for ${product.name}.`);
         return;
       }
+      const eligibleItems = targetMode === "open" ? items.filter((it) => !it.opened_on_date) : items;
+      if (targetMode === "open" && eligibleItems.length === 0) {
+        setCandidateItems([]);
+        setCandidateHeading(null);
+        setSelectedItemIds([]);
+        setToast(null);
+        setErrorMsg(
+          items.length === 1 && items[0].opened_on_date
+            ? `${product.name} was already opened (${items[0].opened_on_date}).`
+            : `All in-stock items of ${product.name} were already opened.`
+        );
+        return;
+      }
       setCandidateHeading(`Select items of ${product.name}`);
-      setCandidateItems(items);
+      setCandidateItems(eligibleItems);
       if (targetMode === "transfer") {
-        const firstUnstaged = items.find((it) => !transferItems.some((t) => t.id === it.id));
+        const firstUnstaged = eligibleItems.find((it) => !transferItems.some((t) => t.id === it.id));
         setSelectedItemIds(firstUnstaged ? [firstUnstaged.id] : []);
       } else {
-        setSelectedItemIds([items[0].id]);
+        setSelectedItemIds([eligibleItems[0].id]);
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to load product items");
@@ -768,9 +781,27 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         setErrorMsg(`${itemName} was already consumed (${res.item.consumed_on_date}).`);
         return;
       }
-      const resp = await apiFetch<{ item: Item; previous: Item }>(`/api/items/${res.item.id}/${action}`, {
+      if (action === "open" && res.item.opened_on_date) {
+        const itemName = res.item.product_name || res.product?.name || `Item #${res.item.id}`;
+        setToast(null);
+        setErrorMsg(`${itemName} was already opened (${res.item.opened_on_date}).`);
+        return;
+      }
+      const resp = await apiFetch<{ item: Item; previous: Item; already_opened?: boolean; already_consumed?: boolean }>(`/api/items/${res.item.id}/${action}`, {
         method: "POST",
       });
+      if (action === "consume" && resp.already_consumed) {
+        const itemName = resp.item.product_name || res.product?.name || `Item #${resp.item.id}`;
+        setToast(null);
+        setErrorMsg(`${itemName} was already consumed (${resp.item.consumed_on_date}).`);
+        return;
+      }
+      if (action === "open" && resp.already_opened) {
+        const itemName = resp.item.product_name || res.product?.name || `Item #${resp.item.id}`;
+        setToast(null);
+        setErrorMsg(`${itemName} was already opened (${resp.item.opened_on_date}).`);
+        return;
+      }
       setToast({
         message: `${action === "consume" ? "Consumed" : "Opened"} ${resp.item.product_name}`,
         itemId: resp.item.id,
@@ -783,11 +814,32 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     }
     if (res.kind === "product" || res.kind === "barcode" || res.kind === "location") {
       setCandidateHeading(null);
-      setCandidateItems(res.items);
-      setSelectedItemIds(res.items.length > 0 ? [res.items[0].id] : []);
       if (res.items.length === 0) {
+        setCandidateItems([]);
+        setSelectedItemIds([]);
         setStatusMsg("No unconsumed items found.");
+        return;
       }
+      const eligibleItems = action === "open" ? res.items.filter((it) => !it.opened_on_date) : res.items;
+      if (action === "open" && eligibleItems.length === 0) {
+        setCandidateItems([]);
+        setSelectedItemIds([]);
+        setToast(null);
+        if (res.kind === "location") {
+          const locName = res.location?.hierarchy_name || res.location?.name || "this location";
+          setErrorMsg(`All in-stock items in ${locName} were already opened.`);
+        } else {
+          const prodName = res.product?.name || res.items[0]?.product_name || "This product";
+          setErrorMsg(
+            res.items.length === 1 && res.items[0].opened_on_date
+              ? `${prodName} was already opened (${res.items[0].opened_on_date}).`
+              : `All in-stock items of ${prodName} were already opened.`
+          );
+        }
+        return;
+      }
+      setCandidateItems(eligibleItems);
+      setSelectedItemIds(eligibleItems.length > 0 ? [eligibleItems[0].id] : []);
       return;
     }
     if (/^\d{6,14}$/.test(raw.trim())) {
@@ -838,8 +890,20 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
         body: JSON.stringify({ barcode: unknownBarcodeForAssoc, default_quantity: 1 }),
       });
       setUnknownBarcodeForAssoc(null);
-      setCandidateItems(detail.items);
-      setSelectedItemIds(detail.items.length > 0 ? [detail.items[0].id] : []);
+      const eligibleItems = mode === "open" ? detail.items.filter((it) => !it.opened_on_date) : detail.items;
+      if (mode === "open" && detail.items.length > 0 && eligibleItems.length === 0) {
+        setCandidateItems([]);
+        setSelectedItemIds([]);
+        setStatusMsg(`Linked barcode to ${product.name}`);
+        setErrorMsg(
+          detail.items.length === 1 && detail.items[0].opened_on_date
+            ? `${product.name} was already opened (${detail.items[0].opened_on_date}).`
+            : `All in-stock items of ${product.name} were already opened.`
+        );
+        return;
+      }
+      setCandidateItems(eligibleItems);
+      setSelectedItemIds(eligibleItems.length > 0 ? [eligibleItems[0].id] : []);
       setStatusMsg(`Linked barcode to ${product.name}`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Association failed");

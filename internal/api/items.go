@@ -436,6 +436,15 @@ func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {
 		writeInternalError(w, "open item load", err)
 		return
 	}
+	if prev.OpenedOnDate != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"item":           prev,
+			"previous":       prev,
+			"already_opened": true,
+			"print_warnings": nil,
+		})
+		return
+	}
 	p, err := s.getProductByID(r.Context(), prev.ProductID)
 	if err != nil {
 		writeInternalError(w, "open item load product", err)
@@ -456,7 +465,12 @@ func (s *Server) handleOpenItem(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, _ := s.getItemByID(r.Context(), id)
 	warnings := s.reprintIfDueDateChanged(r.Context(), r, p, prev.DueOnDate, updated)
-	writeJSON(w, http.StatusOK, map[string]any{"item": updated, "previous": prev, "print_warnings": warnings})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"item":           updated,
+		"previous":       prev,
+		"already_opened": false,
+		"print_warnings": warnings,
+	})
 }
 
 func (s *Server) handleTransferItem(w http.ResponseWriter, r *http.Request) {
@@ -618,13 +632,16 @@ func (s *Server) handleBulkItems(w http.ResponseWriter, r *http.Request) {
 			}
 		case "open":
 			if prev, err := s.getItemByID(r.Context(), id); err == nil {
+				if prev.OpenedOnDate != nil || prev.ConsumedOnDate != nil {
+					continue
+				}
 				if p, err := s.getProductByID(r.Context(), prev.ProductID); err == nil {
 					var existingDue *time.Time
 					if prev.DueOnDate != nil {
 						existingDue, _ = domain.ParseDate(*prev.DueOnDate)
 					}
 					nextDue := domain.FormatDate(domain.CalculateOpenDueDate(today, existingDue, p.DefaultDueDaysOnOpen))
-					if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET opened_on_date = ?, due_on_date = ?, updated_at = ? WHERE id = ?`, todayStr, nextDue, now, id); err == nil {
+					if _, err := s.DB.ExecContext(r.Context(), `UPDATE items SET opened_on_date = ?, due_on_date = ?, updated_at = ? WHERE id = ? AND opened_on_date IS NULL`, todayStr, nextDue, now, id); err == nil {
 						processed++
 						if updated, err := s.getItemByID(r.Context(), id); err == nil {
 							warnings = append(warnings, s.reprintIfDueDateChanged(r.Context(), r, p, prev.DueOnDate, updated)...)

@@ -399,7 +399,9 @@ export const ProductDetailPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs">
             <span className="font-semibold text-indigo-200">{selectedIds.length} selected:</span>
             <button type="button" onClick={() => runBulk("consume")} className="inline-flex h-8 items-center rounded-lg bg-rose-600 px-2.5 font-medium text-white">Consume</button>
-            <button type="button" onClick={() => runBulk("open")} className="inline-flex h-8 items-center rounded-lg bg-amber-600 px-2.5 font-medium text-white">Open</button>
+            {selectedIds.some((id) => !items.find((it) => it.id === id)?.opened_on_date) && (
+              <button type="button" onClick={() => runBulk("open")} className="inline-flex h-8 items-center rounded-lg bg-amber-600 px-2.5 font-medium text-white">Open</button>
+            )}
             {printersEnabled && (
               <button type="button" onClick={() => runBulk("print_label")} className="inline-flex h-8 items-center rounded-lg bg-slate-700 px-2.5 font-medium text-white">Reprint Labels</button>
             )}
@@ -552,31 +554,40 @@ export const ProductDetailPage: React.FC = () => {
                         <Plus className="h-3 w-3" /> Add note
                       </button>
                     )}
-                    <div className={`grid ${printersEnabled ? "grid-cols-3" : "grid-cols-2"} gap-2 pt-1`}>
-                      <button
-                        type="button"
-                        onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }}
-                        className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-                      >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => { await apiFetch(`/api/items/${it.id}/consume`, { method: "POST" }); refresh(); }}
-                        className="rounded-lg bg-rose-500/20 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30"
-                      >
-                        Consume
-                      </button>
-                      {printersEnabled && (
-                        <button
-                          type="button"
-                          onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }}
-                          className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-                        >
-                          Print
-                        </button>
-                      )}
-                    </div>
+                    {(() => {
+                      const canOpen = !it.opened_on_date;
+                      const actionCols = (canOpen ? 1 : 0) + 1 + (printersEnabled ? 1 : 0);
+                      const gridColsClass = actionCols === 3 ? "grid-cols-3" : actionCols === 2 ? "grid-cols-2" : "grid-cols-1";
+                      return (
+                        <div className={`grid ${gridColsClass} gap-2 pt-1`}>
+                          {canOpen && (
+                            <button
+                              type="button"
+                              onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }}
+                              className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                            >
+                              Open
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={async () => { await apiFetch(`/api/items/${it.id}/consume`, { method: "POST" }); refresh(); }}
+                            className="rounded-lg bg-rose-500/20 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30"
+                          >
+                            Consume
+                          </button>
+                          {printersEnabled && (
+                            <button
+                              type="button"
+                              onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }}
+                              className="rounded-lg bg-slate-800 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                            >
+                              Print
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -677,7 +688,9 @@ export const ProductDetailPage: React.FC = () => {
                           )}
                         </td>
                         <td className="whitespace-nowrap py-2.5 text-right space-x-1.5">
-                          <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Open</button>
+                          {!it.opened_on_date && (
+                            <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/open`, { method: "POST" }); refresh(); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Open</button>
+                          )}
                           <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/consume`, { method: "POST" }); refresh(); }} className="rounded bg-rose-500/20 px-2 py-1 text-xs text-rose-200 hover:bg-rose-500/30">Consume</button>
                           {printersEnabled && (
                             <button type="button" onClick={async () => { await apiFetch(`/api/items/${it.id}/print-label`, { method: "POST" }); setNotice(`Printed label for item #${it.id}`); }} className="rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700">Print</button>
