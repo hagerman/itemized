@@ -333,9 +333,16 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     setErrorMsg(null);
     setPurchaseProduct(null);
     setCreatingNew(false);
+    setNewProdName("");
     setNewProdCatId(0);
     setNewProdLocId(0);
     setPurchaseLocId(0);
+    setPurchaseQty(1);
+    setPurchaseBarcodeQty(1);
+    setSecondBarcodeQty(1);
+    setVariantId(null);
+    setShowVariantSection(false);
+    setPurchasePrintMode("per_item");
     setPurchaseSearchHits([]);
     setPurchaseExistingQuery("");
     setLlmMatchedProduct(null);
@@ -494,6 +501,11 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
       setNewProdMeasurement(EMPTY_MEASUREMENT);
       setVariantMeasurement(EMPTY_MEASUREMENT);
       setPurchaseBarcode(raw.trim());
+      setPurchaseBarcodeQty(1);
+      setSecondBarcode("");
+      setSecondBarcodeQty(1);
+      setPurchaseQty(1);
+      setPurchasePrintMode("per_item");
       setShowVariantSection(true);
       setVariantId(null);
       setNewProdCatId(0);
@@ -604,14 +616,42 @@ const ScannerDrawerContent: React.FC<ScannerDrawerContentProps> = ({
     }
 
     // Text search for existing product
+    lookupSeqRef.current += 1;
+    userEditedNameRef.current = false;
+    userEditedCatRef.current = false;
+    userEditedProdMeasRef.current = false;
+    userEditedVarMeasRef.current = false;
+    setLookupPhase("idle");
+    setUpcHint(null);
+    setClassifyWarning(null);
+    setPurchaseProduct(null);
+    setCreatingNew(false);
+    setPurchaseExistingQuery("");
+    setLlmMatchedProduct(null);
+    setLiveSimilarProducts([]);
+    setVariantId(null);
+    setVariantName("");
+    setPurchaseBarcode("");
+    setPurchaseBarcodeQty(1);
+    setSecondBarcode("");
+    setSecondBarcodeQty(1);
+    setPurchaseQty(1);
+    setPurchaseLocId(0);
+    setPurchaseDueDate("");
+    setPurchasePrintMode("per_item");
+    setShowVariantSection(false);
+    setNewProdName("");
+    setNewProdCatId(0);
+    setNewProdLocId(0);
+    setNewProdDueDays("");
+    setNewProdUseAvg(true);
+    setNewProdMeasurement(EMPTY_MEASUREMENT);
+    setVariantMeasurement(EMPTY_MEASUREMENT);
+
     const search = await apiFetch<{ products: Product[] }>(`/api/products?status=all&q=${encodeURIComponent(raw)}`);
     setPurchaseSearchHits(search.products.slice(0, 8));
     if (search.products.length === 0) {
-      userEditedCatRef.current = false;
       setNewProdName(raw);
-      setNewProdCatId(0);
-      setNewProdLocId(0);
-      setPurchaseLocId(0);
       setCreatingNew(true);
     }
   };

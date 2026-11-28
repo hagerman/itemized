@@ -2232,4 +2232,155 @@ describe("BarcodeScanner and ScannerDrawer", () => {
     // Confirm & Add becomes enabled now that both category and location are selected
     expect(screen.getByRole("button", { name: /Confirm & Add/i })).not.toBeDisabled();
   });
+
+  it("resets purchase quantity and pack quantities to 1 after submitting a purchase for subsequent new products", async () => {
+    const purchasePayloads: Array<Record<string, unknown>> = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/scan/resolve") {
+          const body = JSON.parse(String(init?.body || "{}"));
+          return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(JSON.stringify({ found: false }), { status: 200 });
+        }
+        if (url === "/api/workflows/purchase") {
+          const body = JSON.parse(String(init?.body || "{}"));
+          purchasePayloads.push(body);
+          const qty = Number(body.quantity || 1);
+          return new Response(
+            JSON.stringify({
+              product: { id: purchasePayloads.length, name: body.new_product?.name || "Product" },
+              items: Array.from({ length: qty }, (_, i) => ({ id: i + 1 })),
+            }),
+            { status: 201 }
+          );
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+          locations={[{ id: 1, name: "Shelf", parent_id: null, is_freezer: false, hierarchy_name: "Shelf" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const scanInput = screen.getByLabelText("Barcode or search input");
+
+    // 1. Purchase first new product with custom quantity (10) and pack quantities (6, 12)
+    fireEvent.change(scanInput, { target: { value: "011122233344" } });
+    fireEvent.submit(scanInput.closest("form")!);
+
+    const nameInput = await screen.findByPlaceholderText("Product name");
+    fireEvent.change(nameInput, { target: { value: "Widget A" } });
+    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Primary pack quantity"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("Second pack quantity"), { target: { value: "12" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "New product category" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pantry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Purchase location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Shelf" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & Add (10)" }));
+    await waitFor(() => expect(purchasePayloads).toHaveLength(1));
+    expect(purchasePayloads[0]).toMatchObject({
+      quantity: 10,
+      barcode_quantity: 6,
+      second_barcode_quantity: 12,
+    });
+
+    // 2. Scan a second unknown barcode -> Quantity and pack quantities default to 1
+    fireEvent.change(scanInput, { target: { value: "055566677788" } });
+    fireEvent.submit(scanInput.closest("form")!);
+
+    await screen.findByPlaceholderText("Product name");
+    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Primary pack quantity")).toHaveValue(1);
+    expect(screen.getByLabelText("Second pack quantity")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
+
+    // Submit second product with quantity 4, then start an unmatched text search
+    fireEvent.change(screen.getByPlaceholderText("Product name"), { target: { value: "Widget B" } });
+    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "New product category" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pantry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Purchase location" }));
+    fireEvent.click(screen.getByRole("button", { name: "Shelf" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm & Add (4)" }));
+    await waitFor(() => expect(purchasePayloads).toHaveLength(2));
+
+    // 3. Unmatched text search for third new product -> Quantity defaults to 1
+    fireEvent.change(scanInput, { target: { value: "Widget C" } });
+    fireEvent.submit(scanInput.closest("form")!);
+
+    await screen.findByPlaceholderText("Product name");
+    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
+  });
+
+  it("resets purchase quantity to 1 when starting a new unknown-barcode or text-search purchase before submitting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/scan/resolve") {
+          const body = JSON.parse(String(init?.body || "{}"));
+          return new Response(JSON.stringify({ kind: "unknown", barcode: body.input }), { status: 200 });
+        }
+        if (url === "/api/upc/lookup") {
+          return new Response(JSON.stringify({ found: false }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ products: [] }), { status: 200 });
+      })
+    );
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ScannerDrawer
+          open={true}
+          initialMode="purchase"
+          onClose={() => {}}
+          categories={[{ id: 1, name: "Pantry", parent_id: null, hierarchy_name: "Pantry" }]}
+          locations={[{ id: 1, name: "Shelf", parent_id: null, is_freezer: false, hierarchy_name: "Shelf" }]}
+        />
+      </QueryClientProvider>
+    );
+
+    const scanInput = screen.getByLabelText("Barcode or search input");
+
+    // Start first unknown barcode and set Quantity to 10 without submitting
+    fireEvent.change(scanInput, { target: { value: "012312312312" } });
+    fireEvent.submit(scanInput.closest("form")!);
+    await screen.findByPlaceholderText("Product name");
+    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "10" } });
+    expect(screen.getByRole("button", { name: "Confirm & Add (10)" })).toBeInTheDocument();
+
+    // Scan a second unknown barcode without submitting -> resets Quantity to 1
+    fireEvent.change(scanInput, { target: { value: "098798798798" } });
+    fireEvent.submit(scanInput.closest("form")!);
+    await waitFor(() => expect(screen.getByLabelText("Primary barcode")).toHaveValue("098798798798"));
+    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
+
+    // Edit Quantity to 7 and submit an unmatched text search without submitting -> resets Quantity to 1
+    fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "7" } });
+    expect(screen.getByRole("button", { name: "Confirm & Add (7)" })).toBeInTheDocument();
+
+    fireEvent.change(scanInput, { target: { value: "Kumquat" } });
+    fireEvent.submit(scanInput.closest("form")!);
+    await waitFor(() => expect(screen.getByPlaceholderText("Product name")).toHaveValue("Kumquat"));
+    expect(screen.getByLabelText("Quantity")).toHaveValue(1);
+    expect(screen.getByRole("button", { name: "Confirm & Add (1)" })).toBeInTheDocument();
+  });
 });
