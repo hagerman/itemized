@@ -84,9 +84,9 @@ export const AppRoutes: React.FC<AppRoutesProps> = ({ onOidcRedirect }) => {
       <Route path="/locations" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Locations" demoMode={demoMode} demoResetAt={demoResetAt}><LocationsPage /></Layout>} />
       <Route path="/locations/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Location" demoMode={demoMode} demoResetAt={demoResetAt}><LocationDetailPage /></Layout>} />
       <Route path="/go/:kind/:id" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Quick Action" demoMode={demoMode} demoResetAt={demoResetAt}><QrActionPage /></Layout>} />
-      <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt}><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
-      <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
-      <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt}><Suspense fallback={<div className="text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
+      <Route path="/settings" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Settings" demoMode={demoMode} demoResetAt={demoResetAt} splitPane><SettingsPage user={authStatus.user} demoMode={demoMode} /></Layout>} />
+      <Route path="/help" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt} splitPane><Suspense fallback={<div className="p-6 text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
+      <Route path="/help/*" element={<Layout user={authStatus.user} onLogout={handleLogout} title="Help" demoMode={demoMode} demoResetAt={demoResetAt} splitPane><Suspense fallback={<div className="p-6 text-sm text-slate-600 dark:text-slate-400">Loading Help...</div>}><LazyHelpPage /></Suspense></Layout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

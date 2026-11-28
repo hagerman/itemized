@@ -20,8 +20,9 @@ export const APP_SCREENS: AppScreen[] = [
   { id: "help", kind: "route", label: "Help", routePath: "/help" },
   { id: "help-article", kind: "route", label: "Help Article", routePath: "/help/*" },
 
-  // Settings sections / cards (must match SettingsPage.tsx)
+  // Settings sections / cards (must match SettingsPage.tsx and settings components)
   { id: "settings/account", kind: "settings", label: "Account" },
+  { id: "settings/notifications", kind: "settings", label: "Push Notifications" },
   { id: "settings/api-tokens", kind: "settings", label: "API Tokens" },
   { id: "settings/instance", kind: "settings", label: "Instance Configuration" },
   { id: "settings/oidc", kind: "settings", label: "OIDC" },

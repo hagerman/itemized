@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelpProvider } from "../components/HelpContext";
@@ -43,6 +43,40 @@ describe("In-app Help and Contextual Help", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Label printing and ZPL templates" })).toBeInTheDocument();
     });
+
+    // Desktop left sub-nav highlights active guide and navigates directly between guides and Overview
+    const helpNav = screen.getByRole("navigation", { name: "Help navigation" });
+    expect(within(helpNav).getByRole("button", { name: "Label printing and ZPL templates" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    fireEvent.click(within(helpNav).getByRole("button", { name: "Push notifications" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Push notifications" })).toBeInTheDocument();
+    });
+
+    // Mobile custom grouped dropdown preserves entry-point hierarchy and navigates back to Overview
+    const mobileTrigger = screen.getByRole("button", { name: "Help guide" });
+    fireEvent.click(mobileTrigger);
+    const mobileMenu = screen.getByRole("menu", { name: "Help guide" });
+    expect(within(mobileMenu).getByText("Get started")).toBeInTheDocument();
+    expect(within(mobileMenu).getByText("Use itemized")).toBeInTheDocument();
+    expect(within(mobileMenu).getByText("Configure & connect")).toBeInTheDocument();
+    expect(within(mobileMenu).getByRole("menuitemradio", { name: "Push notifications" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+
+    // Outside click closes dropdown
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole("menu", { name: "Help guide" })).not.toBeInTheDocument();
+
+    // Selecting Overview returns to Help landing
+    fireEvent.click(mobileTrigger);
+    fireEvent.click(within(screen.getByRole("menu", { name: "Help guide" })).getByRole("menuitemradio", { name: "Overview" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Search offline Help/i)).toBeInTheDocument();
+    });
   });
 
   it("opens contextual Help from a Settings card without discarding unsaved input", async () => {
@@ -77,7 +111,7 @@ describe("In-app Help and Contextual Help", () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={["/settings"]}>
+        <MemoryRouter initialEntries={["/settings?tab=printing"]}>
           <HelpProvider>
             <SettingsPage user={{ id: 1, email: "admin@example.com", role: "admin", created_at: "", updated_at: "" }} />
           </HelpProvider>

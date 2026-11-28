@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsPage } from "./SettingsPage";
 import { PrinterRecord, User } from "../api";
@@ -21,35 +22,79 @@ const ADMIN_USER: User = {
   updated_at: "2026-11-23T00:00:00Z",
 };
 
-function renderWithQuery(user: User) {
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+};
+
+function renderSettings(
+  user: User,
+  options: { demoMode?: boolean; initialEntry?: string; withTheme?: boolean } = {}
+) {
+  const { demoMode = false, initialEntry = "/settings", withTheme = false } = options;
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const content = (
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <LocationProbe />
+      <SettingsPage user={user} demoMode={demoMode} />
+    </MemoryRouter>
+  );
+  const result = render(
     <QueryClientProvider client={qc}>
-      <SettingsPage user={user} />
+      {withTheme ? <ThemeProvider>{content}</ThemeProvider> : content}
     </QueryClientProvider>
   );
+  return { ...result, qc };
 }
 
-describe("SettingsPage role-based visibility", () => {
+function getDesktopNav() {
+  return screen.getByRole("navigation", { name: "Settings navigation" });
+}
+
+describe("SettingsPage role-based visibility and navigation", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("shows only Account and API Tokens settings and skips admin API calls for member users", () => {
+  it("shows only Personal panels, falls back from admin tab URLs, and skips admin API calls for member users", () => {
     const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ tokens: [] }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    renderWithQuery(MEMBER_USER);
+    renderSettings(MEMBER_USER, { initialEntry: "/settings?tab=printing" });
 
-    expect(screen.getByText("Account")).toBeInTheDocument();
-    expect(screen.getByText("API Tokens")).toBeInTheDocument();
+    const nav = getDesktopNav();
+    expect(within(nav).getByText("Personal")).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "Account & Preferences" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("button", { name: "Notifications" })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "API Tokens" })).toBeInTheDocument();
+    expect(within(nav).queryByText("Admin")).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "General" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Users & SSO" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "AI & Classification" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Label Printing" })).not.toBeInTheDocument();
+
+    // Falls back to Account & Preferences
+    expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("member@home.local")).toBeInTheDocument();
-    expect(screen.queryByText("Instance Configuration")).not.toBeInTheDocument();
-    expect(screen.queryByText("Household Users (Admin)")).not.toBeInTheDocument();
-    expect(screen.queryByText("Label Printers")).not.toBeInTheDocument();
-    expect(screen.queryByText("ZPL Label Templates")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Label Printers" })).not.toBeInTheDocument();
+
+    // Mobile custom grouped dropdown shows only Personal group for members
+    const mobileTrigger = screen.getByRole("button", { name: "Settings section" });
+    expect(mobileTrigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(mobileTrigger);
+    expect(mobileTrigger).toHaveAttribute("aria-expanded", "true");
+    const mobileMenu = screen.getByRole("menu", { name: "Settings section" });
+    expect(within(mobileMenu).getByText("Personal")).toBeInTheDocument();
+    expect(within(mobileMenu).queryByText("Admin")).not.toBeInTheDocument();
+    expect(within(mobileMenu).getByRole("menuitemradio", { name: "Account & Preferences" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "Settings section" })).not.toBeInTheDocument();
+
     const calledUrls = fetchMock.mock.calls.map(([u]) => String(u));
     expect(calledUrls).not.toContain("/api/settings");
     expect(calledUrls).not.toContain("/api/users");
@@ -57,7 +102,7 @@ describe("SettingsPage role-based visibility", () => {
     expect(calledUrls).not.toContain("/api/label-templates");
   });
 
-  it("shows all admin settings sections and queries admin endpoints for admin users", async () => {
+  it("switches Settings panels, syncs URL query param, and shows all Admin panels for admin users", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/settings") {
         return new Response(
@@ -85,21 +130,60 @@ describe("SettingsPage role-based visibility", () => {
       }
       if (url === "/api/label-templates") {
         return new Response(
-          JSON.stringify({ templates: [{ entity_type: "item", content: "^XA^XZ", is_custom: false, default_content: "^XA^XZ" }] }),
+          JSON.stringify({
+            templates: [{ entity_type: "item", content: "^XA^XZ", is_custom: false, default_content: "^XA^XZ" }],
+          }),
           { status: 200 }
         );
       }
-      return new Response(JSON.stringify({}), { status: 404 });
+      return new Response(JSON.stringify({}), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderWithQuery(ADMIN_USER);
+    renderSettings(ADMIN_USER);
 
-    expect(screen.getByText("Account")).toBeInTheDocument();
-    expect(screen.getByText("Instance Configuration")).toBeInTheDocument();
-    expect(screen.getByText("Household Users (Admin)")).toBeInTheDocument();
-    expect(screen.getByText("Label Printers")).toBeInTheDocument();
-    expect(screen.getByText("ZPL Label Templates")).toBeInTheDocument();
+    const nav = getDesktopNav();
+    expect(within(nav).getByText("Personal")).toBeInTheDocument();
+    expect(within(nav).getByText("Admin")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Account" })).toBeInTheDocument();
+
+    // Switch to Label Printing
+    fireEvent.click(within(nav).getByRole("button", { name: "Label Printing" }));
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/settings?tab=printing");
+    expect(within(nav).getByRole("button", { name: "Label Printing" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "Label Printers" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ZPL Label Templates" })).toBeInTheDocument();
+
+    // Switch to General
+    fireEvent.click(within(nav).getByRole("button", { name: "General" }));
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/settings?tab=general");
+    expect(screen.getByRole("heading", { name: "Instance Configuration" })).toBeInTheDocument();
+
+    // Switch to Users & SSO
+    fireEvent.click(within(nav).getByRole("button", { name: "Users & SSO" }));
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/settings?tab=users-sso");
+    expect(screen.getByRole("heading", { name: "Household Users" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OIDC Single Sign-On (Optional)" })).toBeInTheDocument();
+
+    // Switch to AI & Classification
+    fireEvent.click(within(nav).getByRole("button", { name: "AI & Classification" }));
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/settings?tab=ai");
+    expect(screen.getByRole("heading", { name: "LLM Product Classification (Optional)" })).toBeInTheDocument();
+
+    // Mobile custom grouped dropdown preserves Personal and Admin groups and switches panels
+    const mobileTrigger = screen.getByRole("button", { name: "Settings section" });
+    fireEvent.click(mobileTrigger);
+    const mobileMenu = screen.getByRole("menu", { name: "Settings section" });
+    expect(within(mobileMenu).getByText("Personal")).toBeInTheDocument();
+    expect(within(mobileMenu).getByText("Admin")).toBeInTheDocument();
+    expect(within(mobileMenu).getByRole("menuitemradio", { name: "AI & Classification" })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    );
+    fireEvent.click(within(mobileMenu).getByRole("menuitemradio", { name: "Notifications" }));
+    expect(screen.queryByRole("menu", { name: "Settings section" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/settings?tab=notifications");
+    expect(screen.getByRole("heading", { name: "Push Notifications" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/settings", expect.any(Object));
@@ -109,7 +193,8 @@ describe("SettingsPage role-based visibility", () => {
     });
   });
 
-  it("allows admins to promote/demote other users and configure Force OIDC", async () => {
+  it("allows admins to promote/demote users and save OIDC, General, and AI settings independently", async () => {
+    const patchPayloads: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/settings" && (!init?.method || init.method === "GET")) {
         return new Response(
@@ -130,22 +215,9 @@ describe("SettingsPage role-based visibility", () => {
         );
       }
       if (url === "/api/settings" && init?.method === "PATCH") {
-        return new Response(
-          JSON.stringify({
-            base_url: "https://itemized.example.com",
-            due_date_average_count: 3,
-            oidc_issuer: "https://idp.example.com",
-            oidc_client_id: "itemized",
-            oidc_has_secret: false,
-            oidc_auto_provision: false,
-            oidc_force: true,
-            llm_provider: "",
-            llm_model: "",
-            llm_base_url: "",
-            llm_has_api_key: false,
-          }),
-          { status: 200 }
-        );
+        const body = JSON.parse(String(init.body));
+        patchPayloads.push(body);
+        return new Response(JSON.stringify({ ...body }), { status: 200 });
       }
       if (url === "/api/users") {
         return new Response(JSON.stringify({ users: [ADMIN_USER, MEMBER_USER] }), { status: 200 });
@@ -153,17 +225,11 @@ describe("SettingsPage role-based visibility", () => {
       if (url === "/api/users/2" && init?.method === "PATCH") {
         return new Response(JSON.stringify({ user: { ...MEMBER_USER, role: "admin" } }), { status: 200 });
       }
-      if (url === "/api/printers") {
-        return new Response(JSON.stringify({ printers: [] }), { status: 200 });
-      }
-      if (url === "/api/label-templates") {
-        return new Response(JSON.stringify({ templates: [] }), { status: 200 });
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
+      return new Response(JSON.stringify({}), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderWithQuery(ADMIN_USER);
+    renderSettings(ADMIN_USER, { initialEntry: "/settings?tab=users-sso" });
 
     // Other user has role selector; current admin does not
     const roleSelect = await screen.findByLabelText("Role for member@home.local");
@@ -196,15 +262,46 @@ describe("SettingsPage role-based visibility", () => {
     expect(forceCheckbox).not.toBeDisabled();
 
     fireEvent.click(forceCheckbox);
-    fireEvent.click(screen.getByRole("button", { name: "Save Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save OIDC Settings" }));
 
     await waitFor(() => {
-      const patchCall = fetchMock.mock.calls.find(
-        ([url, init]) => url === "/api/settings" && (init as RequestInit | undefined)?.method === "PATCH"
-      );
-      expect(patchCall).toBeTruthy();
-      const body = JSON.parse(String((patchCall![1] as RequestInit).body));
-      expect(body.oidc_force).toBe("true");
+      expect(patchPayloads).toHaveLength(1);
+    });
+    expect(patchPayloads[0]).toEqual({
+      oidc_issuer: "https://idp.example.com",
+      oidc_client_id: "itemized",
+      oidc_auto_provision: "false",
+      oidc_force: "true",
+    });
+
+    // Save General independently
+    const nav = getDesktopNav();
+    fireEvent.click(within(nav).getByRole("button", { name: "General" }));
+    const baseUrlInput = await screen.findByLabelText(/Base URL/i);
+    fireEvent.change(baseUrlInput, { target: { value: "https://pantry.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save General Settings" }));
+
+    await waitFor(() => {
+      expect(patchPayloads).toHaveLength(2);
+    });
+    expect(patchPayloads[1]).toEqual({
+      base_url: "https://pantry.example.com",
+      due_date_average_count: 3,
+    });
+
+    // Save AI & Classification independently
+    fireEvent.click(within(nav).getByRole("button", { name: "AI & Classification" }));
+    fireEvent.change(screen.getByLabelText("LLM Provider"), { target: { value: "openai" } });
+    fireEvent.change(screen.getByPlaceholderText("Model name"), { target: { value: "gpt-4o-mini" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save AI Settings" }));
+
+    await waitFor(() => {
+      expect(patchPayloads).toHaveLength(3);
+    });
+    expect(patchPayloads[2]).toEqual({
+      llm_provider: "openai",
+      llm_model: "gpt-4o-mini",
+      llm_base_url: "",
     });
   });
 
@@ -231,27 +328,21 @@ describe("SettingsPage role-based visibility", () => {
       if (url === "/api/users") {
         return new Response(JSON.stringify({ users: [ADMIN_USER] }), { status: 200 });
       }
-      if (url === "/api/printers") {
-        return new Response(JSON.stringify({ printers: [] }), { status: 200 });
-      }
-      if (url === "/api/label-templates") {
-        return new Response(JSON.stringify({ templates: [] }), { status: 200 });
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
+      return new Response(JSON.stringify({}), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <SettingsPage user={ADMIN_USER} demoMode={true} />
-      </QueryClientProvider>
-    );
+    renderSettings(ADMIN_USER, { demoMode: true });
 
     expect(screen.getByText(/Demo mode is active/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update Account" })).toBeDisabled();
+
+    const nav = getDesktopNav();
+    fireEvent.click(within(nav).getByRole("button", { name: "Users & SSO" }));
     expect(screen.getByPlaceholderText("Issuer URL")).toBeDisabled();
     expect(screen.getByPlaceholderText("Client ID")).toBeDisabled();
+
+    fireEvent.click(within(nav).getByRole("button", { name: "AI & Classification" }));
     expect(screen.getByPlaceholderText("Model name")).toBeDisabled();
     expect(screen.getByPlaceholderText("Base URL (optional)")).toBeDisabled();
   });
@@ -287,9 +378,6 @@ describe("SettingsPage role-based visibility", () => {
           { status: 200 }
         );
       }
-      if (url === "/api/users") {
-        return new Response(JSON.stringify({ users: [ADMIN_USER] }), { status: 200 });
-      }
       if (url === "/api/printers" && (!init?.method || init.method === "GET")) {
         return new Response(JSON.stringify({ printers }), { status: 200 });
       }
@@ -319,13 +407,8 @@ describe("SettingsPage role-based visibility", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { qc } = renderSettings(ADMIN_USER, { initialEntry: "/settings?tab=printing" });
     const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
-    render(
-      <QueryClientProvider client={qc}>
-        <SettingsPage user={ADMIN_USER} />
-      </QueryClientProvider>
-    );
 
     expect(await screen.findByText("Kitchen Zebra")).toBeInTheDocument();
 
@@ -343,10 +426,8 @@ describe("SettingsPage role-based visibility", () => {
     invalidateSpy.mockClear();
 
     // Delete printer -> invalidates auth-status
-    const testPrintBtns = await screen.findAllByRole("button", { name: /Test Print/i });
-    const deleteBtn = testPrintBtns[0].nextElementSibling as HTMLButtonElement | null;
-    expect(deleteBtn).toBeTruthy();
-    fireEvent.click(deleteBtn!);
+    const deleteBtn = await screen.findByRole("button", { name: "Delete Kitchen Zebra" });
+    fireEvent.click(deleteBtn);
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["auth-status"] });
@@ -354,7 +435,7 @@ describe("SettingsPage role-based visibility", () => {
   });
 });
 
-describe("SettingsPage Appearance theme selector", () => {
+describe("SettingsPage Appearance, Quick Actions, and API Tokens", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     window.localStorage.clear();
@@ -371,14 +452,7 @@ describe("SettingsPage Appearance theme selector", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    renderSettings(MEMBER_USER, { withTheme: true });
 
     expect(screen.getByText("Appearance")).toBeInTheDocument();
     const darkRadio = screen.getByRole("radio", { name: "Dark" });
@@ -401,14 +475,7 @@ describe("SettingsPage Appearance theme selector", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: "server error" }), { status: 500 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    renderSettings(MEMBER_USER, { withTheme: true });
 
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
@@ -420,14 +487,7 @@ describe("SettingsPage Appearance theme selector", () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), { status: 403 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} demoMode />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    renderSettings(MEMBER_USER, { demoMode: true, withTheme: true });
 
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
@@ -451,14 +511,7 @@ describe("SettingsPage Appearance theme selector", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const { unmount } = render(
-      <QueryClientProvider client={qc}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    const { unmount } = renderSettings(MEMBER_USER, { withTheme: true });
 
     const group = screen.getByRole("radiogroup", { name: "Quick actions" });
     const enabledBtn = group.querySelector('button[aria-checked="true"]') as HTMLButtonElement;
@@ -473,14 +526,7 @@ describe("SettingsPage Appearance theme selector", () => {
     // Demo mode updates locally without calling PATCH /api/auth/account
     const demoFetch = vi.fn();
     vi.stubGlobal("fetch", demoFetch);
-    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc2}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} demoMode />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    renderSettings(MEMBER_USER, { demoMode: true, withTheme: true });
 
     fireEvent.click(screen.getByRole("radio", { name: "Disabled" }));
     expect(await screen.findByText("Quick actions preference updated locally for this session.")).toBeInTheDocument();
@@ -529,14 +575,7 @@ describe("SettingsPage Appearance theme selector", () => {
       })
     );
 
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const { unmount } = render(
-      <QueryClientProvider client={qc}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    const { unmount } = renderSettings(MEMBER_USER, { initialEntry: "/settings?tab=api-tokens", withTheme: true });
 
     expect(await screen.findByText("No personal API tokens yet.")).toBeInTheDocument();
 
@@ -555,14 +594,7 @@ describe("SettingsPage Appearance theme selector", () => {
     unmount();
 
     // Demo mode disables API token creation
-    const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={qc2}>
-        <ThemeProvider>
-          <SettingsPage user={MEMBER_USER} demoMode />
-        </ThemeProvider>
-      </QueryClientProvider>
-    );
+    renderSettings(MEMBER_USER, { initialEntry: "/settings?tab=api-tokens", demoMode: true, withTheme: true });
     expect(screen.getByLabelText("Token name")).toBeDisabled();
     expect(screen.getByRole("button", { name: /Create Token/i })).toBeDisabled();
   });

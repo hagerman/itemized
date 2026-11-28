@@ -47,6 +47,7 @@ interface LayoutProps {
   demoMode?: boolean;
   demoResetAt?: string;
   headerActions?: React.ReactNode;
+  splitPane?: boolean;
   children: React.ReactNode;
 }
 
@@ -77,7 +78,7 @@ function formatDemoCountdown(resetAtIso: string | undefined, nowMs: number): str
   return `Sample data resets in ${secs}s (at ${timeLabel})`;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode = false, demoResetAt, headerActions, children }) => {
+export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode = false, demoResetAt, headerActions, splitPane = false, children }) => {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const loc = useLocation();
@@ -452,7 +453,13 @@ export const Layout: React.FC<LayoutProps> = ({ user, onLogout, title, demoMode 
           </div>
         )}
 
-        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={`flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 ${
+            splitPane ? "md:overflow-hidden md:p-0 lg:pb-0" : "[scrollbar-gutter:stable]"
+          }`}
+        >
           <ScannerControlContext.Provider value={{ openScanner }}>
             {children}
           </ScannerControlContext.Provider>

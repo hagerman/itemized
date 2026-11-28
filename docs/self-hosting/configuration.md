@@ -11,7 +11,7 @@ screens: []
 
 **No environment variable is mandatory.** Itemized starts out of the box with sensible defaults (`PORT=8080`, `DB_PATH=/data/itemized.db`).
 
-Settings marked **Editable in UI** can be changed anytime under **Settings → Instance Configuration**; values saved in the database take precedence over environment variable defaults.
+Settings marked **Editable in UI** can be changed anytime under the **Admin** panels in **Settings** (**General**, **Users & SSO**, and **AI & Classification**); values saved in the database take precedence over environment variable defaults.
 
 ## Environment variables
 

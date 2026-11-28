@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BellRing, Send, Smartphone, Trash2 } from "lucide-react";
+import { Bell, BellRing, HelpCircle, Send, Smartphone, Trash2 } from "lucide-react";
 import {
   apiFetch,
   NotificationConfig,
@@ -8,6 +8,8 @@ import {
   NotificationPreferences,
   NotificationTarget,
 } from "../api";
+import { useHelp } from "./HelpContext";
+import { LEARN_MORE_CLASS } from "./settings/styles";
 
 interface NotificationsCardProps {
   demoMode?: boolean;
@@ -80,6 +82,7 @@ export function detectPushEnvironment(): {
 
 export const NotificationsCard: React.FC<NotificationsCardProps> = ({ demoMode = false, onFlash, onError }) => {
   const qc = useQueryClient();
+  const { openHelpForScreen } = useHelp();
   const env = detectPushEnvironment();
 
   const { data: config } = useQuery({
@@ -228,7 +231,17 @@ export const NotificationsCard: React.FC<NotificationsCardProps> = ({ demoMode =
             Receive daily PWA push digests for expiring items and your shopping list on iOS, Android, and desktop.
           </p>
         </div>
-        {demoMode && <span className="text-xs text-amber-700 dark:text-amber-300">Disabled in demo mode</span>}
+        <div className="flex items-center gap-3">
+          {demoMode && <span className="text-xs text-amber-700 dark:text-amber-300">Disabled in demo mode</span>}
+          <button
+            type="button"
+            data-help-screen="settings/notifications"
+            onClick={() => openHelpForScreen("settings/notifications")}
+            className={LEARN_MORE_CLASS}
+          >
+            <HelpCircle className="h-3.5 w-3.5" /> Learn more
+          </button>
+        </div>
       </div>
 
       {!demoMode && !env.isSecureContext && (

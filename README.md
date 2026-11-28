@@ -44,8 +44,9 @@ Itemized is designed to make tracking everything in your pantry, fridge, freezer
 - **[Search and keyboard shortcuts](docs/use/search-and-shortcuts.md)**: Find products instantly with typo-tolerant FTS5 search and navigate desktop views with Gmail-style shortcuts.
 - **[Label printing and ZPL templates](docs/configure/label-printing.md)**: Print scannable QR labels directly to Zebra ZSB (IPP) and Raw TCP (:9100) ZPL printers on your LAN.
 - **[UPC lookup and AI classification](docs/configure/upc-and-ai.md)**: Automatically look up unknown retail barcodes via OpenFoodFacts and optionally normalize names with an LLM.
-- **[Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, and optional OpenID Connect single sign-on.
-- **[Settings overview](docs/configure/settings.md)**: Navigate Account, Instance Configuration, OIDC, AI classification, Household Users, Printers, and ZPL Templates.
+- **[Household accounts and OIDC SSO](docs/configure/accounts-and-sso.md)**: Manage household users, Admin and Member roles, passwords, appearance, quick actions, and optional OpenID Connect single sign-on.
+- **[Settings overview](docs/configure/settings.md)**: Navigate Personal and Admin Settings panels for Account, Preferences, Notifications, API Tokens, General, Users & SSO, AI, and Label Printing.
+- **[Push notifications](docs/configure/push-notifications.md)**: Enable daily PWA push digests for expiring items and your shopping list on iOS, Android, and desktop.
 - **[API tokens and Home Assistant](docs/configure/api-tokens-and-integrations.md)**: Create long-lived Personal API Tokens and connect itemized to Home Assistant, iOS Shortcuts, and custom scripts.
 
 ---
@@ -69,7 +70,7 @@ Itemized is designed to make tracking everything in your pantry, fridge, freezer
       <strong><a href="docs/use/inventory-and-expiration.md">Inventory and expiration tracking</a></strong>
     </td>
     <td align="center" width="50%">
-      <a href="docs/configure/label-printing.md"><img src="docs/assets/settings-printers.png" alt="Label Printers and ZPL Label Templates cards in Settings" width="440" /></a><br />
+      <a href="docs/configure/label-printing.md"><img src="docs/assets/settings-printers.png" alt="Label Printing panel in Settings showing Label Printers and ZPL Label Templates" width="440" /></a><br />
       <strong><a href="docs/configure/label-printing.md">Label printing and ZPL templates</a></strong>
     </td>
   </tr>

@@ -11,19 +11,19 @@ screens:
   - settings/label-templates
 ---
 
-![Label Printers and ZPL Label Templates cards in Settings](../assets/settings-printers.png)
+![Label Printing panel in Settings showing Label Printers and ZPL Label Templates](../assets/settings-printers.png)
 
 Itemized prints ZPL QR labels directly from the Go server to printers on your local network—no companion print server or browser plugin required.
 
 ## Adding a label printer
 
-1. Open **Settings → Label Printers** (Admin only).
-2. Enter a **Printer name** and choose a driver:
+1. Open **Settings → Label Printing** (Admin only).
+2. Under **Label Printers**, enter a **Printer name** and choose a driver:
    - **IPP ZPL (Zebra ZSB)**: Endpoint such as `http://192.168.1.50:631/ipp/print`.
    - **Raw TCP :9100 ZPL**: Endpoint such as `192.168.1.50:9100`.
 3. Select **Add Printer**, then click **Test Print** to verify connectivity.
 
-Make sure your **Base URL** in **Settings → Instance Configuration** is set to your HTTPS address so printed QR codes encode the right URL.
+Make sure your **Base URL** in **Settings → General** is set to your HTTPS address so printed QR codes encode the right URL.
 
 ## Choosing a product label mode
 
@@ -37,4 +37,4 @@ You can also reprint item, product, or location labels anytime from their detail
 
 ## Customizing ZPL templates
 
-Under **Settings → ZPL Label Templates**, switch between **item**, **product**, and **location** templates. Templates use Go `text/template` syntax with variables including `.Payload.Barcode`, `.Payload.ProductName`, `.Payload.LocationName`, `.Payload.DueDate`, and `.MediaReady`. Select **Reset to Default** anytime to restore the built-in template.
+Under **Settings → Label Printing → ZPL Label Templates**, switch between **item**, **product**, and **location** templates. Templates use Go `text/template` syntax with variables including `.Payload.Barcode`, `.Payload.ProductName`, `.Payload.LocationName`, `.Payload.DueDate`, and `.MediaReady`. Select **Reset to Default** anytime to restore the built-in template.

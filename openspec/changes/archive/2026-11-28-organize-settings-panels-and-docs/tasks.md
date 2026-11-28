@@ -1,0 +1,36 @@
+# Tasks
+
+## 1. Settings Navigation Shell & Personal Panels
+
+- [x] 1.1 Extract shared styles and Personal panel components (`AccountPreferencesPanel.tsx` for Account + Appearance & Quick Actions, `ApiTokensPanel.tsx` for Personal API Tokens) under `web/src/components/settings/`, and add a `Learn more` contextual Help button (`data-help-screen="settings/notifications"`) to `web/src/components/NotificationsCard.tsx`. Verify TypeScript compiles (`cd web && npx tsc --noEmit`).
+- [x] 1.2 Refactor `web/src/pages/SettingsPage.tsx` into a responsive two-column layout with a desktop left vertical sub-nav (`Personal` and `Admin` groups) and mobile horizontally scrollable pill strip synced with `/settings?tab=<id>` (`account`, `notifications`, `api-tokens`, `general`, `users-sso`, `ai`, `printing`), falling back to `account` for unknown or unauthorized tabs, and update the demo-mode notice copy to include API Tokens and Push Notifications. Verify personal panel switching and member-role fallback in `web/src/pages/SettingsPage.test.tsx`.
+- [x] 1.3 Register `settings/notifications` in `web/src/screens.ts` and update `web/src/screens.test.ts` to validate all settings screen IDs (including `settings/api-tokens` and `settings/notifications`) across `SettingsPage.tsx`, `NotificationsCard.tsx`, and `web/src/components/settings/`. Verify `cd web && npx vitest run src/screens.test.ts`.
+
+## 2. Admin Panels & Independent Settings Saves
+
+- [x] 2.1 Extract Admin panel components under `web/src/components/settings/`: `GeneralSettingsPanel.tsx` (`base_url`, `due_date_average_count`), `UsersSsoPanel.tsx` (Household Users + OIDC SSO), `AiClassificationPanel.tsx` (LLM Product Classification), and `LabelPrintingPanel.tsx` (Label Printers + ZPL Label Templates), with General, OIDC, and AI forms each submitting independent partial `PATCH /api/settings` payloads while keeping admin queries gated by `isAdmin`. Verify TypeScript compiles (`cd web && npx tsc --noEmit`).
+- [x] 2.2 Update `web/src/pages/SettingsPage.test.tsx` and `web/src/pages/HelpPage.test.tsx` (wrapping `SettingsPage` renders in `MemoryRouter`) to cover tab navigation, URL query sync, independent General/OIDC/AI saves, member-role admin-tab fallback and API isolation, and contextual Help preserving unsaved input in the active panel. Verify `cd web && npx vitest run src/pages/SettingsPage.test.tsx src/pages/HelpPage.test.tsx`.
+
+## 3. Documentation & Automated Screenshots
+
+- [x] 3.1 Create `docs/configure/push-notifications.md` (< 600 words, `capabilities: [push-notifications]`, `screens: [settings/notifications]`, leading with `../assets/settings-notifications.png`) covering PWA device enrollment, HTTPS and iOS Home Screen requirements, daily digest toggles and `TZ` send time, and test notifications. Verify front matter and word count via `make docs-check` (after screenshots are captured in 3.3).
+- [x] 3.2 Audit and update all Settings documentation to match the Personal/Admin panel organization and ensure every setting is documented: `docs/configure/settings.md`, `docs/configure/accounts-and-sso.md`, `docs/configure/api-tokens-and-integrations.md`, `docs/configure/label-printing.md`, `docs/configure/upc-and-ai.md`, `docs/use/inventory-and-expiration.md`, and `docs/self-hosting/configuration.md`. Verify all internal links, anchors, and brand casing rules pass.
+- [x] 3.3 Update `web/scripts/docs/screenshots.ts` to capture `docs/assets/settings.png` (`/settings`), `docs/assets/settings-notifications.png` (`/settings?tab=notifications`), and `docs/assets/settings-printers.png` (`/settings?tab=printing`), run the screenshot capture script, and regenerate the in-app Help bundle and `README.md` via `make docs-build`. Verify the new/updated PNGs exist in `docs/assets/` and `make docs-check` passes with zero errors.
+
+## 4. Integration Verification
+
+- [x] 4.1 Run full frontend test suite and production build (`cd web && npm test && npm run build`) and verify all tests and build steps pass.
+- [x] 4.2 Run `make docs-check` and Go verification (`go test ./...`, `go vet ./...`, and `gopls check` on Go files, resolving `gopls` from `PATH` or `$(go env GOPATH)/bin/gopls`) and fix any reported diagnostics.
+
+## 5. Layout Consistency, Mobile Grouped Dropdown & Help Sub-Nav
+
+- [x] 5.1 Add `[scrollbar-gutter:stable]` on `<main>` in `web/src/components/Layout.tsx` and create a shared left-aligned `web/src/components/SectionNavLayout.tsx` component (non-shifting desktop left vertical sub-nav + mobile grouped `<select>` using `<optgroup>` headings at `16px` font size). Verify TypeScript compiles (`cd web && npx tsc --noEmit`).
+- [x] 5.2 Refactor `web/src/pages/SettingsPage.tsx` to use `SectionNavLayout` (replacing the mobile pill strip with the grouped **Personal** / **Admin** dropdown and keeping left alignment consistent across all panels) and update `web/src/pages/SettingsPage.test.tsx` to verify grouped mobile dropdown options and navigation for both admin and member roles. Verify `cd web && npx vitest run src/pages/SettingsPage.test.tsx`.
+- [x] 5.3 Refactor `web/src/pages/HelpPage.tsx` to use `SectionNavLayout` on `/help` and `/help/*` (showing **Overview** plus grouped guides under `Get started`, `Use itemized`, and `Configure & connect` in both the desktop left vertical sub-nav and mobile grouped dropdown while preserving `/help` search auto-focus, 9 task entries, and categorized guide list) and update `web/src/pages/HelpPage.test.tsx` to cover sub-nav and mobile dropdown guide navigation. Verify `cd web && npx vitest run src/pages/HelpPage.test.tsx`.
+- [x] 5.4 Update `docs/configure/settings.md` to reference the grouped mobile dropdown instead of a pill strip, re-capture updated screenshots via `make docs-screenshots`, rebuild docs via `make docs-build`, and run full verification (`cd web && npm test && npm run build`, `make docs-check`, `go test ./...`, `go vet ./...`, and `gopls check` on Go files).
+
+## 6. Independent Split-Pane Scrolling & Custom Mobile Dropdown
+
+- [x] 6.1 Add `splitPane?: boolean` to `web/src/components/Layout.tsx` (enabling `md:overflow-hidden md:p-0` on `<main>` while keeping standard mobile scrolling), pass `splitPane` for `/settings`, `/help`, and `/help/*` in `web/src/App.tsx`, and refactor `web/src/components/SectionNavLayout.tsx` into two independent `overflow-y-auto` desktop panes (top-anchored left nav + scrollable right content pane that resets `scrollTop = 0` on navigation) plus a custom styled grouped mobile dropdown menu (trigger button + popover with group headings, icons, active checkmark, and outside-click/`Escape` dismissal). Verify TypeScript compiles (`cd web && npx tsc --noEmit`).
+- [x] 6.2 Update `web/src/pages/SettingsPage.test.tsx` and `web/src/pages/HelpPage.test.tsx` to verify the custom grouped mobile dropdown menu (open/close, group headings, role visibility, selection, outside-click and `Escape` dismissal) and desktop split-pane navigation. Verify `cd web && npx vitest run src/pages/SettingsPage.test.tsx src/pages/HelpPage.test.tsx`.
+- [x] 6.3 Re-capture updated screenshots via `make docs-screenshots`, rebuild docs via `make docs-build`, and run full verification (`cd web && npm test && npm run build`, `make docs-check`, `go test ./...`, `go vet ./...`, and `gopls check` on Go files).

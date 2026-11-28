@@ -23,10 +23,24 @@ describe("APP_SCREENS registry", () => {
     expect(missing, `Routes missing from APP_SCREENS: ${missing.join(", ")}`).toEqual([]);
   });
 
-  it("covers every Settings card section in SettingsPage.tsx", () => {
-    const settingsSource = fs.readFileSync(path.resolve(__dirname, "pages/SettingsPage.tsx"), "utf8");
+  it("covers every Settings card section across SettingsPage and settings components", () => {
+    const settingsFiles = [
+      path.resolve(__dirname, "pages/SettingsPage.tsx"),
+      path.resolve(__dirname, "components/NotificationsCard.tsx"),
+    ];
+    const settingsComponentsDir = path.resolve(__dirname, "components/settings");
+    if (fs.existsSync(settingsComponentsDir)) {
+      for (const entry of fs.readdirSync(settingsComponentsDir)) {
+        if (entry.endsWith(".tsx")) {
+          settingsFiles.push(path.join(settingsComponentsDir, entry));
+        }
+      }
+    }
+
     const expectedSettingsIds = [
       "settings/account",
+      "settings/notifications",
+      "settings/api-tokens",
       "settings/instance",
       "settings/oidc",
       "settings/llm",
@@ -40,10 +54,19 @@ describe("APP_SCREENS registry", () => {
       expect(registered.has(id), `Settings screen ${id} missing from APP_SCREENS`).toBe(true);
     }
 
-    // Ensure every declared data-help-screen in SettingsPage.tsx is registered
-    const usedInSettings = Array.from(settingsSource.matchAll(/data-help-screen="([^"]+)"/g)).map((m) => m[1]);
+    // Ensure every declared data-help-screen in Settings files is registered
+    const usedInSettings = new Set<string>();
+    for (const filePath of settingsFiles) {
+      const source = fs.readFileSync(filePath, "utf8");
+      for (const match of source.matchAll(/data-help-screen="([^"]+)"/g)) {
+        usedInSettings.add(match[1]);
+      }
+    }
     for (const id of usedInSettings) {
-      expect(registered.has(id), `Settings screen ${id} used in SettingsPage.tsx is not in APP_SCREENS`).toBe(true);
+      expect(registered.has(id), `Settings screen ${id} used in Settings UI is not in APP_SCREENS`).toBe(true);
+    }
+    for (const id of expectedSettingsIds) {
+      expect(usedInSettings.has(id), `Expected Settings screen ${id} to have a Learn more button`).toBe(true);
     }
   });
 });

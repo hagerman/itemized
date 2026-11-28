@@ -3,7 +3,7 @@ title: API tokens and Home Assistant
 summary: Create long-lived Personal API Tokens and connect itemized to Home Assistant, iOS Shortcuts, and custom scripts.
 audience: user
 entry_point: configure
-order: 5
+order: 6
 capabilities:
   - user-auth
   - inventory-catalog
@@ -11,13 +11,13 @@ screens:
   - settings/api-tokens
 ---
 
-![Settings page showing Account, API Tokens, and Instance Configuration cards](../assets/settings.png)
+![Settings page showing the left navigation and Account & Preferences panel](../assets/settings.png)
 
 Personal API Tokens let external tools—such as **Home Assistant**, **iOS Shortcuts**, **Mealie/Tandoor bridges**, or shell scripts—authenticate with itemized without relying on short-lived browser cookies or local password login (even when **Force OIDC** is enabled).
 
 ## Creating and revoking tokens
 
-1. Open **Settings** and scroll to **API Tokens**.
+1. Open **Settings → API Tokens**.
 2. Enter a descriptive **Token name** (for example, `Home Assistant`) and choose an optional expiration (`Never expires`, `30 days`, `90 days`, or `1 year`).
 3. Select **Create Token** and copy the `itm_...` value immediately—for security, itemized stores only a SHA-256 hash and will not show the plaintext token again.
 4. Pass the token in the `Authorization` header of any `/api/*` request:

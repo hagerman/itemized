@@ -19,10 +19,10 @@ When you scan an unknown retail barcode in **Purchase** mode, itemized looks up 
 
 Out of the box, OpenFoodFacts provides raw product titles and brands. To automatically normalize names into your `Item, Variety, Detail` style and suggest the best matching **Category** and **Location**:
 
-1. Open **Settings → Instance Configuration → LLM Product Classification**.
+1. Open **Settings → AI & Classification**.
 2. Choose a provider: **Anthropic**, **OpenAI**, **Gemini**, or **OpenAI-Compatible (Ollama)**.
 3. Enter the **Model name**, optional **Base URL** (for Ollama or self-hosted endpoints, such as `http://ollama:11434/v1`), and **API Key**.
-4. Select **Save Settings**.
+4. Select **Save AI Settings**.
 
 You can also configure these via environment variables (`LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`). See the [Configuration reference](../self-hosting/configuration.md).
 

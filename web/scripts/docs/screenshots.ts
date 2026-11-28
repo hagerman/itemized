@@ -117,12 +117,10 @@ async function main() {
         await page.waitForTimeout(300);
       });
 
-      // Settings & Label Printers
+      // Settings panels (Account & Preferences, Notifications, Label Printing)
       await snap("/settings", "settings.png");
-      await snap("/settings", "settings-printers.png", async () => {
-        const heading = page.getByRole("heading", { name: "Label Printers" });
-        await heading.scrollIntoViewIfNeeded();
-      });
+      await snap("/settings?tab=notifications", "settings-notifications.png");
+      await snap("/settings?tab=printing", "settings-printers.png");
 
       await context.close();
 

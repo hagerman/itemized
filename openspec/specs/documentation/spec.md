@@ -42,11 +42,13 @@ The documentation SHALL include a task-oriented user guide for people using Item
 - UPC lookup and optional AI classification
 - shopping list and minimum stock levels
 - Zebra ZPL label printing and custom templates
+- push notifications (PWA device enrollment, HTTPS and iOS Home Screen requirements, daily digests, and test notifications)
+- API tokens and external integrations
 - search and keyboard shortcuts
 - household accounts and OIDC sign-in
 - installing Itemized as a mobile PWA
 - demo mode
-- settings
+- settings (reflecting every Settings panel and option under Personal and Admin navigation groups)
 - troubleshooting
 
 User guide pages SHALL be under 600 words each and lead with a screenshot. The keyboard shortcuts guide SHALL be generated from the app's canonical shortcut table so the `?` overlay and the guide cannot drift. An automated screenshot script SHALL capture up-to-date UI screenshots against a seeded local Itemized instance (using demo seed data) while hiding the demo-mode banner on standard user guide screenshots so screenshots reflect a normal household instance and can be refreshed reproducibly.
@@ -61,11 +63,15 @@ User guide pages SHALL be under 600 words each and lead with a screenshot. The k
 
 #### Scenario: Automated screenshot capture
 - **WHEN** a contributor runs the screenshot capture target
-- **THEN** it launches or connects to a seeded Itemized instance and captures the user guide screenshots referenced by `docs/` into `docs/assets/` with the demo-mode banner hidden
+- **THEN** it launches or connects to a seeded Itemized instance and captures the user guide screenshots referenced by `docs/` into `docs/assets/` with the demo-mode banner hidden (including Settings panel views such as `settings.png`, `settings-notifications.png`, and `settings-printers.png`)
 
 #### Scenario: Word count limit enforced
 - **WHEN** a user guide page exceeds 600 words
 - **THEN** the docs check fails and names the page and its word count
+
+#### Scenario: Push notifications guide and contextual Help
+- **WHEN** a user clicks **Learn more** on the Push Notifications card in Settings (or opens the Push Notifications guide in Help)
+- **THEN** the Push Notifications user guide opens covering device enrollment, HTTPS/iOS requirements, daily digest toggles and send time, and test notifications, and `docs-check` verifies `push-notifications` capability and `settings/notifications` screen coverage
 
 ### Requirement: Documentation website
 Every release and CI build SHALL produce the documentation as a standalone static website bundle (deployable to GitHub Pages or `/docs/` on `itemizedapp.com`) with sidebar navigation, an "On this page" outline, client-side search over a prebuilt index, the version described, and an "Edit this page" link pointing to the source file on GitHub. Every page SHALL belong to one of six entry points (`Get started`, `Use itemized`, `Configure & connect`, `Self-host`, `API & reference`, `Under the hood`). The landing page SHALL display the search input and the six entry points, each with a one-line description, its key pages, and a link to its section page; each section page SHALL list every page of its entry point with its summary. The sidebar SHALL follow the entry points, and every page SHALL display its entry point in a breadcrumb. The header and footer SHALL carry itemized navigation links (`Docs`, `Demo` linking to `https://demo.itemizedapp.com`, and `GitHub` linking to `https://github.com/itemizedapp/itemized`). Pages SHALL be readable and navigable without JavaScript, no search query SHALL be sent over the network, and no page SHALL request assets (including fonts or stylesheets) from any third-party origin.
@@ -87,7 +93,7 @@ Every release and CI build SHALL produce the documentation as a standalone stati
 - **THEN** the header provides links to `Docs`, `Demo`, and `GitHub` without horizontal overflow
 
 ### Requirement: Help inside the app
-The web application SHALL include a `/help` view bundling the user guide for its own version, available offline and searchable, reachable from the sidebar footer, every page header, the `?` keyboard shortcuts cheat sheet, and the keyboard shortcut `g` then `?`. Each in-app guide page SHALL be under 600 words with a screenshot first. Links between user guide pages SHALL navigate inside the app; links to admin or developer pages SHALL open the corresponding documentation website URL in a new tab. The Help bundle SHALL be lazy-loaded only when the Help view or contextual Help panel is opened so initial app bundle size is unaffected.
+The web application SHALL include a `/help` view bundling the user guide for its own version, available offline and searchable, reachable from the sidebar footer, every page header, the `?` keyboard shortcuts cheat sheet, and the keyboard shortcut `g` then `?`. `/help` and `/help/*` SHALL use the same consistent, top-anchored, independently scrollable left vertical sub-navigation and independently scrollable content pane on desktop (`>= md`) and custom styled grouped dropdown menu on mobile (`< md`) as Settings, organizing **Overview** (`/help`) and all user guide pages under `Get started`, `Use itemized`, and `Configure & connect`. Each in-app guide page SHALL be under 600 words with a screenshot first. Links between user guide pages SHALL navigate inside the app; links to admin or developer pages SHALL open the corresponding documentation website URL in a new tab. The Help bundle SHALL be lazy-loaded only when the Help view or contextual Help panel is opened so initial app bundle size is unaffected.
 
 #### Scenario: Offline help
 - **WHEN** the installed app is offline and the user opens Help and searches for `"ZPL"`
@@ -100,6 +106,10 @@ The web application SHALL include a `/help` view bundling the user guide for its
 #### Scenario: Keyboard shortcut opens Help
 - **WHEN** a user presses `g` then `?` outside an input field
 - **THEN** the application navigates to `/help`
+
+#### Scenario: Navigating guides via Help sub-navigation and mobile grouped dropdown
+- **WHEN** a user views `/help` or `/help/*` on desktop or mobile and selects a guide from the independently scrollable desktop left sub-navigation or custom grouped mobile dropdown (`Get started`, `Use itemized`, `Configure & connect`)
+- **THEN** the application navigates directly to `/help/<slug>`, highlights that guide as active without shifting the left sub-navigation vertically or horizontally, scrolls the left navigation independently of the article pane on desktop, and allows returning to **Overview** (`/help`) from the same selector
 
 ### Requirement: Help landing page
 The `/help` view's landing page SHALL focus the search input on open, followed by task-shaped quick entries, with the full categorized guide list below grouped under `Get started`, `Use itemized`, and `Configure & connect`. The task-shaped entries SHALL be:
