@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.15.0](https://github.com/itemizedapp/itemized/compare/v0.14.2...v0.15.0) (2026-11-28)
+
+
+### Features
+
+* add personal API tokens and Home Assistant summary endpoint ([73ca975](https://github.com/itemizedapp/itemized/commit/73ca975384613b92ef9e54eec056decf39c23883))
+* add PWA web push notifications and daily digest scheduler ([40c9c1a](https://github.com/itemizedapp/itemized/commit/40c9c1a75189645ac913e967f5e1c6863e9b06ca))
+* add quick-consume endpoint and frontend action for products ([9351608](https://github.com/itemizedapp/itemized/commit/935160808526614686410fe5f97f9c9f5d375f5a))
+
+
+### Bug Fixes
+
+* improve mobile section navigation accessibility label and update tests and a11y script ([1829807](https://github.com/itemizedapp/itemized/commit/1829807115d329f32409eb7a50b7583d3f2ec815))
+* type fetchMock parameter in SettingsPage test ([4bb4be7](https://github.com/itemizedapp/itemized/commit/4bb4be71e0176eb48e15dc1e043d7afd377c2e3c))
+* update desktop table column header hover contrast for light mode ([820cef1](https://github.com/itemizedapp/itemized/commit/820cef169468779d298773d8468b9a005c7f1a56))
+
+
+### Code Refactoring
+
+* organize settings panels into modular subcomponents and update documentation ([8358adc](https://github.com/itemizedapp/itemized/commit/8358adc3fb12a1bcf17bfef0ff88a380fa9ecf6b))
+
 ## [0.14.2](https://github.com/itemizedapp/itemized/compare/v0.14.1...v0.14.2) (2026-11-28)
 
 
