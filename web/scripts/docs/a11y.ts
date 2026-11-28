@@ -217,8 +217,8 @@ async function main() {
       await assertAxeClean(appPage, `in-app /help/configure/label-printing (${vp.name})`);
       await assertNoHorizontalOverflow(appPage, `in-app /help/configure/label-printing (${vp.name})`);
 
-      // Open contextual Help drawer from Settings page
-      await appPage.goto(`${appUrl}/settings`, { waitUntil: "networkidle" });
+      // Open contextual Help drawer from Settings page (Label Printing panel)
+      await appPage.goto(`${appUrl}/settings?tab=printing`, { waitUntil: "networkidle" });
       await appPage.locator('button[data-help-screen="settings/printers"]').click();
       await appPage.waitForSelector('[data-testid="contextual-help-drawer"]');
       await assertAxeClean(appPage, `contextual Help drawer (${vp.name})`, '[data-testid="contextual-help-drawer"]');

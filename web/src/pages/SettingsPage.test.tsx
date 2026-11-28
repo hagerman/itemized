@@ -81,7 +81,7 @@ describe("SettingsPage role-based visibility and navigation", () => {
     expect(screen.queryByRole("heading", { name: "Label Printers" })).not.toBeInTheDocument();
 
     // Mobile custom grouped dropdown shows only Personal group for members
-    const mobileTrigger = screen.getByRole("button", { name: "Settings section" });
+    const mobileTrigger = screen.getByRole("button", { name: /^Settings section:/ });
     expect(mobileTrigger).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(mobileTrigger);
     expect(mobileTrigger).toHaveAttribute("aria-expanded", "true");
@@ -171,7 +171,7 @@ describe("SettingsPage role-based visibility and navigation", () => {
     expect(screen.getByRole("heading", { name: "LLM Product Classification (Optional)" })).toBeInTheDocument();
 
     // Mobile custom grouped dropdown preserves Personal and Admin groups and switches panels
-    const mobileTrigger = screen.getByRole("button", { name: "Settings section" });
+    const mobileTrigger = screen.getByRole("button", { name: /^Settings section:/ });
     fireEvent.click(mobileTrigger);
     const mobileMenu = screen.getByRole("menu", { name: "Settings section" });
     expect(within(mobileMenu).getByText("Personal")).toBeInTheDocument();

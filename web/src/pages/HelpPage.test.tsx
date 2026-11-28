@@ -56,7 +56,7 @@ describe("In-app Help and Contextual Help", () => {
     });
 
     // Mobile custom grouped dropdown preserves entry-point hierarchy and navigates back to Overview
-    const mobileTrigger = screen.getByRole("button", { name: "Help guide" });
+    const mobileTrigger = screen.getByRole("button", { name: /^Help guide:/ });
     fireEvent.click(mobileTrigger);
     const mobileMenu = screen.getByRole("menu", { name: "Help guide" });
     expect(within(mobileMenu).getByText("Get started")).toBeInTheDocument();

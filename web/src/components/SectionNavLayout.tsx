@@ -84,7 +84,6 @@ export const SectionNavLayout: React.FC<SectionNavLayoutProps> = ({
       <div ref={dropdownRef} className="relative mb-4 md:hidden">
         <button
           type="button"
-          aria-label={mobileSelectLabel}
           aria-haspopup="menu"
           aria-expanded={mobileOpen}
           onClick={() => setMobileOpen((open) => !open)}
@@ -93,6 +92,7 @@ export const SectionNavLayout: React.FC<SectionNavLayoutProps> = ({
           <span className="flex min-w-0 items-center gap-2.5">
             {ActiveIcon && <ActiveIcon className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />}
             <span className="min-w-0 truncate">
+              <span className="sr-only">{mobileSelectLabel}: </span>
               {activeEntry?.groupLabel && (
                 <span className="mr-1.5 text-xs font-normal text-slate-500 dark:text-slate-400">
                   {activeEntry.groupLabel} /
